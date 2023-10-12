@@ -322,6 +322,19 @@ docker run --name=gogs -d  -p 10022:22 -p 10880:3000 -v /mount/docker/gogs:/data
 
 
 ## rabbitmq
+```shell
+docker run \
+ -e RABBITMQ_DEFAULT_USER=admin \
+ -e RABBITMQ_DEFAULT_PASS=admin \
+ -v mq-plugins:/plugins \
+ --name mq \
+ --hostname mq \
+ -p 15672:15672 \
+ -p 5672:5672 \
+ -d \
+ rabbitmq:management
+```
+
 ```s
 docker pull rabbitmq:management
 

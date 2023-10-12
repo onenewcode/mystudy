@@ -2065,20 +2065,50 @@ fn main() {
 ```rs
 trait SimpleFuture {
     type Output;
+    // 
     fn poll(&mut self, wake: fn()) -> Poll<Self::Output>;
 }
 
+// Future 需要被执行器poll(轮询)后才能运行，并不能保证在一次 poll 中就被执行完，
 enum Poll<T> {
     Ready(T),
     Pending,
 }
 ```
+若在当前 poll 中， Future 可以被完成，则会返回 Poll::Ready(result) ，反之则返回 Poll::Pending， 并且安排一个 wake 函数：当未来 Future 准备好进一步执行时， 该函数会被调用，然后管理该 Future 的执行器(例如上一章节中的block_on函数)会再次调用 poll 方法，此时 Future 就可以继续执行了。
 
-
-
-### 定海神针 Pin 和 Unpin
+我们用一个例子来说明下。考虑一个需要从 socket 读取数据的场景：如果有数据，可以直接读取数据并返回 Poll::Ready(data)， 但如果没有数据，Future 会被阻塞且不会再继续执行，此时它会注册一个 wake 函数，当 socket 数据准备好时，该函数将被调用以通知执行器：我们的 Future 已经准备好了，可以继续执行。
 ```rs
-#[derive(Debug)]
+pub struct SocketRead<'a> {
+    socket: &'a Socket,
+}
+
+impl SimpleFuture for SocketRead<'_> {
+    type Output = Vec<u8>;
+
+    fn poll(&mut self, wake: fn()) -> Poll<Self::Output> {
+        if self.socket.has_data_to_read() {
+            // socket有数据，写入buffer中并返回
+            Poll::Ready(self.socket.read_buf())
+        } else {
+            // socket中还没数据
+            //
+            // 注册一个`wake`函数，当数据可用时，该函数会被调用，
+            // 然后当前Future的执行器会再次调用`poll`方法，此时就可以读取到数据
+            self.socket.set_readable_callback(wake);
+            Poll::Pending
+        }
+    }
+}
+
+```
+#### 使用 Waker 来唤醒任务
+Waker 提供了一个 wake() 方法可以用于告诉执行器：相关的任务可以被唤醒了，此时执行器就可以对相应的 Future 再次进行 poll 操作。
+### 定海神针 Pin 和 Unpin
+在 Rust 中，所有的类型可以分为两类:
+- 类型的值可以在内存中安全地被移动，例如数值、字符串、布尔值、结构体、枚举，总之你能想到的几乎所有类型都可以落入到此范畴内
+- 自引用类型，
+```rs
 struct Test {
     a: String,
     b: *const String,
