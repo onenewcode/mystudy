@@ -2059,13 +2059,13 @@ fn main() {
 }
 ```
 总之，在async fn函数中使用.await可以等待另一个异步调用的完成。但是与block_on不同，.await并不会阻塞当前的线程，而是异步的等待Future A的完成，在等待的过程中，该线程还可以继续执行其它的Future B，最终实现了并发处理的效果。
-### 底层探秘: Future 执行器与任务调度
+###  Future 执行器与任务调度
 #### Future 特征
-首先，来给出 Future 的定义：它是一个能产出值的异步计算(虽然该值可能为空，例如 () )。光看这个定义，可能会觉得很空洞，我们来看看一个简化版的 Future 特征:
+首先，来给出 Future 的定义：它是一个能产出值的异步计算(虽然该值可能为空，例如 () )。光看这个定义，一个简化版的 Future 特征:
 ```rs
 trait SimpleFuture {
     type Output;
-    // 
+    // 输出计算完成的结果或者输出Pending表示本次不能够完成计算
     fn poll(&mut self, wake: fn()) -> Poll<Self::Output>;
 }
 
@@ -2075,9 +2075,9 @@ enum Poll<T> {
     Pending,
 }
 ```
-若在当前 poll 中， Future 可以被完成，则会返回 Poll::Ready(result) ，反之则返回 Poll::Pending， 并且安排一个 wake 函数：当未来 Future 准备好进一步执行时， 该函数会被调用，然后管理该 Future 的执行器(例如上一章节中的block_on函数)会再次调用 poll 方法，此时 Future 就可以继续执行了。
+若在当前 poll 中， Future 可以被完成，则会返回 Poll::Ready(result) ，反之则返回 Poll::Pending， 并且安排一个 wake 函数：当未来 Future 准备好进一步执行时， 该函数会被调用，然后管理该 Future 的执行器会再次调用 poll 方法，此时 Future 就可以继续执行了。
 
-我们用一个例子来说明下。考虑一个需要从 socket 读取数据的场景：如果有数据，可以直接读取数据并返回 Poll::Ready(data)， 但如果没有数据，Future 会被阻塞且不会再继续执行，此时它会注册一个 wake 函数，当 socket 数据准备好时，该函数将被调用以通知执行器：我们的 Future 已经准备好了，可以继续执行。
+用一个例子来说明下。考虑一个需要从 socket 读取数据的场景：如果有数据，可以直接读取数据并返回 Poll::Ready(data)， 但如果没有数据，Future 会被阻塞且不会再继续执行，此时它会注册一个 wake 函数，当 socket 数据准备好时，该函数将被调用以通知执行器：我们的 Future 已经准备好了，可以继续执行。
 ```rs
 pub struct SocketRead<'a> {
     socket: &'a Socket,
@@ -2102,12 +2102,534 @@ impl SimpleFuture for SocketRead<'_> {
 }
 
 ```
+
+这种 Future 模型允许将**多个异步**操作组合在一起，同时还无需任何内存分配。不仅仅如此，如果你需要同时运行多个 Future或链式调用多个 Future ，也可以通过无内存分配的状态机实现，例如：
+```rs
+
+trait SimpleFuture {
+    // 关联类型是 trait 定义中的类型占位符。定义的时候，并不定义它的具体的类型是什么。在 impl 这个 trait 的时候，才为这个关联类型赋予确定的类型。
+    type Output;//关联类型
+    fn poll(&mut self, wake: fn()) -> Poll<Self::Output>;
+}
+
+enum Poll<T> {
+    Ready(T),
+    Pending,
+}
+
+/// 一个SimpleFuture，它会并发地运行两个Future直到它们完成
+///
+/// 之所以可以并发，是因为两个Future的轮询可以交替进行，一个阻塞，另一个就可以立刻执行，反之亦然
+pub struct Join<FutureA, FutureB> {
+    // 结构体的每个字段都包含一个Future，可以运行直到完成.
+    // 等到Future完成后，字段会被设置为 `None`. 这样Future完成后，就不会再被轮询
+    a: Option<FutureA>,
+    b: Option<FutureB>,
+}
+
+impl<FutureA, FutureB> SimpleFuture for Join<FutureA, FutureB>
+where
+    FutureA: SimpleFuture<Output = ()>,
+    FutureB: SimpleFuture<Output = ()>,
+{
+    type Output = ();
+    fn poll(&mut self, wake: fn()) -> Poll<Self::Output> {
+        // 尝试去完成一个 Future `a`
+        if let Some(a) = &mut self.a {
+            if let Poll::Ready(()) = a.poll(wake) {
+                self.a.take();
+            }
+        }
+
+        // 尝试去完成一个 Future `b`
+        if let Some(b) = &mut self.b {
+            if let Poll::Ready(()) = b.poll(wake) {
+                self.b.take();
+            }
+        }
+
+        if self.a.is_none() && self.b.is_none() {
+            // 两个 Future都已完成 - 我们可以成功地返回了
+            Poll::Ready(())
+        } else {
+            // 至少还有一个 Future 没有完成任务，因此返回 `Poll::Pending`.
+            // 当该 Future 再次准备好时，通过调用`wake()`函数来继续执行
+            Poll::Pending
+        }
+    }
+}
+```
+
+上面代码展示了如何同时运行多个 Future， 且在此过程中没有任何内存分配，让并发编程更加高效。 类似的，多个Future也可以一个接一个的连续运行：
+```rs
+/// 一个SimpleFuture, 它使用顺序的方式，一个接一个地运行两个Future
+//
+// 注意: 由于本例子用于演示，因此功能简单，`AndThenFut` 会假设两个 Future 在创建时就可用了.
+// 而真实的`Andthen`允许根据第一个`Future`的输出来创建第二个`Future`，因此复杂的多。
+pub struct AndThenFut<FutureA, FutureB> {
+    first: Option<FutureA>,
+    second: FutureB,
+}
+
+impl<FutureA, FutureB> SimpleFuture for AndThenFut<FutureA, FutureB>
+where
+    FutureA: SimpleFuture<Output = ()>,
+    FutureB: SimpleFuture<Output = ()>,
+{
+    type Output = ();
+    fn poll(&mut self, wake: fn()) -> Poll<Self::Output> {
+        if let Some(first) = &mut self.first {
+            match first.poll(wake) {
+                // 我们已经完成了第一个 Future， 可以将它移除， 然后准备开始运行第二个
+                Poll::Ready(()) => self.first.take(),
+                // 第一个 Future 还不能完成
+                Poll::Pending => return Poll::Pending,
+            };
+        }
+
+        // 运行到这里，说明第一个Future已经完成，尝试去完成第二个
+        self.second.poll(wake)
+    }
+}
+
+```
+
+这些例子展示了在不需要内存对象分配以及深层嵌套回调的情况下，该如何使用 Future 特征去表达异步控制流。 在了解了基础的控制流后，我们再来看看真实的 Future 特征有何不同之处。
+```rs
+trait Future {
+    type Output;
+    fn poll(
+        // 首先值得注意的地方是，`self`的类型从`&mut self`变成了`Pin<&mut Self>`:
+        self: Pin<&mut Self>,
+        // 其次将`wake: fn()` 修改为 `cx: &mut Context<'_>`:
+        cx: &mut Context<'_>,
+    ) -> Poll<Self::Output>;
+}
+
+```
+
+首先这里多了一个 Pin ，现在你只需要知道使用它可以创建一个无法被移动的 Future ，因为无法被移动，所以它将具有固定的内存地址，意味着我们可以存储它的指针(如果内存地址可能会变动，那存储指针地址将毫无意义！)，也意味着可以实现一个自引用数据结构: struct MyFut { a: i32, ptr_to_a: *const i32 }。 
+
+其次，从 wake: fn() 变成了 &mut Context<'_> 。意味着 wake 函数可以携带数据了。
+
 #### 使用 Waker 来唤醒任务
+对于 Future 来说，第一次被 poll 时无法完成任务是很正常的。但它需要确保在未来一旦准备好时，可以通知执行器再次对其进行 poll 进而继续往下执行，该通知就是通过 Waker 类型完成的。
+
 Waker 提供了一个 wake() 方法可以用于告诉执行器：相关的任务可以被唤醒了，此时执行器就可以对相应的 Future 再次进行 poll 操作。
+
+#### 构建一个定时器
+下面一起来实现一个简单的定时器 Future 。为了让例子尽量简单，当计时器创建时，我们会启动一个线程接着让该线程进入睡眠，等睡眠结束后再通知给 Future 。
+
+注意本例子还会在后面继续使用，因此我们重新创建一个工程来演示：使用 cargo new --lib timer_future 来创建一个新工程，在 lib 包的根路径 src/lib.rs 中添加以下内容：
+```rs
+use std::{
+    future::Future,
+    pin::Pin,
+    sync::{Arc, Mutex},
+    task::{Context, Poll, Waker},
+    thread,
+    time::Duration,
+};
+```
+
+继续来实现 Future 定时器，之前提到: 新建线程在睡眠结束后会需要将状态同步给定时器 Future ，由于是多线程环境，我们需要使用 Arc/<Mutex/><T/>/> 来作为一个共享状态，用于在新线程和 Future 定时器间共享。
+```rs
+pub struct TimerFuture {
+    shared_state: Arc<Mutex<SharedState>>,
+}
+
+/// 在Future和等待的线程间共享状态
+struct SharedState {
+    /// 定时(睡眠)是否结束
+    completed: bool,
+
+    /// 当睡眠结束后，线程可以用`waker`通知`TimerFuture`来唤醒任务
+    waker: Option<Waker>,
+}
+```
+
+下面给出 Future 的具体实现:
+```rs
+impl Future for TimerFuture {
+    type Output = ();
+    fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+        // 通过检查共享状态，来确定定时器是否已经完成
+        let mut shared_state = self.shared_state.lock().unwrap();
+        if shared_state.completed {
+            Poll::Ready(())
+        } else {
+            // 设置`waker`，这样新线程在睡眠(计时)结束后可以唤醒当前的任务，接着再次对`Future`进行`poll`操作,
+            //
+            // 下面的`clone`每次被`poll`时都会发生一次，实际上，应该是只`clone`一次更加合理。
+            // 选择每次都`clone`的原因是： `TimerFuture`可以在执行器的不同任务间移动，如果只克隆一次，
+            // 那么获取到的`waker`可能已经被篡改并指向了其它任务，最终导致执行器运行了错误的任务
+            shared_state.waker = Some(cx.waker().clone());
+            Poll::Pending
+        }
+    }
+}
+```
+
+代码很简单，只要新线程设置了 shared_state.completed = true ，那任务就能顺利结束。如果没有设置，会为当前的任务克隆一份 Waker ，这样新线程就可以使用它来唤醒当前的任务。
+
+最后，再来创建一个 API 用于构建定时器和启动计时线程:
+```rs
+impl TimerFuture {
+    /// 创建一个新的`TimerFuture`，在指定的时间结束后，该`Future`可以完成
+    pub fn new(duration: Duration) -> Self {
+        let shared_state = Arc::new(Mutex::new(SharedState {
+            completed: false,
+            waker: None,
+        }));
+
+        // 创建新线程
+        let thread_shared_state = shared_state.clone();
+        thread::spawn(move || {
+            // 睡眠指定时间实现计时功能
+            thread::sleep(duration);
+            let mut shared_state = thread_shared_state.lock().unwrap();
+            // 通知执行器定时器已经完成，可以继续`poll`对应的`Future`了
+            shared_state.completed = true;
+            if let Some(waker) = shared_state.waker.take() {
+                waker.wake()
+            }
+        });
+
+        TimerFuture { shared_state }
+    }
+}
+
+```
+
+
+
+#### 执行器 Executor
+Rust 的 Future 是惰性的。其中一个推动它的方式就是在 async 函数中使用 .await 来调用另一个 async 函数，但是这个只能解决 async 内部的问题，那么这些最外层的 async 函数由执行器 executor控制 。
+
+执行器会管理一批 Future (最外层的 async 函数)，然后通过不停地 poll 推动它们直到完成。 最开始，执行器会先 poll 一次 Future ，后面就不会主动去 poll 了，而是等待 Future 通过调用 wake 函数来通知它可以继续，它才会继续去 poll 。这种 wake 通知然后 poll 的方式会不断重复，直到 Future 完成。
+
+##### 构建执行器
+下面我们将实现一个简单的执行器，它可以同时并发运行多个 Future 。例子中，需要用到 futures 包的 ArcWake 特征，它可以提供一个方便的途径去构建一个 Waker 。编辑 Cargo.toml ，添加下面依赖:
+```toml
+[dependencies]
+futures = "0.3"
+```
+
+在之前的内容中，我们在 src/lib.rs 中创建了定时器 Future ，现在在 src/main.rs 中来创建程序的主体内容，开始之前，先引入所需的包：
+```rs
+
+use {
+    futures::{
+        future::{BoxFuture, FutureExt},
+        task::{waker_ref, ArcWake},
+    },
+    std::{
+        future::Future,
+        sync::mpsc::{sync_channel, Receiver, SyncSender},
+        sync::{Arc, Mutex},
+        task::{Context, Poll},
+        time::Duration,
+    },
+    // 引入之前实现的定时器模块
+    timer_future::TimerFuture,
+};
+```
+
+执行器需要从一个消息通道( channel )中拉取事件，然后运行它们。当一个任务准备好后（可以继续执行），它会将自己放入消息通道中，然后等待执行器 poll 。
+```rs
+/// 任务执行器，负责从通道中接收任务然后执行
+struct Executor {
+    ready_queue: Receiver<Arc<Task>>,
+}
+
+/// `Spawner`负责创建新的`Future`然后将它发送到任务通道中
+#[derive(Clone)]
+struct Spawner {
+    task_sender: SyncSender<Arc<Task>>,
+}
+
+/// 一个Future，它可以调度自己(将自己放入任务通道中)，然后等待执行器去`poll`
+struct Task {
+    /// 进行中的Future，在未来的某个时间点会被完成
+    ///
+    /// 按理来说`Mutex`在这里是多余的，因为我们只有一个线程来执行任务。但是由于
+    /// Rust并不聪明，它无法知道`Future`只会在一个线程内被修改，并不会被跨线程修改。因此
+    /// 我们需要使用`Mutex`来满足这个笨笨的编译器对线程安全的执着。
+    ///
+    /// 如果是生产级的执行器实现，不会使用`Mutex`，因为会带来性能上的开销，取而代之的是使用`UnsafeCell`
+    future: Mutex<Option<BoxFuture<'static, ()>>>,
+
+    /// 可以将该任务自身放回到任务通道中，等待执行器的poll
+    task_sender: SyncSender<Arc<Task>>,
+}
+
+fn new_executor_and_spawner() -> (Executor, Spawner) {
+    // 任务通道允许的最大缓冲数(任务队列的最大长度)
+    // 当前的实现仅仅是为了简单，在实际的执行中，并不会这么使用
+    const MAX_QUEUED_TASKS: usize = 10_000;
+    let (task_sender, ready_queue) = sync_channel(MAX_QUEUED_TASKS);
+    (Executor { ready_queue }, Spawner { task_sender })
+}
+```
+
+
+下面再来添加一个方法用于生成 Future , 然后将它放入任务通道中:
+```rs
+impl Spawner {
+    fn spawn(&self, future: impl Future<Output = ()> + 'static + Send) {
+        let future = future.boxed();
+        let task = Arc::new(Task {
+            future: Mutex::new(Some(future)),
+            task_sender: self.task_sender.clone(),
+        });
+        self.task_sender.send(task).expect("任务队列已满");
+    }
+}
+```
+
+在执行器 poll 一个 Future 之前，首先需要调用 wake 方法进行唤醒，然后再由 Waker 负责调度该任务并将其放入任务通道中。创建 Waker 的最简单的方式就是实现 ArcWake 特征，先来为我们的任务实现 ArcWake 特征，这样它们就能被转变成 Waker 然后被唤醒:
+```rs
+impl ArcWake for Task {
+    fn wake_by_ref(arc_self: &Arc<Self>) {
+        // 通过发送任务到任务管道的方式来实现`wake`，这样`wake`后，任务就能被执行器`poll`
+        let cloned = arc_self.clone();
+        arc_self
+            .task_sender
+            .send(cloned)
+            .expect("任务队列已满");
+    }
+}
+```
+
+当任务实现了 ArcWake 特征后，它就变成了 Waker ，在调用 wake() 对其唤醒后会将任务复制一份所有权( Arc )，然后将其发送到任务通道中。最后我们的执行器将从通道中获取任务，然后进行 poll 执行：
+```rs
+impl Executor {
+    fn run(&self) {
+        while let Ok(task) = self.ready_queue.recv() {
+            // 获取一个future，若它还没有完成(仍然是Some，不是None)，则对它进行一次poll并尝试完成它
+            let mut future_slot = task.future.lock().unwrap();
+            if let Some(mut future) = future_slot.take() {
+                // 基于任务自身创建一个 `LocalWaker`
+                let waker = waker_ref(&task);
+                let context = &mut Context::from_waker(&*waker);
+                // `BoxFuture<T>`是`Pin<Box<dyn Future<Output = T> + Send + 'static>>`的类型别名
+                // 通过调用`as_mut`方法，可以将上面的类型转换成`Pin<&mut dyn Future + Send + 'static>`
+                if future.as_mut().poll(context).is_pending() {
+                    // Future还没执行完，因此将它放回任务中，等待下次被poll
+                    *future_slot = Some(future);
+                }
+            }
+        }
+    }
+}
+```
+
+恭喜！我们终于拥有了自己的执行器，下面再来写一段代码使用该执行器去运行之前的定时器 Future ：
+```rs
+fn main() {
+    let (executor, spawner) = new_executor_and_spawner();
+
+    // 生成一个任务
+    spawner.spawn(async {
+        println!("howdy!");
+        // 创建定时器Future，并等待它完成
+        TimerFuture::new(Duration::new(2, 0)).await;
+        println!("done!");
+    });
+
+    // drop掉任务，这样执行器就知道任务已经完成，不会再有新的任务进来
+    drop(spawner);
+
+    // 运行执行器直到任务队列为空
+    // 任务运行后，会先打印`howdy!`, 暂停2秒，接着打印 `done!`
+    executor.run();
+}
+```
+
+#### 执行器和系统 IO
+前面我们一起看过一个使用 Future 从 Socket 中异步读取数据的例子:
+```rs
+
+pub struct SocketRead<'a> {
+    socket: &'a Socket,
+}
+
+impl SimpleFuture for SocketRead<'_> {
+    type Output = Vec<u8>;
+
+    fn poll(&mut self, wake: fn()) -> Poll<Self::Output> {
+        if self.socket.has_data_to_read() {
+            // socket有数据，写入buffer中并返回
+            Poll::Ready(self.socket.read_buf())
+        } else {
+            // socket中还没数据
+            //
+            // 注册一个`wake`函数，当数据可用时，该函数会被调用，
+            // 然后当前Future的执行器会再次调用`poll`方法，此时就可以读取到数据
+            self.socket.set_readable_callback(wake);
+            Poll::Pending
+        }
+    }
+}
+```
+
+该例子中，Future 将从 Socket 读取数据，若当前还没有数据，则会让出当前线程的所有权，允许执行器去执行其它的 Future 。当数据准备好后，会调用 wake() 函数将该 Future 的任务放入任务通道中，等待执行器的 poll 。
+
+关于该流程已经反复讲了很多次，相信大家应该非常清楚了。然而该例子中还有一个疑问没有解决：
+
+set_readable_callback 方法到底是怎么工作的？怎么才能知道 socket 中的数据已经可以被读取了？
+关于第二点，其中一个简单粗暴的方法就是使用一个新线程不停的检查 socket 中是否有了数据，当有了后，就调用 wake() 函数。该方法确实可以满足需求，但是性能着实太低了，需要为每个阻塞的 Future 都创建一个单独的线程！
+
+在现实世界中，该问题往往是通过操作系统提供的 IO 多路复用机制来完成，例如 Linux 中的 epoll，FreeBSD 和 macOS 中的 kqueue ，Windows 中的 IOCP, Fuchisa中的 ports 等(可以通过 Rust 的跨平台包 mio 来使用它们)。借助 IO 多路复用机制，可以实现一个线程同时阻塞地去等待多个异步 IO 事件，一旦某个事件完成就立即退出阻塞并返回数据。相关实现类似于以下代码：
+```rs
+pub struct SocketRead<'a> {
+    socket: &'a Socket,
+}
+
+impl SimpleFuture for SocketRead<'_> {
+    type Output = Vec<u8>;
+
+    fn poll(&mut self, wake: fn()) -> Poll<Self::Output> {
+        if self.socket.has_data_to_read() {
+            // socket有数据，写入buffer中并返回
+            Poll::Ready(self.socket.read_buf())
+        } else {
+            // socket中还没数据
+            //
+            // 注册一个`wake`函数，当数据可用时，该函数会被调用，
+            // 然后当前Future的执行器会再次调用`poll`方法，此时就可以读取到数据
+            self.socket.set_readable_callback(wake);
+            Poll::Pending
+        }
+    }
+}
+
+struct IoBlocker {
+    /* ... */
+}
+
+struct Event {
+    // Event的唯一ID，该事件发生后，就会被监听起来
+    id: usize,
+
+    // 一组需要等待或者已发生的信号
+    signals: Signals,
+}
+
+impl IoBlocker {
+    /// 创建需要阻塞等待的异步IO事件的集合
+    fn new() -> Self { /* ... */ }
+
+    /// 对指定的IO事件表示兴趣
+    fn add_io_event_interest(
+        &self,
+
+        /// 事件所绑定的socket
+        io_object: &IoObject,
+
+        event: Event,
+    ) { /* ... */ }
+
+    /// 进入阻塞，直到某个事件出现
+    fn block(&self) -> Event { /* ... */ }
+}
+
+let mut io_blocker = IoBlocker::new();
+io_blocker.add_io_event_interest(
+    &socket_1,
+    Event { id: 1, signals: READABLE },
+);
+io_blocker.add_io_event_interest(
+    &socket_2,
+    Event { id: 2, signals: READABLE | WRITABLE },
+);
+let event = io_blocker.block();
+
+// 当socket的数据可以读取时，打印 "Socket 1 is now READABLE"
+println!("Socket {:?} is now {:?}", event.id, event.signals);
+```
+这样，我们只需要一个执行器线程，它会接收 IO 事件并将其分发到对应的 Waker 中，接着后者会唤醒相关的任务，最终通过执行器 poll 后，任务可以顺利地继续执行, 这种 IO 读取流程可以不停的循环，直到 socket 关闭。
 ### 定海神针 Pin 和 Unpin
 在 Rust 中，所有的类型可以分为两类:
 - 类型的值可以在内存中安全地被移动，例如数值、字符串、布尔值、结构体、枚举，总之你能想到的几乎所有类型都可以落入到此范畴内
 - 自引用类型，
+#### 为何需要 Pin
+其实 Pin 还有一个小伙伴 UnPin ，与前者相反，后者表示类型可以在内存中安全地移动。在深入之前，我们先来回忆下 async/.await 是如何工作的:
+```rs
+
+let fut_one = /* ... */; // Future 1
+let fut_two = /* ... */; // Future 2
+async move {
+    fut_one.await;
+    fut_two.await;
+}
+```
+
+在底层，async 会创建一个实现了 Future 的匿名类型，并提供了一个 poll 方法：
+```rs
+// `async { ... }`语句块创建的 `Future` 类型
+struct AsyncFuture {
+    fut_one: FutOne,
+    fut_two: FutTwo,
+    state: State,
+}
+
+// `async` 语句块可能处于的状态
+enum State {
+    AwaitingFutOne,
+    AwaitingFutTwo,
+    Done,
+}
+
+impl Future for AsyncFuture {
+    type Output = ();
+
+    fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<()> {
+        loop {
+            match self.state {
+                State::AwaitingFutOne => match self.fut_one.poll(..) {
+                    Poll::Ready(()) => self.state = State::AwaitingFutTwo,
+                    Poll::Pending => return Poll::Pending,
+                }
+                State::AwaitingFutTwo => match self.fut_two.poll(..) {
+                    Poll::Ready(()) => self.state = State::Done,
+                    Poll::Pending => return Poll::Pending,
+                }
+                State::Done => return Poll::Ready(()),
+            }
+        }
+    }
+}
+```
+
+当 poll 第一次被调用时，它会去查询 fut_one 的状态，若 fut_one 无法完成，则 poll 方法会返回。未来对 poll 的调用将从上一次调用结束的地方开始。该过程会一直持续，直到 Future 完成为止。
+
+然而，如果我们的 async 语句块中使用了引用类型，会发生什么？例如下面例子：
+```rs
+
+async {
+    let mut x = [0; 128];
+    let read_into_buf_fut = read_into_buf(&mut x);
+    read_into_buf_fut.await;
+    println!("{:?}", x);
+}
+```
+
+这段代码会编译成下面的形式：
+```RS
+struct ReadIntoBuf<'a> {
+    buf: &'a mut [u8], // 指向下面的`x`字段
+}
+
+struct AsyncFuture {
+    x: [u8; 128],
+    read_into_buf_fut: ReadIntoBuf<'what_lifetime?>,
+}
+```
+
+这里，ReadIntoBuf 拥有一个引用字段，指向了结构体的另一个字段 x ，一旦 AsyncFuture 被移动，那 x 的地址也将随之变化，此时对 x 的引用就变成了不合法的，也就是 read_into_buf_fut.buf 会变为不合法的。
+
+若能将 Future 在内存中固定到一个位置，就可以避免这种问题的发生，也就可以安全的创建上面这种引用类型。
 ```rs
 struct Test {
     a: String,
@@ -2138,13 +2660,517 @@ impl Test {
 }
 
 ```
+#### Unpin
+事实上，绝大多数类型都不在意是否被移动，因此它们都自动实现了 Unpin 特征。
+```mermaid
+graph TB
+    A(Pin<Pointer>)-->B[Pointer（e.g.Box<Data>）]-->C[Data];
+```
+实际上，Pin 不按套路出牌，它是一个结构体：
+```RS
+pub struct Pin<P> {
+    pointer: P,
+}
+
+```
+
+它包裹一个指针，并且能确保该指针指向的数据不会被移动，例如 Pin<&mut T> , Pin<&T> , Pin&LT;Box>&LT;T>> ，都能确保 T 不会被移动。
+
+
+而 Unpin 才是一个特征，它表明一个类型可以随意被移动，可以被 Pin 住的值实现的特征是 !Unpin ，大家可能之前没有见过，!Unpin 说明类型没有实现 Unpin 特征，那自然就可以被 Pin 了。
+
+
+
+例如 Pin<&mut u8> ，显然 u8 实现了 Unpin 特征，它可以在内存中被移动，因此 Pin<&mut u8> 跟 &mut u8 实际上并无区别，一样可以被移动。
+
+
+
+
+
+- 都是标记特征( marker trait )，该特征未定义任何行为，非常适用于标记
+- 都可以通过!语法去除实现
+- 绝大多数情况都是自动实现, 无需我们的操心
+#### 深入理解 Pin
+对于上面的问题，我们可以简单的归结为如何在 Rust 中处理自引用类型，下面用一个稍微简单点的例子来理解下 Pin :
+```rs
+#[derive(Debug)]
+struct Test {
+    a: String,
+    b: *const String,
+}
+
+impl Test {
+    fn new(txt: &str) -> Self {
+        Test {
+            a: String::from(txt),
+            b: std::ptr::null(),
+        }
+    }
+
+    fn init(&mut self) {
+        // 裸指针，进行自引用
+        let self_ref: *const String = &self.a;
+        // 进行自引用
+        self.b = self_ref;
+    }
+
+    fn a(&self) -> &str {
+        &self.a
+    }
+
+    fn b(&self) -> &String {
+        assert!(!self.b.is_null(), "Test::b called without Test::init being called first");
+        unsafe { &*(self.b) }
+    }
+}
+```
+
+Test 提供了方法用于获取字段 a 和 b 的值的引用。这里b 是 a 的一个引用，但是我们并没有使用引用类型而是用了裸指针，原因是：Rust 的借用规则不允许我们这样用，因为不符合生命周期的要求。 此时的 Test 就是一个自引用结构体。
+
+如果不移动任何值，那么上面的例子将没有任何问题，例如:
+```rs
+fn main() {
+    let mut test1 = Test::new("test1");
+    test1.init();
+    let mut test2 = Test::new("test2");
+    test2.init();
+
+    println!("a: {}, b: {}", test1.a(), test1.b());
+    println!("a: {}, b: {}", test2.a(), test2.b());
+
+}
+```
+
+输出非常正常：
+```rs
+a: test1, b: test1
+a: test2, b: test2
+```
+
+明知山有虎，偏向虎山行，这才是我辈年轻人的风华。既然移动数据会导致指针不合法，那我们就移动下数据试试，将 test1 和 test2 进行下交换：
+```rs
+fn main() {
+    let mut test1 = Test::new("test1");
+    test1.init();
+    let mut test2 = Test::new("test2");
+    test2.init();
+
+    println!("a: {}, b: {}", test1.a(), test1.b());
+    std::mem::swap(&mut test1, &mut test2);
+    println!("a: {}, b: {}", test2.a(), test2.b());
+
+}
+```
+
+按理来说，这样修改后，输出应该如下:
+```rs
+a: test1, b: test1
+a: test1, b: test1
+
+```
+
+但是实际运行后，却产生了下面的输出:
+```rs
+a: test1, b: test1
+a: test1, b: test2
+```
+
+原因是 test2.b 指针依然指向了旧的地址，而该地址对应的值现在在 test1 里，最终会打印出意料之外的值。
+
+如果大家还是将信将疑，那再看看下面的代码：
+```rs
+fn main() {
+    let mut test1 = Test::new("test1");
+    test1.init();
+    let mut test2 = Test::new("test2");
+    test2.init();
+
+    println!("a: {}, b: {}", test1.a(), test1.b());
+    std::mem::swap(&mut test1, &mut test2);
+    test1.a = "I've totally changed now!".to_string();
+    println!("a: {}, b: {}", test2.a(), test2.b());
+
+}
+```
+
+下面的图片也可以帮助更好的理解这个过程：
+
+
+#### Pin 在实践中的运用
+在理解了 Pin 的作用后，我们再来看看它怎么帮我们解决问题。
+
+将值固定到栈上
+回到之前的例子，我们可以用 Pin 来解决指针指向的数据被移动的问题:
+```rs
+use std::pin::Pin;
+use std::marker::PhantomPinned;
+
+#[derive(Debug)]
+struct Test {
+    a: String,
+    b: *const String,
+    _marker: PhantomPinned,
+}
+impl Test {
+    fn new(txt: &str) -> Self {
+        Test {
+            a: String::from(txt),
+            b: std::ptr::null(),
+            _marker: PhantomPinned, // 这个标记可以让我们的类型自动实现特征`!Unpin`
+        }
+    }
+
+    fn init(self: Pin<&mut Self>) {
+        let self_ptr: *const String = &self.a;
+        let this = unsafe { self.get_unchecked_mut() };
+        this.b = self_ptr;
+    }
+
+    fn a(self: Pin<&Self>) -> &str {
+        &self.get_ref().a
+    }
+
+    fn b(self: Pin<&Self>) -> &String {
+        assert!(!self.b.is_null(), "Test::b called without Test::init being called first");
+        unsafe { &*(self.b) }
+    }
+}
+```
+
+我们使用了一个标记类型 PhantomPinned 将自定义结构体 Test 变成了 !Unpin，因此该结构体无法再被移动。
+
+一旦类型实现了 !Unpin ，那将它的值固定到栈( stack )上就是不安全的行为，因此在代码中我们使用了 unsafe 语句块来进行处理，你也可以使用 pin_utils 来避免 unsafe 的使用。
+
+Rust 中的 unsafe 其实没有那么可怕，虽然听上去很不安全，但是实际上 Rust 依然提供了很多机制来帮我们提升了安全性，因此不必像对待 Go 语言的 unsafe 那样去畏惧于使用 Rust 中的 unsafe ，大致使用原则总结如下：没必要用时，就不要用，当有必要用时，就大胆用，但是尽量控制好边界，让 unsafe 的范围尽可能小
+
+此时，再去尝试移动被固定的值，就会导致编译错误：
+```rs
+pub fn main() {
+    // 此时的`test1`可以被安全的移动
+    let mut test1 = Test::new("test1");
+    // 新的`test1`由于使用了`Pin`，因此无法再被移动，这里的声明会将之前的`test1`遮蔽
+    let mut test1 = unsafe { Pin::new_unchecked(&mut test1) };
+    Test::init(test1.as_mut());
+
+    let mut test2 = Test::new("test2");
+    let mut test2 = unsafe { Pin::new_unchecked(&mut test2) };
+    Test::init(test2.as_mut());
+
+    println!("a: {}, b: {}", Test::a(test1.as_ref()), Test::b(test1.as_ref()));
+    std::mem::swap(test1.get_mut(), test2.get_mut());
+    println!("a: {}, b: {}", Test::a(test2.as_ref()), Test::b(test2.as_ref()));
+}
+```
+
+是的，Rust 并不是在运行时做这件事，而是在编译期就完成了，因此没有额外的性能开销！来看看报错:
+```shell
+error[E0277]: `PhantomPinned` cannot be unpinned
+   --> src/main.rs:47:43
+    |
+47  |     std::mem::swap(test1.get_mut(), test2.get_mut());
+    |                                           ^^^^^^^ within `Test`, the trait `Unpin` is not implemented for `PhantomPinned`
+```
+
+需要注意的是固定在栈上非常依赖于你写出的 unsafe 代码的正确性。我们知道 &'a mut T 可以固定的生命周期是 'a ，但是我们却不知道当生命周期 'a 结束后，该指针指向的数据是否会被移走。如果你的 unsafe 代码里这么实现了，那么就会违背 Pin 应该具有的作用！
+
+一个常见的错误就是忘记去遮蔽( shadow )初始的变量，因为你可以 drop 掉 Pin ，然后在 &'a mut T 结束后去移动数据:
+```rs
+
+fn main() {
+   let mut test1 = Test::new("test1");
+   let mut test1_pin = unsafe { Pin::new_unchecked(&mut test1) };
+   Test::init(test1_pin.as_mut());
+
+   drop(test1_pin);
+   println!(r#"test1.b points to "test1": {:?}..."#, test1.b);
+
+   let mut test2 = Test::new("test2");
+   mem::swap(&mut test1, &mut test2);
+   println!("... and now it points nowhere: {:?}", test1.b);
+}
+```
+
+#### 固定到堆上
+将一个 !Unpin 类型的值固定到堆上，会给予该值一个稳定的内存地址，它指向的堆中的值在 Pin 后是无法被移动的。而且与固定在栈上不同，我们知道堆上的值在整个生命周期内都会被稳稳地固定住。
+```rs
+use std::pin::Pin;
+use std::marker::PhantomPinned;
+
+#[derive(Debug)]
+struct Test {
+    a: String,
+    b: *const String,
+    _marker: PhantomPinned,
+}
+
+impl Test {
+    fn new(txt: &str) -> Pin<Box<Self>> {
+        let t = Test {
+            a: String::from(txt),
+            b: std::ptr::null(),
+            _marker: PhantomPinned,
+        };
+        let mut boxed = Box::pin(t);
+        let self_ptr: *const String = &boxed.as_ref().a;
+        unsafe { boxed.as_mut().get_unchecked_mut().b = self_ptr };
+
+        boxed
+    }
+
+    fn a(self: Pin<&Self>) -> &str {
+        &self.get_ref().a
+    }
+
+    fn b(self: Pin<&Self>) -> &String {
+        unsafe { &*(self.b) }
+    }
+}
+
+pub fn main() {
+    let test1 = Test::new("test1");
+    let test2 = Test::new("test2");
+
+    println!("a: {}, b: {}",test1.as_ref().a(), test1.as_ref().b());
+    println!("a: {}, b: {}",test2.as_ref().a(), test2.as_ref().b());
+}
+```
+
+#### 将固定住的 Future 变为 Unpin
+async 函数返回的 Future 默认就是 !Unpin 的。
+
+但是，在实际应用中，一些函数会要求它们处理的 Future 是 Unpin 的，此时，若你使用的 Future 是 !Unpin 的，必须要使用以下的方法先将 Future 进行固定:
+
+- Box::pin， 创建一个 Pin&lt;Box&lt;T>>
+- pin_utils::pin_mut!， 创建一个 Pin<&mut T>
+固定后获得的 Pin<Box<T>> 和 Pin<&mut T> 既可以用于 Future ，又会自动实现 Unpin。
+```rs
+use pin_utils::pin_mut; // `pin_utils` 可以在crates.io中找到
+
+// 函数的参数是一个`Future`，但是要求该`Future`实现`Unpin`
+fn execute_unpin_future(x: impl Future<Output = ()> + Unpin) { /* ... */ }
+
+let fut = async { /* ... */ };
+// 下面代码报错: 默认情况下，`fut` 实现的是`!Unpin`，并没有实现`Unpin`
+// execute_unpin_future(fut);
+
+// 使用`Box`进行固定
+let fut = async { /* ... */ };
+let fut = Box::pin(fut);
+execute_unpin_future(fut); // OK
+
+// 使用`pin_mut!`进行固定
+let fut = async { /* ... */ };
+pin_mut!(fut);
+execute_unpin_future(fut); // OK
+```
+
 ### async/await 和 Stream 流处理
 #### async/await 和 Stream 流处理
+async 允许我们使用 move 关键字来将环境中变量的所有权转移到语句块内，就像闭包那样，好处是你不再发愁该如何解决借用生命周期的问题，坏处就是无法跟其它代码实现对变量的共享.
+```rs
+// `foo()`返回一个`Future<Output = u8>`,
+// 当调用`foo().await`时，该`Future`将被运行，当调用结束后我们将获取到一个`u8`值
+async fn foo() -> u8 { 5 }
+
+fn bar() -> impl Future<Output = u8> {
+    // 下面的`async`语句块返回`Future<Output = u8>`
+    async {
+        let x: u8 = foo().await;
+        x + 5
+    }
+}
+```
+
+async 是懒惰的，直到被执行器 poll 或者 .await 后才会开始运行，其中后者是最常用的运行 Future 的方法。 当 .await 被调用时，它会尝试运行 Future 直到完成，但是若该 Future 进入阻塞，那就会让出当前线程的控制权。当 Future 后面准备再一次被运行时(例如从 socket 中读取到了数据)，执行器会得到通知，并再次运行该 Future ，如此循环，直到完成。
+#### async 的生命周期
+async fn 函数如果拥有引用类型的参数，那它返回的 Future 的生命周期就会被这些参数的生命周期所限制:
+```rs
+async fn foo(x: &u8) -> u8 { *x }
+
+// 上面的函数跟下面的函数是等价的:
+    async move { *x }
+}
+```
+
+意味着 async fn 函数返回的 Future 必须满足以下条件: 当 x 依然有效时， 该 Future 就必须继续等待( .await ), 也就是说 x 必须比 Future 活得更久。
+
+在一般情况下，在函数调用后就立即 .await 不会存在任何问题，例如foo(&x).await。但是，若 Future 被先存起来或发送到另一个任务或者线程，就可能存在问题了:
+```rs
+use std::future::Future;
+fn bad() -> impl Future<Output = u8> {
+    let x = 5;
+    borrow_x(&x) // ERROR: `x` does not live long enough
+}
+
+async fn borrow_x(x: &u8) -> u8 { *x }
+
+```
+
+
+以上代码会报错，因为 x 的生命周期只到 bad 函数的结尾。 但是 Future 显然会活得更久：
+```shell
+error[E0597]: `x` does not live long enough
+ --> src/main.rs:4:14
+  |
+4 |     borrow_x(&x) // ERROR: `x` does not live long enough
+  |     ---------^^-
+  |     |        |
+  |     |        borrowed value does not live long enough
+  |     argument requires that `x` is borrowed for `'static`
+5 | }
+  | - `x` dropped here while still borrowed
+```
+其中一个常用的解决方法就是将具有引用参数的 async fn 函数转变成一个具有 'static 生命周期的 Future 。 以上解决方法可以通过将参数和对 async fn 的调用放在同一个 async 语句块来实现:
+```rs
+use std::future::Future;
+
+async fn borrow_x(x: &u8) -> u8 { *x }
+
+fn good() -> impl Future<Output = u8> {
+    async {
+        let x = 5;
+        borrow_x(&x).await
+    }
+}
+```
+
+如上所示，通过将参数移动到 async 语句块内， 我们将它的生命周期扩展到 'static， 并跟返回的 Future 保持了一致。
+
+#### async move
 async 允许我们使用 move 关键字来将环境中变量的所有权转移到语句块内，就像闭包那样，好处是你不再发愁该如何解决借用生命周期的问题，坏处就是无法跟其它代码实现对变量的共享:
+```rs
+// 多个不同的 `async` 语句块可以访问同一个本地变量，只要它们在该变量的作用域内执行
+async fn blocks() {
+    let my_string = "foo".to_string();
+
+    let future_one = async {
+        // ...
+        println!("{my_string}");
+    };
+
+    let future_two = async {
+        // ...
+        println!("{my_string}");
+    };
+
+    // 运行两个 Future 直到完成
+    let ((), ()) = futures::join!(future_one, future_two);
+}
+
+// 由于 `async move` 会捕获环境中的变量，因此只有一个 `async move` 语句块可以访问该变量，
+// 但是它也有非常明显的好处： 变量可以转移到返回的 Future 中，不再受借用生命周期的限制
+fn move_block() -> impl Future<Output = ()> {
+    let my_string = "foo".to_string();
+    async move {
+        // ...
+        println!("{my_string}");
+    }
+}
+```
+
+#### 当.await 遇见多线程执行器
+需要注意的是，当使用多线程 Future 执行器( executor )时， Future 可能会在线程间被移动，因此 async 语句块中的变量必须要能在线程间传递。 至于 Future 会在线程间移动的原因是：它内部的任何.await都可能导致它被切换到一个新线程上去执行。
+
+由于需要在多线程环境使用，意味着 Rc、 RefCell 、没有实现 Send 的所有权类型、没有实现 Sync 的引用类型，它们都是不安全的，因此无法被使用
+
+需要注意！实际上它们还是有可能被使用的，只要在 .await 调用期间，它们没有在作用域范围内。
+
+类似的原因，在 .await 时使用普通的锁也不安全，例如 Mutex 。原因是，它可能会导致线程池被锁：当一个任务获取锁 A 后，若它将线程的控制权还给执行器，然后执行器又调度运行另一个任务，该任务也去尝试获取了锁 A ，结果当前线程会直接卡死，最终陷入死锁中。
+
+因此，为了避免这种情况的发生，我们需要使用 futures 包下的锁 futures::lock 来替代 Mutex 完成任务。
+
+#### Stream 流处理
+Stream 特征类似于 Future 特征，但是前者在完成前可以生成多个值，这种行为跟标准库中的 Iterator 特征倒是颇为相似。
+```rs
+trait Stream {
+    // Stream生成的值的类型
+    type Item;
+
+    // 尝试去解析Stream中的下一个值,
+    // 若无数据，返回`Poll::Pending`, 若有数据，返回 `Poll::Ready(Some(x))`, `Stream`完成则返回 `Poll::Ready(None)`
+    fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>)
+        -> Poll<Option<Self::Item>>;
+}
+
+```
+
+关于 Stream 的一个常见例子是消息通道（ futures 包中的）的消费者 Receiver。每次有消息从 Send 端发送后，它都可以接收到一个 Some(val) 值， 一旦 Send 端关闭( drop )，且消息通道中没有消息后，它会接收到一个 None 值。
+```rs
+async fn send_recv() {
+    const BUFFER_SIZE: usize = 10;
+    let (mut tx, mut rx) = mpsc::channel::<i32>(BUFFER_SIZE);
+
+    tx.send(1).await.unwrap();
+    tx.send(2).await.unwrap();
+    drop(tx);
+
+    // `StreamExt::next` 类似于 `Iterator::next`, 但是前者返回的不是值，而是一个 `Future<Output = Option<T>>`，
+    // 因此还需要使用`.await`来获取具体的值
+    assert_eq!(Some(1), rx.next().await);
+    assert_eq!(Some(2), rx.next().await);
+    assert_eq!(None, rx.next().await);
+}
+```
+
+#### 迭代和并发
+跟迭代器类似，我们也可以迭代一个 Stream。 例如使用 map，filter，fold 方法，以及它们的遇到错误提前返回的版本： try_map，try_filter，try_fold。
+
+但是跟迭代器又有所不同，for 循环无法在这里使用，但是命令式风格的循环while let是可以用的，同时还可以使用next 和 try_next 方法:
+```rs
+async fn sum_with_next(mut stream: Pin<&mut dyn Stream<Item = i32>>) -> i32 {
+    use futures::stream::StreamExt; // 引入 next
+    let mut sum = 0;
+    while let Some(item) = stream.next().await {
+        sum += item;
+    }
+    sum
+}
+
+async fn sum_with_try_next(
+    mut stream: Pin<&mut dyn Stream<Item = Result<i32, io::Error>>>,
+) -> Result<i32, io::Error> {
+    use futures::stream::TryStreamExt; // 引入 try_next
+    let mut sum = 0;
+    while let Some(item) = stream.try_next().await? {
+        sum += item;
+    }
+    Ok(sum)
+}
+```
+
+上面代码是一次处理一个值的模式，但是需要注意的是：如果你选择一次处理一个值的模式，可能会造成无法并发，这就失去了异步编程的意义。 因此，如果可以的话我们还是要选择从一个 Stream 并发处理多个值的方式，通过 for_each_concurrent 或 try_for_each_concurrent 方法来实现:
+```rs
+async fn jump_around(
+    mut stream: Pin<&mut dyn Stream<Item = Result<u8, io::Error>>>,
+) -> Result<(), io::Error> {
+    use futures::stream::TryStreamExt; // 引入 `try_for_each_concurrent`
+    const MAX_CONCURRENT_JUMPERS: usize = 100;
+
+    stream.try_for_each_concurrent(MAX_CONCURRENT_JUMPERS, |num| async move {
+        jump_n_times(num).await?;
+        report_n_jumps(num).await?;
+        Ok(())
+    }).await?;
+
+    Ok(())
+}
+```
 
 ### 使用 join! 和 select! 同时运行多个 Future
 #### join!
 futures 包中提供了很多实用的工具，其中一个就是 join! 宏， 它允许我们同时等待多个不同 Future 的完成，且可以并发地运行这些 Future。
+```rs
+use futures::join;
+
+async fn enjoy_book_and_music() -> (Book, Music) {
+    let book_fut = enjoy_book();
+    let music_fut = enjoy_music();
+    join!(book_fut, music_fut)
+}
+
+```
+#### try_join!
+由于 join! 必须等待它管理的所有 Future 完成后才能完成，如果你希望在某一个 Future 报错后就立即停止所有 Future 的执行，可以使用 try_join!，特别是当 Future 返回 Result 时:
 ```rs
 use futures::{
     future::TryFutureExt,
@@ -2162,6 +3188,7 @@ async fn get_book_and_music() -> Result<(Book, Music), String> {
 
 ```
 #### select!
+join! 只有等所有 Future 结束后，才能集中处理结果，如果你想同时等待多个 Future ，且任何一个 Future 结束后，都可以立即被处理，可以考虑使用 futures::select!:
 ```rs
 use futures::{
     future::FutureExt, // for `.fuse()`
@@ -2184,28 +3211,162 @@ async fn race_tasks() {
     }
 }
 ```
+#### default 和 complete
+- select!还支持 default 和 complete 分支:
+- complete 分支当所有的 Future 和 Stream 完成后才会被执行，它往往配合 loop 使用，loop 用于循环完成所有的 Future
+default 分支，若没有任何 Future 或 Stream 处于 Ready 状态， 则该分支会被立即执行
+```rs
+use futures::future;
+use futures::select;
+pub fn main() {
+    let mut a_fut = future::ready(4);
+    let mut b_fut = future::ready(6);
+    let mut total = 0;
+
+    loop {
+        select! {
+            a = a_fut => total += a,
+            b = b_fut => total += b,
+            complete => break,
+            default => panic!(), // 该分支永远不会运行，因为 `Future` 会先运行，然后是 `complete`
+        };
+    }
+    assert_eq!(total, 10);
+}
+```
+#### 跟 Unpin 和 FusedFuture 进行交互
+首先，.fuse() 方法可以让 Future 实现 FusedFuture 特征， 而 pin_mut! 宏会为 Future 实现 Unpin 特征，这两个特征恰恰是使用 select 所必须的:
+
+- Unpin，由于 select 不会通过拿走所有权的方式使用 Future，而是通过可变引用的方式去使用，这样当 select 结束后，该 Future 若没有被完成，它的所有权还可以继续被其它代码使用。
+- FusedFuture 的原因跟上面类似，当 Future 一旦完成后，那 select 就不能再对其进行轮询使用。Fuse 意味着熔断，相当于 Future 一旦完成，再次调用 poll 会直接返回 Poll::Pending。
+只有实现了 FusedFuture，select 才能配合 loop 一起使用。假如没有实现，就算一个 Future 已经完成了，它依然会被 select 不停的轮询执行。
+
+Stream 稍有不同，它们使用的特征是 FusedStream。 通过 .fuse()(也可以手动实现)实现了该特征的 Stream，对其调用 .next() 或 .try_next() 方法可以获取实现了 FusedFuture 特征的Future:
 
 ```rs
+
 use futures::{
-    future::FutureExt, // for `.fuse()`
+    stream::{Stream, StreamExt, FusedStream},
+    select,
+};
+
+async fn add_two_streams(
+    mut s1: impl Stream<Item = u8> + FusedStream + Unpin,
+    mut s2: impl Stream<Item = u8> + FusedStream + Unpin,
+) -> u8 {
+    let mut total = 0;
+
+    loop {
+        let item = select! {
+            x = s1.next() => x,
+            x = s2.next() => x,
+            complete => break,
+        };
+        if let Some(next_num) = item {
+            total += next_num;
+        }
+    }
+
+    total
+}
+
+```
+#### 在 select 循环中并发
+一个很实用但又鲜为人知的函数是 Fuse::terminated() ，可以使用它构建一个空的 Future ，空自然没啥用，但是如果它能在后面再被填充呢？
+
+考虑以下场景：当你要在 select 循环中运行一个任务，但是该任务却是在 select 循环内部创建时，上面的函数就非常好用了。
+```rs
+use futures::{
+    future::{Fuse, FusedFuture, FutureExt},
+    stream::{FusedStream, Stream, StreamExt},
     pin_mut,
     select,
 };
 
-async fn task_one() { /* ... */ }
-async fn task_two() { /* ... */ }
+async fn get_new_num() -> u8 { /* ... */ 5 }
 
-async fn race_tasks() {
-    let t1 = task_one().fuse();
-    let t2 = task_two().fuse();
+async fn run_on_new_num(_: u8) { /* ... */ }
 
-    pin_mut!(t1, t2);
-
-    select! {
-        () = t1 => println!("任务1率先完成"),
-        () = t2 => println!("任务2率先完成"),
+async fn run_loop(
+    mut interval_timer: impl Stream<Item = ()> + FusedStream + Unpin,
+    starting_num: u8,
+) {
+    let run_on_new_num_fut = run_on_new_num(starting_num).fuse();
+    let get_new_num_fut = Fuse::terminated();
+    pin_mut!(run_on_new_num_fut, get_new_num_fut);
+    loop {
+        select! {
+            () = interval_timer.select_next_some() => {
+                // 定时器已结束，若`get_new_num_fut`没有在运行，就创建一个新的
+                if get_new_num_fut.is_terminated() {
+                    get_new_num_fut.set(get_new_num().fuse());
+                }
+            },
+            new_num = get_new_num_fut => {
+                // 收到新的数字 -- 创建一个新的`run_on_new_num_fut`并丢弃掉旧的
+                run_on_new_num_fut.set(run_on_new_num(new_num).fuse());
+            },
+            // 运行 `run_on_new_num_fut`
+            () = run_on_new_num_fut => {},
+            // 若所有任务都完成，直接 `panic`， 原因是 `interval_timer` 应该连续不断的产生值，而不是结束
+            //后，执行到 `complete` 分支
+            complete => panic!("`interval_timer` completed unexpectedly"),
+        }
     }
 }
+
+```
+
+当某个 Future 有多个拷贝都需要同时运行时，可以使用 FuturesUnordered 类型。下面的例子跟上个例子大体相似，但是它会将 run_on_new_num_fut 的每一个拷贝都运行到完成，而不是像之前那样一旦创建新的就终止旧的。
+
+```rs
+use futures::{
+    future::{Fuse, FusedFuture, FutureExt},
+    stream::{FusedStream, FuturesUnordered, Stream, StreamExt},
+    pin_mut,
+    select,
+};
+
+async fn get_new_num() -> u8 { /* ... */ 5 }
+
+async fn run_on_new_num(_: u8) -> u8 { /* ... */ 5 }
+
+
+// 使用从 `get_new_num` 获取的最新数字 来运行 `run_on_new_num`
+//
+// 每当计时器结束后，`get_new_num` 就会运行一次，它会立即取消当前正在运行的`run_on_new_num` ,
+// 并且使用新返回的值来替换
+async fn run_loop(
+    mut interval_timer: impl Stream<Item = ()> + FusedStream + Unpin,
+    starting_num: u8,
+) {
+    let mut run_on_new_num_futs = FuturesUnordered::new();
+    run_on_new_num_futs.push(run_on_new_num(starting_num));
+    let get_new_num_fut = Fuse::terminated();
+    pin_mut!(get_new_num_fut);
+    loop {
+        select! {
+            () = interval_timer.select_next_some() => {
+                 // 定时器已结束，若 `get_new_num_fut` 没有在运行，就创建一个新的
+                if get_new_num_fut.is_terminated() {
+                    get_new_num_fut.set(get_new_num().fuse());
+                }
+            },
+            new_num = get_new_num_fut => {
+                 // 收到新的数字 -- 创建一个新的 `run_on_new_num_fut` (并没有像之前的例子那样丢弃掉旧值)
+                run_on_new_num_futs.push(run_on_new_num(new_num));
+            },
+            // 运行 `run_on_new_num_futs`, 并检查是否有已经完成的
+            res = run_on_new_num_futs.select_next_some() => {
+                println!("run_on_new_num_fut returned {:?}", res);
+            },
+            // 若所有任务都完成，直接 `panic`， 原因是 `interval_timer` 应该连续不断的产生值，而不是结束
+            //后，执行到 `complete` 分支
+            complete => panic!("`interval_timer` completed unexpectedly"),
+        }
+    }
+}
+
 ```
 
 # 宏编程
