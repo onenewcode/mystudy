@@ -996,6 +996,34 @@ docker create --name xxl-job-admin -p 8088:8080 \
 --privileged=true \
 xuxueli/xxl-job-admin:2.3.1
 
+# mongoDB
+**拉取mongo镜像**
+
+>docker pull mongo:4.4
+
+创建mongo数据持久化目录
+>mkdir -p /docker_volume/mongodb/data
+
+运行容器
+>docker run -itd --name mongo -v /docker_volume/mongodb/data:/data/db -p 27017:27017 mongo:4.4 --auth
+
+-v: 将宿主机的/docker_volume/mongodb/data映射到容器的/data/db目录，将数据持久化到宿主机，以防止删除容器后，容器内的数据丢失–auth：需要密码才能访问容器服务
+**创建用户**
+登录mongo容器，并进入到【admin】数据库
+> docker exec -it mongo mongo admin
+
+创建一个用户，mongo 默认没有用户
+>db.createUser({ user:'root',pwd:'123456',roles:[ { role:'userAdminAnyDatabase', db: 'admin'},'readWriteAnyDatabase']});
+
+【user:‘root’ 】：设置用户名为root
+【pwd:‘123456’】：设置密码为123456
+【role:‘userAdminAnyDatabase’】：只在admin数据库中可用，赋予用户所有数据库的userAdmin权限
+【db: ‘admin’】：可操作的数据库
+【‘readWriteAnyDatabase’】：赋予用户读写权限
+
+dbAdmin：允许用户在指定数据库中执行管理函数，如索引创建、删除，查看统计或访问system.profile
+
+
 
 # docker compose
 sudo curl -L https://get.daocloud.io/docker/compose/releases/download/1.25.1/docker-compose-`uname -s`-`uname -m` -o /usr/local/bin/docker-compose
@@ -1025,3 +1053,4 @@ networks:
 volumes:
     vol:
 ```    
+
