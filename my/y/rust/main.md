@@ -579,20 +579,187 @@ fn main() {
 
 ```
 ##  泛型和特征
-### 泛型 Generics
-```rs
-fn display_array<T: std::fmt::Debug>(arr: &[T]) {
-    println!("{:?}", arr);
-}
-fn main() {
-    let arr: [i32; 3] = [1, 2, 3];
-    display_array(&arr);
+### 泛型 Generics泛型详解
 
-    let arr: [i32;2] = [1,2];
-    display_array(&arr);
+使用泛型参数，有一个先决条件，必需在使用前对其进行声明：
+```rs
+fn largest<T>(list: &[T]) -> T {
+```
+
+该泛型函数的作用是从列表中找出最大的值，其中列表中的元素类型为 T。首先 largest&lt;T> 对泛型参数 T 进行了声明，然后才在函数参数中进行使用该泛型参数 list: &[T] 。
+
+
+
+下面是一个错误的泛型函数的实现：
+```rs
+fn largest<T>(list: &[T]) -> T {
+    let mut largest = list[0];
+
+    for &item in list.iter() {
+        if item > largest {
+            largest = item;
+        }
+    }
+
+    largest
+}
+
+fn main() {
+    let number_list = vec![34, 50, 25, 100, 65];
+
+    let result = largest(&number_list);
+    println!("The largest number is {}", result);
+
+    let char_list = vec!['y', 'm', 'a', 'q'];
+
+    let result = largest(&char_list);
+    println!("The largest char is {}", result);
 }
 ```
-####  const
+
+运行后报错：
+```shell
+error[E0369]: binary operation `>` cannot be applied to type `T` // `>`操作符不能用于类型`T`
+ --> src/main.rs:5:17
+  |
+5 |         if item > largest {
+  |            ---- ^ ------- T
+  |            |
+  |            T
+  |
+help: consider restricting type parameter `T` // 考虑对T进行类型上的限制 :
+  |
+1 | fn largest<T: std::cmp::PartialOrd>(list: &[T]) -> T {
+  |             ++++++++++++++++++++++
+```
+
+因为 T 可以是任何类型，但不是所有的类型都能进行比较，因此上面的错误中，编译器建议我们给 T 添加一个类型限制：使用 std::cmp::PartialOrd 特征（Trait）对 T 进行限制，特征在下一节会详细介绍，现在你只要理解，该特征的目的就是让类型实现可比较的功能。
+
+
+#### 结构体中使用泛型
+结构体中的字段类型也可以用泛型来定义，下面代码定义了一个坐标点 Point，它可以存放任何类型的坐标值：
+```rs
+struct Point<T> {
+    x: T,
+    y: T,
+}
+
+fn main() {
+    let integer = Point { x: 5, y: 10 };
+    let float = Point { x: 1.0, y: 4.0 };
+}
+```
+
+这里有两点需要特别的注意：
+
+提前声明，跟泛型函数定义类似，首先我们在使用泛型参数之前必需要进行声明 Point&lt;T>，接着就可以在结构体的字段类型中使用 T 来替代具体的类型
+x 和 y 是相同的类型
+第二点非常重要，如果使用不同的类型，那么它会导致下面代码的报错：
+
+
+
+如果想让 x 和 y 既能类型相同，又能类型不同，就需要使用不同的泛型参数：
+```rs
+struct Point<T,U> {
+    x: T,
+    y: U,
+}
+fn main() {
+    let p = Point{x: 1, y :1.1};
+}
+```
+
+切记，所有的泛型参数都要提前声明.
+
+#### 枚举中使用泛型
+提到枚举类型，Option 永远是第一个应该被想起来的，在之前的章节中，它也多次出现：
+```rs
+enum Option<T> {
+    Some(T),
+    None,
+}
+```
+
+Option&lt;T> 是一个拥有泛型 T 的枚举类型，它第一个成员是 Some(T)，存放了一个类型为 T 的值。得益于泛型的引入，我们可以在任何一个需要返回值的函数中，去使用 Option&lt;T> 枚举类型来做为返回值，用于返回一个任意类型的值 Some(T)，或者没有值 None。
+
+```rs
+enum Result<T, E> {
+    Ok(T),
+    Err(E),
+}
+```
+
+
+这个枚举和 Option 一样，主要用于函数返回值，与 Option 用于值的存在与否不同，Result 关注的主要是值的正确性。
+
+如果函数正常运行，则最后返回一个 Ok(T)，T 是函数具体的返回值类型，如果函数异常运行，则返回一个 Err(E)，E 是错误类型。例如打开一个文件：如果成功打开文件，则返回 Ok(std::fs::File)，因此 T 对应的是 std::fs::File 类型；而当打开文件时出现问题时，返回 Err(std::io::Error)，E 对应的就是 std::io::Error 类型。
+
+#### 方法中使用泛型
+方法上也可以使用泛型：
+```rs
+struct Point<T> {
+    x: T,
+    y: T,
+}
+
+impl<T> Point<T> {
+    fn x(&self) -> &T {
+        &self.x
+    }
+}
+fn main() {
+    let p = Point { x: 5, y: 10 };
+
+    println!("p.x = {}", p.x());
+}
+```
+
+
+
+使用泛型参数前，依然需要提前声明：impl&lt;T>，只有提前声明了，我们才能在Point&ltT>中使用它，这样 Rust 就知道 Point 的尖括号中的类型是泛型而不是具体类型。需要注意的是，这里的 Point&ltT> 不再是泛型声明，而是一个完整的结构体类型，因为我们定义的结构体就是 Point&ltT> 而不再是 Point。
+
+除了结构体中的泛型参数，我们还能在该结构体的方法中定义额外的泛型参数，就跟泛型函数一样：
+```rs
+struct Point<T, U> {
+    x: T,
+    y: U,
+}
+
+impl<T, U> Point<T, U> {
+    fn mixup<V, W>(self, other: Point<V, W>) -> Point<T, W> {
+        Point {
+            x: self.x,
+            y: other.y,
+        }
+    }
+}
+
+fn main() {
+    let p1 = Point { x: 5, y: 10.4 };
+    let p2 = Point { x: "Hello", y: 'c'};
+
+    let p3 = p1.mixup(p2);
+
+    println!("p3.x = {}, p3.y = {}", p3.x, p3.y);
+}
+```
+
+这个例子中，T,U 是定义在结构体 Point 上的泛型参数，V,W 是单独定义在方法 mixup 上的泛型参数，它们并不冲突，说白了，你可以理解为，一个是结构体泛型，一个是函数泛型。
+
+#### 为具体的泛型类型实现方法
+对于 Point&lt;T> 类型，你不仅能定义基于 T 的方法，还能针对特定的具体类型，进行方法定义：
+```rs
+impl Point<f32> {
+    fn distance_from_origin(&self) -> f32 {
+        (self.x.powi(2) + self.y.powi(2)).sqrt()
+    }
+}
+```
+
+这段代码意味着 Point&lt;f32> 类型会有一个方法 distance_from_origin，而其他 T 不是 f32 类型的 Point&lt;T> 实例则没有定义此方法。这个方法计算点实例与坐标(0.0, 0.0) 之间的距离，并使用了只能用于浮点型的数学运算符。
+
+#### const 泛型
+ const 泛型，也就是针对值的泛型，正好可以用于处理数组长度的问题：
 ```rs
 fn display_array<T: std::fmt::Debug, const N: usize>(arr: [T; N]) {
     println!("{:?}", arr);
@@ -605,7 +772,52 @@ fn main() {
     display_array(arr);
 }
 ```
+
 如上所示，我们定义了一个类型为 [T; N] 的数组，其中 T 是一个基于类型的泛型参数，这个和之前讲的泛型没有区别，而重点在于 N 这个泛型参数，它是一个基于值的泛型参数！因为它用来替代的是数组的长度。
+
+N 就是 const 泛型，定义的语法是 const N: usize，表示 const 泛型 N ，它基于的值类型是 usize。
+
+在泛型参数之前，Rust 完全不适合复杂矩阵的运算，自从有了 const 泛型，一切即将改变。
+
+#### const 泛型表达式
+假设我们某段代码需要在内存很小的平台上工作，因此需要限制函数参数占用的内存大小，此时就可以使用 const 泛型表达式来实现：
+```rs
+// 目前只能在nightly版本下使用
+#![allow(incomplete_features)]
+#![feature(generic_const_exprs)]
+
+fn something<T>(val: T)
+where
+    Assert<{ core::mem::size_of::<T>() < 768 }>: IsTrue,
+    //       ^-----------------------------^ 这里是一个 const 表达式，换成其它的 const 表达式也可以
+{
+    //
+}
+
+fn main() {
+    something([0u8; 0]); // ok
+    something([0u8; 512]); // ok
+    something([0u8; 1024]); // 编译错误，数组长度是1024字节，超过了768字节的参数长度限制
+}
+
+// ---
+
+pub enum Assert<const CHECK: bool> {
+    //
+}
+
+pub trait IsTrue {
+    //
+}
+
+impl IsTrue for Assert<true> {
+    //
+}
+const fn
+@todo
+```
+
+
 ### 特征 Trait
 ```rs
 pub trait Summary {
@@ -955,7 +1167,8 @@ let home: IpAddr = "127.0.0.1".parse().unwrap();
 ```
 
 
-### 可恢复的错误 Result
+### 返回值和?
+#### 对返回的错误进行处理
 ```rs
 use std::fs::File;
 use std::io::ErrorKind;
@@ -975,7 +1188,14 @@ fn main() {
     };
 }
 ```
-expect 跟 unwrap 很像，也是遇到错误直接 panic, 但是会带上自定义的错误提示信息，相当于重载了错误打印的函数：
+上面代码在匹配出 error 后，又对 error 进行了详细的匹配解析，最终结果：
+
+ - 如果是文件不存在错误 ErrorKind::NotFound，就创建文件，这里创建文件File::create 也是返回 Result，因此继续用 match 对其结果进行处理：创建成功，将新的文件句柄赋值给 f，如果失败，则 panic
+剩下的错误，一律 panic
+ - expect 跟 unwrap 很像，也是遇到错误直接 panic, 但是会带上自定义的错误提示信息，相当于重载了错误打印的函数：
+
+#### 失败就 panic: unwrap 和 expect 
+在不需要处理错误的场景，例如写原型、示例时，我们不想使用 match 去匹配 Result<T, E> 以获取其中的 T 值，因为 match 的穷尽匹配特性，你总要去处理下 Err 分支。那么有没有办法简化这个过程？有，答案就是 unwrap 和 expect。
 ```rs
 use std::fs::File;
 
@@ -983,21 +1203,218 @@ fn main() {
     let f = File::open("hello.txt").expect("Failed to open hello.txt");
 }
 
+```
+如果调用这段代码时 hello.txt 文件不存在，那么 unwrap 就将直接 panic：
 
+```shell
+thread 'main' panicked at 'called `Result::unwrap()` on an `Err` value: Os { code: 2, kind: NotFound, message: "No such file or directory" }', src/main.rs:4:37
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+```
+expect 跟 unwrap 很像，也是遇到错误直接 panic, 但是会带上自定义的错误提示信息，相当于重载了错误打印的函数：
+```rs
+use std::fs::File;
 
+fn main() {
+    let f = File::open("hello.txt").expect("Failed to open hello.txt");
+}
+```
+报错如下：
+```shell
+thread 'main' panicked at 'Failed to open hello.txt: Os { code: 2, kind: NotFound, message: "No such file or directory" }', src/main.rs:4:37
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+```
+
+#### 传播错误
+程序几乎不太可能只有 A->B 形式的函数调用，一个设计良好的程序，一个功能涉及十几层的函数调用都有可能。而错误处理也往往不是哪里调用出错，就在哪里处理，实际应用中，大概率会把错误层层上传然后交给调用链的上游函数进行处理，错误传播将极为常见。
+
+例如以下函数从文件中读取用户名，然后将结果进行返回：
+```rs
+use std::fs::File;
+use std::io::{self, Read};
+
+fn read_username_from_file() -> Result<String, io::Error> {
+    // 打开文件，f是`Result<文件句柄,io::Error>`
+    let f = File::open("hello.txt");
+
+    let mut f = match f {
+        // 打开文件成功，将file句柄赋值给f
+        Ok(file) => file,
+        // 打开文件失败，将错误返回(向上传播)
+        Err(e) => return Err(e),
+    };
+    // 创建动态字符串s
+    let mut s = String::new();
+    // 从f文件句柄读取数据并写入s中
+    match f.read_to_string(&mut s) {
+        // 读取成功，返回Ok封装的字符串
+        Ok(_) => Ok(s),
+        // 将错误向上传播
+        Err(e) => Err(e),
+    }
+}
+```
+
+有几点值得注意：
+
+- 该函数返回一个 Result<String, io::Error> 类型，当读取用户名成功时，返回 Ok(String)，失败时，返回 Err(io:Error)
+- File::open 和 f.read_to_string 返回的 Result<T, E> 中的 E 就是 io::Error
+由此可见，该函数将 io::Error 的错误往上进行传播，该函数的调用者最终会对 Result<String,io::Error> 进行再处理，至于怎么处理就是调用者的事，如果是错误，它可以选择继续向上传播错误，也可以直接 panic，亦或将具体的错误原因包装后写入 socket 中呈现给终端用户。
+
+。
+
+传播界的大明星: ?
+
+```rs
 use std::fs::File;
 use std::io;
 use std::io::Read;
 
 fn read_username_from_file() -> Result<String, io::Error> {
-    let mut s = String::new()
+    let mut f = File::open("hello.txt")?;
+    let mut s = String::new();
+    f.read_to_string(&mut s)?;
+    Ok(s)
+}
+```
+
+看到没，这就是排面，相比前面的 match 处理错误的函数，代码直接减少了一半不止.
+
+其实 ? 就是一个宏，它的作用跟上面的 match 几乎一模一样：
+```rs
+let mut f = match f {
+    // 打开文件成功，将file句柄赋值给f
+    Ok(file) => file,
+    // 打开文件失败，将错误返回(向上传播)
+    Err(e) => return Err(e),
+};
+```
+
+如果结果是 Ok(T)，则把 T 赋值给 f，如果结果是 Err(E)，则返回该错误，所以 ? 特别适合用来传播错误。
+
+虽然 ? 和 match 功能一致，但是事实上 ? 会更胜一筹。
+
+想象一下，一个设计良好的系统中，肯定有自定义的错误特征，错误之间很可能会存在上下级关系，例如标准库中的 std::io::Error 和 std::error::Error，前者是 IO 相关的错误结构体，后者是一个最最通用的标准错误特征，同时前者实现了后者，因此 std::io::Error 可以转换为 std:error::Error。
+
+明白了以上的错误转换，? 的更胜一筹就很好理解了，它可以自动进行类型提升（转换）：
+```rs
+fn open_file() -> Result<File, Box<dyn std::error::Error>> {
+    let mut f = File::open("hello.txt")?;
+    Ok(f)
+}
+```
+
+上面代码中 File::open 报错时返回的错误是 std::io::Error 类型，但是 open_file 函数返回的错误类型是 std::error::Error 的特征对象，可以看到一个错误类型通过 ? 返回后，变成了另一个错误类型，这就是 ? 的神奇之处。
+
+根本原因是在于标准库中定义的 From 特征，该特征有一个方法 from，用于把一个类型转成另外一个类型，? 可以自动调用该方法，然后进行隐式类型转换。因此只要函数返回的错误 ReturnError 实现了 From<OtherError> 特征，那么 ? 就会自动把 OtherError 转换为 ReturnError。
+
+这种转换非常好用，意味着你可以用一个大而全的 ReturnError 来覆盖所有错误类型，只需要为各种子错误类型实现这种转换即可。
+
+```rs
+use std::fs::File;
+use std::io;
+use std::io::Read;
+
+fn read_username_from_file() -> Result<String, io::Error> {
+    let mut s = String::new();
 
     File::open("hello.txt")?.read_to_string(&mut s)?;
 
     Ok(s)
 }
-
 ```
+
+
+？ ? 还能实现链式调用，File::open 遇到错误就返回，没有错误就将 Ok 中的值取出来用于下一个方法调用，简直太精妙了.
+
+```rs
+use std::fs;
+use std::io;
+
+fn read_username_from_file() -> Result<String, io::Error> {
+    // read_to_string是定义在std::io中的方法，因此需要在上面进行引用
+    fs::read_to_string("hello.txt")
+}
+```
+
+从文件读取数据到字符串中，是比较常见的操作，因此 Rust 标准库为我们提供了 fs::read_to_string 函数，该函数内部会打开一个文件、创建 String、读取文件内容最后写入字符串并返回，因为该函数其实与本章讲的内容关系不大，因此放在最后来讲，其实只是我想震你们一下 :)
+
+##### ? 用于 Option 的返回
+? 不仅仅可以用于 Result 的传播，还能用于 Option 的传播，再来回忆下 Option 的定义：
+```rs
+pub enum Option<T> {
+    Some(T),
+    None
+}
+```
+
+Result 通过 ? 返回错误，那么 Option 就通过 ? 返回 None：
+```rs
+fn first(arr: &[i32]) -> Option<&i32> {
+   let v = arr.get(0)?;
+   Some(v)
+}
+```
+
+
+##### 新手用 ? 常会犯的错误
+初学者在用 ? 时，老是会犯错，例如写出这样的代码：
+```rs
+fn first(arr: &[i32]) -> Option<&i32> {
+   arr.get(0)?
+}
+```
+
+这段代码无法通过编译，切记：? 操作符需要一个变量来承载正确的值，这个函数只会返回 Some(&i32) 或者 None，只有错误值能直接返回，正确的值不行，所以如果数组中存在 0 号元素，那么函数第二行使用 ? 后的返回类型为 &i32 而不是 Some(&i32)。因此 ? 只能用于以下形式：
+```rs
+let v = xxx()?;
+xxx()?.yyy()?;
+```
+
+##### 带返回值的 main 函数
+在了解了 ? 的使用限制后，这段代码你很容易看出它无法编译：
+```rs
+use std::fs::File;
+
+fn main() {
+    let f = File::open("hello.txt")?;
+}
+```
+
+运行后会报错:
+```shell
+$ cargo run
+   ...
+   the `?` operator can only be used in a function that returns `Result` or `Option` (or another type that implements `FromResidual`)
+ --> src/main.rs:4:48
+  |
+3 | fn main() {
+  | --------- this function should return `Result` or `Option` to accept `?`
+4 |     let greeting_file = File::open("hello.txt")?;
+  |                                                ^ cannot use the `?` operator in a function that returns `()`
+  |
+  = help: the trait `FromResidual<Result<Infallible, std::io::Error>>` is not implemented for `()`
+```
+
+因为 ? 要求 Result<T, E> 形式的返回值，而 main 函数的返回是 ()，因此无法满足，那是不是就无解了呢？
+
+实际上 Rust 还支持另外一种形式的 main 函数：
+```rs
+use std::error::Error;
+use std::fs::File;
+
+fn main() -> Result<(), Box<dyn Error>> {
+    let f = File::open("hello.txt")?;
+
+    Ok(())
+}
+```
+
+这样就能使用 ? 提前返回了，同时我们又一次看到了Box<dyn Error> 特征对象，因为 std::error:Error 是 Rust 中抽象层次最高的错误，其它标准库中的错误都实现了该特征，因此我们可以用该特征对象代表一切错误，就算 main 函数中调用任何标准库函数发生错误，都可以通过 Box&lt;dyn Error> 这个特征对象进行返回。
+
+
+
+
 ## 包和模块
 ### 包和 Crate
 #### 包 Crate
@@ -1353,6 +1770,237 @@ fn exec<'a, F: Fn(&'a str)>(mut f: F)  {
 }
 ```
 ### 迭代器 Iterator
+迭代器允许我们迭代一个连续的集合，例如数组、动态数组 Vec、HashMap 等，在此过程中，只需关心集合中的元素如何处理，而无需关心如何开始、如何结束、按照什么样的索引去访问等问题。
+
+#### For 循环与迭代器
+从用途来看，迭代器跟 for 循环颇为相似，都是去遍历一个集合，但是实际上它们存在不小的差别，其中最主要的差别就是：是否通过索引来访问集合。
+ Rust 中的 for：
+```rs
+let arr = [1, 2, 3];
+for v in arr {
+    println!("{}",v);
+}
+
+Rust中没有使用索引，它把 arr 数组当成一个迭代器，直接去遍历其中的元素，从哪里开始，从哪里结束，都无需操心。
+
+#### 惰性初始化
+在 Rust 中，迭代器是惰性的，意味着如果你不使用它，那么它将不会发生任何事：
+```rs
+let v1 = vec![1, 2, 3];
+
+let v1_iter = v1.iter();
+
+for val in v1_iter {
+    println!("{}", val);
+}
+```
+在 for 循环之前，我们只是简单的创建了一个迭代器 v1_iter，此时不会发生任何迭代行为，只有在 for 循环开始后，迭代器才会开始迭代其中的元素，最后打印出来。
+
+
+
+#### next 方法
+
+
+for 循环通过不停调用迭代器上的 next 方法，来获取迭代器中的元素。
+
+```rs
+
+fn main() {
+    let arr = [1, 2, 3];
+    let mut arr_iter = arr.into_iter();
+
+    assert_eq!(arr_iter.next(), Some(1));
+    assert_eq!(arr_iter.next(), Some(2));
+    assert_eq!(arr_iter.next(), Some(3));
+    assert_eq!(arr_iter.next(), None);
+}
+```
+果不其然，将 arr 转换成迭代器后，通过调用其上的 next 方法，我们获取了 arr 中的元素，有两点需要注意：
+next 方法返回的是 **Option**类型，当有值时返回 Some(i32)，无值时返回 None
+遍历是按照迭代器中元素的排列顺序依次进行的，因此我们严格按照数组中元素的顺序取出了 Some(1)，Some(2)，Some(3)
+
+
+
+#### 消费者与适配器
+消费者是迭代器上的方法，它会消费掉迭代器中的元素，然后返回其类型的值，这些消费者都有一个共同的特点：在它们的定义中，都依赖 next 方法来消费元素.
+
+##### 消费者适配器
+只要迭代器上的某个方法 A 在其内部调用了 next 方法，那么 A 就被称为消费性适配器：因为 next 方法会消耗掉迭代器上的元素，所以方法 A 的调用也会消耗掉迭代器上的元素。
+
+其中一个例子是 sum 方法，它会拿走迭代器的所有权，然后通过不断调用 next 方法对里面的元素进行求和：
+```rs
+fn main() {
+    let v1 = vec![1, 2, 3];
+
+    let v1_iter = v1.iter();
+
+    let total: i32 = v1_iter.sum();
+
+    assert_eq!(total, 6);
+
+    // v1_iter 是借用了 v1，因此 v1 可以照常使用
+    println!("{:?}",v1);
+
+    // 以下代码会报错，因为 `sum` 拿到了迭代器 `v1_iter` 的所有权
+    // println!("{:?}",v1_iter);
+}
+```
+
+
+##### 迭代器适配器
+既然消费者适配器是消费掉迭代器，然后返回一个值。那么迭代器适配器，顾名思义，会返回一个新的迭代器，这是实现链式方法调用的关键：v.iter().map().filter()...。
+
+与消费者适配器不同，迭代器适配器是惰性的，意味着你需要一个消费者适配器来收尾，最终将迭代器转换成一个具体的值：
+```rs
+let v1: Vec<i32> = vec![1, 2, 3];
+
+v1.iter().map(|x| x + 1);
+```
+运行后输出:
+```rs
+warning: unused `Map` that must be used
+ --> src/main.rs:4:5
+  |
+4 |     v1.iter().map(|x| x + 1);
+  |     ^^^^^^^^^^^^^^^^^^^^^^^^^
+  |
+  = note: `#[warn(unused_must_use)]` on by default
+  = note: iterators are lazy and do nothing unless consumed // 迭代器 map 是惰性的，这里不产生任何效果
+  ```
+如上述中文注释所说，这里的 map 方法是一个迭代者适配器，它是惰性的，不产生任何行为，因此我们还需要一个消费者适配器进行收尾：
+```rs
+let v1: Vec<i32> = vec![1, 2, 3];
+
+let v2: Vec<_> = v1.iter().map(|x| x + 1).collect();
+
+assert_eq!(v2, vec![2, 3, 4]);
+```
+##### collect
+使用了 collect 方法，该方法就是一个消费者适配器，使用它可以将一个迭代器中的元素收集到指定类型中，这里我们为 v2 标注了 Vec<_> 类型，就是为了告诉 collect：请把迭代器中的元素消费掉，然后把值收集成 Vec<_> 类型，至于为何使用 _，因为编译器会帮我们自动推导。
+
+是因为该方法其实很强大，可以收集成多种不同的集合类型，Vec<T> 仅仅是其中之一，因此我们必须显式的告诉编译器我们想要收集成的集合类型。
+
+还有一点值得注意，map 会对迭代器中的每一个值进行一系列操作，然后把该值转换成另外一个新值，该操作是通过闭包 |x| x + 1 来完成：最终迭代器中的每个值都增加了 1，从 [1, 2, 3] 变为 [2, 3, 4]。
+
+再来看看如何使用 collect 收集成 HashMap 集合：
+```rs
+use std::collections::HashMap;
+fn main() {
+    let names = ["sunface", "sunfei"];
+    let ages = [18, 18];
+    let folks: HashMap<_, _> = names.into_iter().zip(ages.into_iter()).collect();
+
+    println!("{:?}",folks);
+}
+```
+
+zip 是一个迭代器适配器，它的作用就是将两个迭代器的内容压缩到一起，形成 Iterator<Item=(ValueFromA, ValueFromB)> 这样的新的迭代器，在此处就是形如 [(name1, age1), (name2, age2)] 的迭代器。
+
+然后再通过 collect 将新迭代器中(K, V) 形式的值收集成 HashMap<K, V>，同样的，这里必须显式声明类型，然后 HashMap 内部的 KV 类型可以交给编译器去推导，最终编译器会推导出 HashMap<&str, i32>，完全正确！
+
+##### 闭包作为适配器参数
+之前的 map 方法中，我们使用闭包来作为迭代器适配器的参数，它最大的好处不仅在于可以就地实现迭代器中元素的处理，还在于可以捕获环境值：
+```rs
+struct Shoe {
+    size: u32,
+    style: String,
+}
+
+fn shoes_in_size(shoes: Vec<Shoe>, shoe_size: u32) -> Vec<Shoe> {
+    shoes.into_iter().filter(|s| s.size == shoe_size).collect()
+}
+```
+filter 是迭代器适配器，用于对迭代器中的每个值进行过滤。 它使用闭包作为参数，该闭包的参数 s 是来自迭代器中的值，然后使用 s 跟外部环境中的 shoe_size 进行比较，若相等，则在迭代器中保留 s 值，若不相等，则从迭代器中剔除 s 值，最终通过 collect 收集为 Vec<Shoe> 类型。
+
+#### 实现 Iterator 特征
+之前的内容我们一直基于数组来创建迭代器，实际上，不仅仅是数组，基于其它集合类型一样可以创建迭代器，例如 HashMap。 你也可以创建自己的迭代器 —— 只要为自定义类型实现 Iterator 特征即可。
+
+首先，创建一个计数器：
+```rs
+struct Counter {
+    count: u32,
+}
+
+impl Counter {
+    fn new() -> Counter {
+        Counter { count: 0 }
+    }
+}
+```
+我们为计数器 Counter 实现了一个关联函数 new，用于创建新的计数器实例。下面我们继续为计数器实现 Iterator 特征：
+```rs
+impl Iterator for Counter {
+    type Item = u32;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.count < 5 {
+            self.count += 1;
+            Some(self.count)
+        } else {
+            None
+        }
+    }
+}
+```
+首先，将该特征的关联类型设置为 u32，由于我们的计数器保存的 count 字段就是 u32 类型， 因此在 next 方法中，最后返回的是实际上是 Option<u32> 类型。
+
+每次调用 next 方法，都会让计数器的值加一，然后返回最新的计数值，一旦计数大于 5，就返回 None。
+
+最后，使用我们新建的 Counter 进行迭代：
+```rs
+ let mut counter = Counter::new();
+
+assert_eq!(counter.next(), Some(1));
+assert_eq!(counter.next(), Some(2));
+assert_eq!(counter.next(), Some(3));
+assert_eq!(counter.next(), Some(4));
+assert_eq!(counter.next(), Some(5));
+assert_eq!(counter.next(), None);
+```
+###### 实现 Iterator 特征的其它方法
+可以看出，实现自己的迭代器非常简单，但是 Iterator 特征中，不仅仅是只有 next 一个方法，那为什么我们只需要实现它呢？因为其它方法都具有默认实现，所以无需像 next 这样手动去实现，而且这些默认实现的方法其实都是基于 next 方法实现的。
+
+下面的代码演示了部分方法的使用：
+```rs
+let sum: u32 = Counter::new()
+    .zip(Counter::new().skip(1))
+    .map(|(a, b)| a * b)
+    .filter(|x| x % 3 == 0)
+    .sum();
+assert_eq!(18, sum);
+```
+其中 zip，map，filter 是迭代器适配器：
+
+- zip 把两个迭代器合并成一个迭代器，新迭代器中，每个元素都是一个元组，由之前两个迭代器的元素组成。例如将形如 [1, 2, 3, 4, 5] 和 [2, 3, 4, 5] 的迭代器合并后，新的迭代器形如 [(1, 2),(2, 3),(3, 4),(4, 5)]
+- map 是将迭代器中的值经过映射后，转换成新的值[2, 6, 12, 20]
+- filter 对迭代器中的元素进行过滤，若闭包返回 true 则保留元素[6, 12]，反之剔除
+而 sum 是消费者适配器，对迭代器中的所有元素求和，最终返回一个 u32 值 18。
+
+#### enumerate
+针对 for 循环，我们提供了一种方法可以获取迭代时的索引：
+```rs
+let v = vec![1u64, 2, 3, 4, 5, 6];
+for (i,v) in v.iter().enumerate() {
+    println!("第{}个值是{}",i,v)
+}
+```
+)。
+
+因为 enumerate 是迭代器适配器，因此我们可以对它返回的迭代器调用其它 Iterator 特征方法：
+```rs
+let v = vec![1u64, 2, 3, 4, 5, 6];
+let val = v.iter()
+    .enumerate()
+    // 每两个元素剔除一个
+    // [1, 3, 5]
+    .filter(|&(idx, _)| idx % 2 == 0)
+    .map(|(idx, val)| val)
+    // 累加 1+3+5 = 9
+    .fold(0u64, |sum, acm| sum + acm);
+
+println!("{}", val);
+```
+
 
 ## 深入类型
 ### 类型转换
@@ -1812,6 +2460,14 @@ std::sync::atomic包中仅提供了数值类型的原子操作：AtomicBool, Ato
 
 ### 基于 Send 和 Sync 的线程安全
 ## 全局变量
+### 编译期初始化
+#### 静态常量
+```rs
+const MAX_ID: usize =  usize::MAX / 2;
+fn main() {
+   println!("用户ID允许的最大值是{}",MAX_ID);
+}
+```
 - 关键字是const而不是let
 - 定义常量必须指明类型（如 i32）不能省略
 - 定义常量时变量的命名规则一般是全部大写
@@ -1819,8 +2475,20 @@ std::sync::atomic包中仅提供了数值类型的原子操作：AtomicBool, Ato
 - 常量的赋值只能是常量表达式/数学表达式，也就是说必须是在编译期就能计算出的值，如果需要在运行时才能得出结果的值比如函数，则不能赋值给常量表达式
 - 对于变量出现重复的定义(绑定)会发生变量遮盖，后面定义的变量会遮住前面定义的变量，常量则不允许出现重复的定义
 
+#### 静态变量
+```rs
+static mut REQUEST_RECV: usize = 0;
+fn main() {
+   unsafe {
+        REQUEST_RECV += 1;
+        assert_eq!(REQUEST_RECV, 1);
+   }
+}
+```
+Rust 要求必须使用unsafe语句块才能访问和修改static变量，因为这种使用方式往往并不安全，其实编译器是对的，当在多线程中同时去修改时，会不可避免的遇到脏数据。
 
-
+只有在同一线程内或者不在乎数据的准确性时，才应该使用全局静态变量。
+#### 原子类型
 想要全局计数器、状态控制等功能，又想要线程安全的实现，原子类型是非常好的办法。
 ```rs
 use std::sync::atomic::{AtomicUsize, Ordering};
@@ -1833,7 +2501,28 @@ fn main() {
     println!("当前用户请求数{:?}",REQUEST_RECV);
 }
 ```
-### lazy_static
+### 运行期初始化
+静态初始化有一个致命的问题：无法用函数进行静态初始化，例如你如果想声明一个全局的Mutex锁：
+```rs
+use std::sync::Mutex;
+static NAMES: Mutex<String> = Mutex::new(String::from("Sunface, Jack, Allen"));
+
+fn main() {
+    let v = NAMES.lock().unwrap();
+    println!("{}",v);
+}
+```
+
+运行后报错如下：
+```shell
+error[E0015]: calls in statics are limited to constant functions, tuple structs and tuple variants
+ --> src/main.rs:3:42
+  |
+3 | static NAMES: Mutex<String> = Mutex::new(String::from("sunface"));
+```
+
+
+#### lazy_static
 lazy_static是社区提供的非常强大的宏，用于懒初始化静态变量，之前的静态变量都是在编译期初始化的，因此无法使用函数调用进行赋值，而lazy_static允许我们在运行期初始化静态变量！
 ```rs
 use std::sync::Mutex;
@@ -1848,7 +2537,9 @@ fn main() {
     println!("{}",v);
 }
 ```
-### Box::leak
+
+#### Box::leak
+Rust为我们提供了Box::leak方法，它可以将一个变量从内存中泄漏，然后将其变为'static生命周期，最终该变量将和程序活得一样久，因此可以赋值给全局静态变量CONFIG。
 ```rs
 #[derive(Debug)]
 struct Config {
@@ -1870,11 +2561,202 @@ fn main() {
     }
 }
 ```
-## 错误处理
-
-### filter
-filter 用于对 Option 进行过滤：
+#### 从函数中返回全局变量
 ```rs
+#[derive(Debug)]
+struct Config {
+    a: String,
+    b: String,
+}
+static mut CONFIG: Option<&mut Config> = None;
+
+fn init() -> Option<&'static mut Config> {
+    Some(&mut Config {
+        a: "A".to_string(),
+        b: "B".to_string(),
+    })
+}
+
+
+fn main() {
+    unsafe {
+        CONFIG = init();
+
+        println!("{:?}", CONFIG)
+    }
+}
+```
+### 标准库中的 OnceCell
+在 Rust 标准库中提供了实验性的 lazy::OnceCell 和 lazy::SyncOnceCell (在 Rust 1.70.0版本及以上的标准库中，替换为稳定的 cell::OnceCell 和 sync::OnceLock )两种 Cell ，前者用于单线程，后者用于多线程，它们用来存储堆上的信息，并且具有最 多只能赋值一次的特性。 如实现一个多线程的日志组件 Logger：
+```rs
+// 低于Rust 1.70版本中， OnceCell 和 SyncOnceCell 的API为实验性的 ，
+// 需启用特性 `#![feature(once_cell)]`。
+// #![feature(once_cell)]
+// use std::{lazy::SyncOnceCell, thread};
+
+// Rust 1.70版本以上,
+use std::{sync::OnceLock, thread};
+
+fn main() {
+    // 子线程中调用
+    let handle = thread::spawn(|| {
+        let logger = Logger::global();
+        logger.log("thread message".to_string());
+    });
+
+    // 主线程调用
+    let logger = Logger::global();
+    logger.log("some message".to_string());
+
+    let logger2 = Logger::global();
+    logger2.log("other message".to_string());
+
+    handle.join().unwrap();
+}
+
+#[derive(Debug)]
+struct Logger;
+
+// 低于Rust 1.70版本
+// static LOGGER: SyncOnceCell<Logger> = SyncOnceCell::new();
+
+// Rust 1.70版本以上
+static LOGGER: OnceLock<Logger> = OnceLock::new();
+
+impl Logger {
+    fn global() -> &'static Logger {
+        // 获取或初始化 Logger
+        LOGGER.get_or_init(|| {
+            println!("Logger is being created..."); // 初始化打印
+            Logger
+        })
+    }
+
+    fn log(&self, message: String) {
+        println!("{}", message)
+    }
+}
+```
+
+以上代码我们声明了一个 global() 关联函数，并在其内部调用 get_or_init 进行初始化 Logger，之后在不同线程上多次调用 Logger::global() 获取其实例：
+
+Logger is being created...
+some message
+other message
+thread message
+可以看到，Logger is being created... 在多个线程中使用也只被打印了一次。
+
+
+## 错误处理
+### 组合器
+
+
+将对象组合成树形结构以表示“部分整体”的层次结构。组合模式使得用户对单个对象和组合对象的使用具有一致性。–GoF <<设计模式>>
+
+与组合器模式有所不同，在 Rust 中，组合器更多的是用于对返回结果的类型进行变换：例如使用 ok_or 将一个 Option 类型转换成 Result 类型。
+
+下面我们来看看一些常见的组合器。
+
+or() 和 and()
+跟布尔关系的与/或很像，这两个方法会对两个表达式做逻辑组合，最终返回 Option / Result。
+
+or()，表达式按照顺序求值，若任何一个表达式的结果是 Some 或 Ok，则该值会立刻返回
+and()，若两个表达式的结果都是 Some 或 Ok，则第二个表达式中的值被返回。若任何一个的结果是 None 或 Err ，则立刻返回。
+实际上，只要将布尔表达式的 true / false，替换成 Some / None 或 Ok / Err 就很好理解了。
+
+fn main() {
+  let s1 = Some("some1");
+  let s2 = Some("some2");
+  let n: Option<&str> = None;
+
+  let o1: Result<&str, &str> = Ok("ok1");
+  let o2: Result<&str, &str> = Ok("ok2");
+  let e1: Result<&str, &str> = Err("error1");
+  let e2: Result<&str, &str> = Err("error2");
+
+  assert_eq!(s1.or(s2), s1); // Some1 or Some2 = Some1
+  assert_eq!(s1.or(n), s1);  // Some or None = Some
+  assert_eq!(n.or(s1), s1);  // None or Some = Some
+  assert_eq!(n.or(n), n);    // None1 or None2 = None2
+
+  assert_eq!(o1.or(o2), o1); // Ok1 or Ok2 = Ok1
+  assert_eq!(o1.or(e1), o1); // Ok or Err = Ok
+  assert_eq!(e1.or(o1), o1); // Err or Ok = Ok
+  assert_eq!(e1.or(e2), e2); // Err1 or Err2 = Err2
+
+  assert_eq!(s1.and(s2), s2); // Some1 and Some2 = Some2
+  assert_eq!(s1.and(n), n);   // Some and None = None
+  assert_eq!(n.and(s1), n);   // None and Some = None
+  assert_eq!(n.and(n), n);    // None1 and None2 = None1
+
+  assert_eq!(o1.and(o2), o2); // Ok1 and Ok2 = Ok2
+  assert_eq!(o1.and(e1), e1); // Ok and Err = Err
+  assert_eq!(e1.and(o1), e1); // Err and Ok = Err
+  assert_eq!(e1.and(e2), e1); // Err1 and Err2 = Err1
+}
+除了 or 和 and 之外，Rust 还为我们提供了 xor ，但是它只能应用在 Option 上，其实想想也是这个理，如果能应用在 Result 上，那你又该如何对一个值和错误进行异或操作？
+
+or_else() 和 and_then()
+它们跟 or() 和 and() 类似，唯一的区别在于，它们的第二个表达式是一个闭包。
+
+fn main() {
+    // or_else with Option
+    let s1 = Some("some1");
+    let s2 = Some("some2");
+    let fn_some = || Some("some2"); // 类似于: let fn_some = || -> Option<&str> { Some("some2") };
+
+    let n: Option<&str> = None;
+    let fn_none = || None;
+
+    assert_eq!(s1.or_else(fn_some), s1);  // Some1 or_else Some2 = Some1
+    assert_eq!(s1.or_else(fn_none), s1);  // Some or_else None = Some
+    assert_eq!(n.or_else(fn_some), s2);   // None or_else Some = Some
+    assert_eq!(n.or_else(fn_none), None); // None1 or_else None2 = None2
+
+    // or_else with Result
+    let o1: Result<&str, &str> = Ok("ok1");
+    let o2: Result<&str, &str> = Ok("ok2");
+    let fn_ok = |_| Ok("ok2"); // 类似于: let fn_ok = |_| -> Result<&str, &str> { Ok("ok2") };
+
+    let e1: Result<&str, &str> = Err("error1");
+    let e2: Result<&str, &str> = Err("error2");
+    let fn_err = |_| Err("error2");
+
+    assert_eq!(o1.or_else(fn_ok), o1);  // Ok1 or_else Ok2 = Ok1
+    assert_eq!(o1.or_else(fn_err), o1); // Ok or_else Err = Ok
+    assert_eq!(e1.or_else(fn_ok), o2);  // Err or_else Ok = Ok
+    assert_eq!(e1.or_else(fn_err), e2); // Err1 or_else Err2 = Err2
+}
+fn main() {
+    // and_then with Option
+    let s1 = Some("some1");
+    let s2 = Some("some2");
+    let fn_some = |_| Some("some2"); // 类似于: let fn_some = |_| -> Option<&str> { Some("some2") };
+
+    let n: Option<&str> = None;
+    let fn_none = |_| None;
+
+    assert_eq!(s1.and_then(fn_some), s2); // Some1 and_then Some2 = Some2
+    assert_eq!(s1.and_then(fn_none), n);  // Some and_then None = None
+    assert_eq!(n.and_then(fn_some), n);   // None and_then Some = None
+    assert_eq!(n.and_then(fn_none), n);   // None1 and_then None2 = None1
+
+    // and_then with Result
+    let o1: Result<&str, &str> = Ok("ok1");
+    let o2: Result<&str, &str> = Ok("ok2");
+    let fn_ok = |_| Ok("ok2"); // 类似于: let fn_ok = |_| -> Result<&str, &str> { Ok("ok2") };
+
+    let e1: Result<&str, &str> = Err("error1");
+    let e2: Result<&str, &str> = Err("error2");
+    let fn_err = |_| Err("error2");
+
+    assert_eq!(o1.and_then(fn_ok), o2);  // Ok1 and_then Ok2 = Ok2
+    assert_eq!(o1.and_then(fn_err), e2); // Ok and_then Err = Err
+    assert_eq!(e1.and_then(fn_ok), e1);  // Err and_then Ok = Err
+    assert_eq!(e1.and_then(fn_err), e1); // Err1 and_then Err2 = Err1
+}
+filter
+filter 用于对 Option 进行过滤：
 
 fn main() {
     let s1 = Some(3);
@@ -1887,12 +2769,8 @@ fn main() {
     assert_eq!(s2.filter(fn_is_even), s2); // Some(6) -> 6 is even -> Some(6)
     assert_eq!(n.filter(fn_is_even), n);   // None -> no value -> None
 }
-```
-
-### map() 和 map_err()
-```rs
+map() 和 map_err()
 map 可以将 Some 或 Ok 中的值映射为另一个：
-
 
 fn main() {
     let s1 = Some("abcde");
@@ -1915,9 +2793,315 @@ fn main() {
     assert_eq!(o1.map(fn_character_count), o2); // Ok1 map = Ok2
     assert_eq!(e1.map(fn_character_count), e2); // Err1 map = Err2
 }
-```
-### Box &lt;dyn Error>
-```rs
+但是如果你想要将 Err 中的值进行改变， map 就无能为力了，此时我们需要用 map_err：
+
+fn main() {
+    let o1: Result<&str, &str> = Ok("abcde");
+    let o2: Result<&str, isize> = Ok("abcde");
+
+    let e1: Result<&str, &str> = Err("404");
+    let e2: Result<&str, isize> = Err(404);
+
+    let fn_character_count = |s: &str| -> isize { s.parse().unwrap() }; // 该函数返回一个 isize
+
+    assert_eq!(o1.map_err(fn_character_count), o2); // Ok1 map = Ok2
+    assert_eq!(e1.map_err(fn_character_count), e2); // Err1 map = Err2
+}
+通过对 o1 的操作可以看出，与 map 面对 Err 时的短小类似， map_err 面对 Ok 时也是相当无力的。
+
+map_or() 和 map_or_else()
+map_or 在 map 的基础上提供了一个默认值:
+
+fn main() {
+    const V_DEFAULT: u32 = 1;
+
+    let s: Result<u32, ()> = Ok(10);
+    let n: Option<u32> = None;
+    let fn_closure = |v: u32| v + 2;
+
+    assert_eq!(s.map_or(V_DEFAULT, fn_closure), 12);
+    assert_eq!(n.map_or(V_DEFAULT, fn_closure), V_DEFAULT);
+}
+如上所示，当处理 None 的时候，V_DEFAULT 作为默认值被直接返回。
+
+map_or_else 与 map_or 类似，但是它是通过一个闭包来提供默认值:
+
+fn main() {
+    let s = Some(10);
+    let n: Option<i8> = None;
+
+    let fn_closure = |v: i8| v + 2;
+    let fn_default = || 1;
+
+    assert_eq!(s.map_or_else(fn_default, fn_closure), 12);
+    assert_eq!(n.map_or_else(fn_default, fn_closure), 1);
+
+    let o = Ok(10);
+    let e = Err(5);
+    let fn_default_for_result = |v: i8| v + 1; // 闭包可以对 Err 中的值进行处理，并返回一个新值
+
+    assert_eq!(o.map_or_else(fn_default_for_result, fn_closure), 12);
+    assert_eq!(e.map_or_else(fn_default_for_result, fn_closure), 6);
+}
+ok_or() and ok_or_else()
+这两兄弟可以将 Option 类型转换为 Result 类型。其中 ok_or 接收一个默认的 Err 参数:
+
+fn main() {
+    const ERR_DEFAULT: &str = "error message";
+
+    let s = Some("abcde");
+    let n: Option<&str> = None;
+
+    let o: Result<&str, &str> = Ok("abcde");
+    let e: Result<&str, &str> = Err(ERR_DEFAULT);
+
+    assert_eq!(s.ok_or(ERR_DEFAULT), o); // Some(T) -> Ok(T)
+    assert_eq!(n.ok_or(ERR_DEFAULT), e); // None -> Err(default)
+}
+而 ok_or_else 接收一个闭包作为 Err 参数:
+
+fn main() {
+    let s = Some("abcde");
+    let n: Option<&str> = None;
+    let fn_err_message = || "error message";
+
+    let o: Result<&str, &str> = Ok("abcde");
+    let e: Result<&str, &str> = Err("error message");
+
+    assert_eq!(s.ok_or_else(fn_err_message), o); // Some(T) -> Ok(T)
+    assert_eq!(n.ok_or_else(fn_err_message), e); // None -> Err(default)
+}
+以上列出的只是常用的一部分，强烈建议大家看看标准库中有哪些可用的 API，在实际项目中，这些 API 将会非常有用: Option 和 Result。
+
+自定义错误类型
+虽然标准库定义了大量的错误类型，但是一个严谨的项目，光使用这些错误类型往往是不够的，例如我们可能会为暴露给用户的错误定义相应的类型。
+
+为了帮助我们更好的定义错误，Rust 在标准库中提供了一些可复用的特征，例如 std::error::Error 特征：
+
+use std::fmt::{Debug, Display};
+
+pub trait Error: Debug + Display {
+    fn source(&self) -> Option<&(Error + 'static)> { ... }
+}
+当自定义类型实现该特征后，该类型就可以作为 Err 来使用，下面一起来看看。
+
+实际上，自定义错误类型只需要实现 Debug 和 Display 特征即可，source 方法是可选的，而 Debug 特征往往也无需手动实现，可以直接通过 derive 来派生
+
+最简单的错误
+use std::fmt;
+
+// AppError 是自定义错误类型，它可以是当前包中定义的任何类型，在这里为了简化，我们使用了单元结构体作为例子。
+// 为 AppError 自动派生 Debug 特征
+#[derive(Debug)]
+struct AppError;
+
+// 为 AppError 实现 std::fmt::Display 特征
+impl fmt::Display for AppError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "An Error Occurred, Please Try Again!") // user-facing output
+    }
+}
+
+// 一个示例函数用于产生 AppError 错误
+fn produce_error() -> Result<(), AppError> {
+    Err(AppError)
+}
+
+fn main(){
+    match produce_error() {
+        Err(e) => eprintln!("{}", e),
+        _ => println!("No error"),
+    }
+
+    eprintln!("{:?}", produce_error()); // Err({ file: src/main.rs, line: 17 })
+}
+上面的例子很简单，我们定义了一个错误类型，当为它派生了 Debug 特征，同时手动实现了 Display 特征后，该错误类型就可以作为 Err来使用了。
+
+事实上，实现 Debug 和 Display 特征并不是作为 Err 使用的必要条件，大家可以把这两个特征实现和相应使用去除，然后看看代码会否报错。既然如此，我们为何要为自定义类型实现这两个特征呢？原因有二:
+
+错误得打印输出后，才能有实际用处，而打印输出就需要实现这两个特征
+可以将自定义错误转换成 Box<dyn std::error:Error> 特征对象，在后面的归一化不同错误类型部分，我们会详细介绍
+更详尽的错误
+上一个例子中定义的错误非常简单，我们无法从错误中得到更多的信息，现在再来定义一个具有错误码和信息的错误:
+
+use std::fmt;
+
+struct AppError {
+    code: usize,
+    message: String,
+}
+
+// 根据错误码显示不同的错误信息
+impl fmt::Display for AppError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        let err_msg = match self.code {
+            404 => "Sorry, Can not find the Page!",
+            _ => "Sorry, something is wrong! Please Try Again!",
+        };
+
+        write!(f, "{}", err_msg)
+    }
+}
+
+impl fmt::Debug for AppError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(
+            f,
+            "AppError {{ code: {}, message: {} }}",
+            self.code, self.message
+        )
+    }
+}
+
+fn produce_error() -> Result<(), AppError> {
+    Err(AppError {
+        code: 404,
+        message: String::from("Page not found"),
+    })
+}
+
+fn main() {
+    match produce_error() {
+        Err(e) => eprintln!("{}", e), // 抱歉，未找到指定的页面!
+        _ => println!("No error"),
+    }
+
+    eprintln!("{:?}", produce_error()); // Err(AppError { code: 404, message: Page not found })
+
+    eprintln!("{:#?}", produce_error());
+    // Err(
+    //     AppError { code: 404, message: Page not found }
+    // )
+}
+在本例中，我们除了增加了错误码和消息外，还手动实现了 Debug 特征，原因在于，我们希望能自定义 Debug 的输出内容，而不是使用派生后系统提供的默认输出形式。
+
+错误转换 From 特征
+标准库、三方库、本地库，各有各的精彩，各也有各的错误。那么问题就来了，我们该如何将其它的错误类型转换成自定义的错误类型？总不能神鬼牛魔，同台共舞吧。。
+
+好在 Rust 为我们提供了 std::convert::From 特征:
+
+pub trait From<T>: Sized {
+  fn from(_: T) -> Self;
+}
+事实上，该特征在之前的 ? 操作符章节中就有所介绍。
+
+大家都使用过 String::from 函数吧？它可以通过 &str 来创建一个 String，其实该函数就是 From 特征提供的
+
+下面一起来看看如何为自定义类型实现 From 特征:
+
+use std::fs::File;
+use std::io;
+
+#[derive(Debug)]
+struct AppError {
+    kind: String,    // 错误类型
+    message: String, // 错误信息
+}
+
+// 为 AppError 实现 std::convert::From 特征，由于 From 包含在 std::prelude 中，因此可以直接简化引入。
+// 实现 From<io::Error> 意味着我们可以将 io::Error 错误转换成自定义的 AppError 错误
+impl From<io::Error> for AppError {
+    fn from(error: io::Error) -> Self {
+        AppError {
+            kind: String::from("io"),
+            message: error.to_string(),
+        }
+    }
+}
+
+fn main() -> Result<(), AppError> {
+    let _file = File::open("nonexistent_file.txt")?;
+
+    Ok(())
+}
+
+// --------------- 上述代码运行后输出 ---------------
+Error: AppError { kind: "io", message: "No such file or directory (os error 2)" }
+上面的代码中除了实现 From 外，还有一点特别重要，那就是 ? 可以将错误进行隐式的强制转换：File::open 返回的是 std::io::Error， 我们并没有进行任何显式的转换，它就能自动变成 AppError ，这就是 ? 的强大之处！
+
+上面的例子只有一个标准库错误，再来看看多个不同的错误转换成 AppError 的实现：
+
+use std::fs::File;
+use std::io::{self, Read};
+use std::num;
+
+#[derive(Debug)]
+struct AppError {
+    kind: String,
+    message: String,
+}
+
+impl From<io::Error> for AppError {
+    fn from(error: io::Error) -> Self {
+        AppError {
+            kind: String::from("io"),
+            message: error.to_string(),
+        }
+    }
+}
+
+impl From<num::ParseIntError> for AppError {
+    fn from(error: num::ParseIntError) -> Self {
+        AppError {
+            kind: String::from("parse"),
+            message: error.to_string(),
+        }
+    }
+}
+
+fn main() -> Result<(), AppError> {
+    let mut file = File::open("hello_world.txt")?;
+
+    let mut content = String::new();
+    file.read_to_string(&mut content)?;
+
+    let _number: usize;
+    _number = content.parse()?;
+
+    Ok(())
+}
+
+
+// --------------- 上述代码运行后的可能输出 ---------------
+
+// 01. 若 hello_world.txt 文件不存在
+Error: AppError { kind: "io", message: "No such file or directory (os error 2)" }
+
+// 02. 若用户没有相关的权限访问 hello_world.txt
+Error: AppError { kind: "io", message: "Permission denied (os error 13)" }
+
+// 03. 若 hello_world.txt 包含有非数字的内容，例如 Hello, world!
+Error: AppError { kind: "parse", message: "invalid digit found in string" }
+归一化不同的错误类型
+至此，关于 Rust 的错误处理大家已经了若指掌了，下面再来看看一些实战中的问题。
+
+在实际项目中，我们往往会为不同的错误定义不同的类型，这样做非常好，但是如果你要在一个函数中返回不同的错误呢？例如：
+
+use std::fs::read_to_string;
+
+fn main() -> Result<(), std::io::Error> {
+  let html = render()?;
+  println!("{}", html);
+  Ok(())
+}
+
+fn render() -> Result<String, std::io::Error> {
+  let file = std::env::var("MARKDOWN")?;
+  let source = read_to_string(file)?;
+  Ok(source)
+}
+上面的代码会报错，原因在于 render 函数中的两个 ? 返回的实际上是不同的错误：env::var() 返回的是 std::env::VarError，而 read_to_string 返回的是 std::io::Error。
+
+为了满足 render 函数的签名，我们就需要将 env::VarError 和 io::Error 归一化为同一种错误类型。要实现这个目的有三种方式:
+
+使用特征对象 Box<dyn Error>
+自定义错误类型
+使用 thiserror
+下面依次来看看相关的解决方式。
+
+Box<dyn Error>
+大家还记得我们之前提到的 std::error::Error 特征吧，当时有说：自定义类型实现 Debug + Display 特征的主要原因就是为了能转换成 Error 的特征对象，而特征对象恰恰是在同一个地方使用不同类型的关键:
+
 use std::fs::read_to_string;
 use std::error::Error;
 fn main() -> Result<(), Box<dyn Error>> {
@@ -1931,7 +3115,134 @@ fn render() -> Result<String, Box<dyn Error>> {
   let source = read_to_string(file)?;
   Ok(source)
 }
-```
+这个方法很简单，在绝大多数场景中，性能也非常够用，但是有一个问题：Result 实际上不会限制错误的类型，也就是一个类型就算不实现 Error 特征，它依然可以在 Result<T, E> 中作为 E 来使用，此时这种特征对象的解决方案就无能为力了。
+
+自定义错误类型
+与特征对象相比，自定义错误类型麻烦归麻烦，但是它非常灵活，因此也不具有上面的类似限制:
+
+use std::fs::read_to_string;
+
+fn main() -> Result<(), MyError> {
+  let html = render()?;
+  println!("{}", html);
+  Ok(())
+}
+
+fn render() -> Result<String, MyError> {
+  let file = std::env::var("MARKDOWN")?;
+  let source = read_to_string(file)?;
+  Ok(source)
+}
+
+#[derive(Debug)]
+enum MyError {
+  EnvironmentVariableNotFound,
+  IOError(std::io::Error),
+}
+
+impl From<std::env::VarError> for MyError {
+  fn from(_: std::env::VarError) -> Self {
+    Self::EnvironmentVariableNotFound
+  }
+}
+
+impl From<std::io::Error> for MyError {
+  fn from(value: std::io::Error) -> Self {
+    Self::IOError(value)
+  }
+}
+
+impl std::error::Error for MyError {}
+
+impl std::fmt::Display for MyError {
+  fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    match self {
+      MyError::EnvironmentVariableNotFound => write!(f, "Environment variable not found"),
+      MyError::IOError(err) => write!(f, "IO Error: {}", err.to_string()),
+    }
+  }
+}
+上面代码中有一行值得注意：impl std::error::Error for MyError {} ，只有为自定义错误类型实现 Error 特征后，才能转换成相应的特征对象。
+
+不得不说，真是啰嗦啊。因此在能用特征对象的时候，建议大家还是使用特征对象，无论如何，代码可读性还是很重要的！
+
+上面的第二种方式灵活归灵活，啰嗦也是真啰嗦，好在 Rust 的社区为我们提供了 thiserror 解决方案，下面一起来看看该如何简化 Rust 中的错误处理。
+
+简化错误处理
+对于开发者而言，错误处理是代码中打交道最多的部分之一，因此选择一把趁手的武器也很重要，它可以帮助我们节省大量的时间和精力，好钢应该用在代码逻辑而不是冗长的错误处理上。
+
+thiserror
+thiserror可以帮助我们简化上面的第二种解决方案：
+
+use std::fs::read_to_string;
+
+fn main() -> Result<(), MyError> {
+  let html = render()?;
+  println!("{}", html);
+  Ok(())
+}
+
+fn render() -> Result<String, MyError> {
+  let file = std::env::var("MARKDOWN")?;
+  let source = read_to_string(file)?;
+  Ok(source)
+}
+
+#[derive(thiserror::Error, Debug)]
+enum MyError {
+  #[error("Environment variable not found")]
+  EnvironmentVariableNotFound(#[from] std::env::VarError),
+  #[error(transparent)]
+  IOError(#[from] std::io::Error),
+}
+如上所示，只要简单写写注释，就可以实现错误处理了，惊不惊喜？
+
+error-chain
+error-chain 也是简单好用的库，可惜不再维护了，但是我觉得它依然可以在合适的地方大放光彩，值得大家去了解下。
+
+use std::fs::read_to_string;
+
+error_chain::error_chain! {
+  foreign_links {
+    EnvironmentVariableNotFound(::std::env::VarError);
+    IOError(::std::io::Error);
+  }
+}
+
+fn main() -> Result<()> {
+  let html = render()?;
+  println!("{}", html);
+  Ok(())
+}
+
+fn render() -> Result<String> {
+  let file = std::env::var("MARKDOWN")?;
+  let source = read_to_string(file)?;
+  Ok(source)
+}
+喏，简单吧？使用 error-chain 的宏你可以获得：Error 结构体，错误类型 ErrorKind 枚举 以及一个自定义的 Result 类型。
+
+anyhow
+anyhow 和 thiserror 是同一个作者开发的，这里是作者关于 anyhow 和 thiserror 的原话：
+
+如果你想要设计自己的错误类型，同时给调用者提供具体的信息时，就使用 thiserror，例如当你在开发一个三方库代码时。如果你只想要简单，就使用 anyhow，例如在自己的应用服务中。
+
+use std::fs::read_to_string;
+
+use anyhow::Result;
+
+fn main() -> Result<()> {
+    let html = render()?;
+    println!("{}", html);
+    Ok(())
+}
+
+fn render() -> Result<String> {
+    let file = std::env::var("MARKDOWN")?;
+    let source = read_to_string(file)?;
+    Ok(source)
+}
+关于如何选用 thiserror 和 anyhow 只需要遵循一个原则即可：是否关注自定义错误消息，关注则使用 thiserror（常见业务代码），否则使用 anyhow（编写第三方库代码）。
 ## unsafe 简介
 
 ### 解引用裸指针

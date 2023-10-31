@@ -526,6 +526,12 @@ docker run -itd -p 3306:3306 \
 -e MYSQL_ROOT_PASSWORD=root \
 -d mysql:latest
 ```
+docker run -itd -p 3306:3306 \
+--name mysql \
+--privileged=true \
+--restart=always \
+-e MYSQL_ROOT_PASSWORD=root \
+-d mysql:latest
 ## nacos
 ```sql
 /******************************************/
@@ -1005,12 +1011,13 @@ xuxueli/xxl-job-admin:2.3.1
 >mkdir -p /docker_volume/mongodb/data
 
 运行容器
->docker run -itd --name mongo -v /docker_volume/mongodb/data:/data/db -p 27017:27017 mongo:4.4 --auth
+>docker run -itd --name mongo  -p 27017:27017 mongo --auth
 
 -v: 将宿主机的/docker_volume/mongodb/data映射到容器的/data/db目录，将数据持久化到宿主机，以防止删除容器后，容器内的数据丢失–auth：需要密码才能访问容器服务
 **创建用户**
 登录mongo容器，并进入到【admin】数据库
-> docker exec -it mongo mongo admin
+> docker exec -it mongo mongosh
+use admin
 
 创建一个用户，mongo 默认没有用户
 >db.createUser({ user:'root',pwd:'123456',roles:[ { role:'userAdminAnyDatabase', db: 'admin'},'readWriteAnyDatabase']});
