@@ -199,9 +199,10 @@ http {
 2. 制作挂在目录（/mount/docker/redis）
 ```s
 mkdir -p /mount/docker/redis/conf
-touch  /mount/docker/redis/conf/redis.conf
+
 mkdir -p /mount/docker/redis/data
 ```
+
 
 3. 下载redis.conf文件
 wget http://download.redis.io/redis-stable/redis.conf
