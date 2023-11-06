@@ -1,3 +1,4 @@
+
 # 入门
 ## 简介
 Redis全称为Remote Dictionary Server（远程数据服务），是一款开源的基于内存的键值对存储系统，其主要被用作高性能缓存服务器使用，当然也可以作为消息中间件和Session共享等。Redis独特的键值对模型使之支持丰富的数据结构类型，即它的值可以是字符串、哈希、列表、集合、有序集合，而不像Memcached要求的键和值都是字符串。同时由于Redis是基于内存的方式，免去了磁盘I/O速度的影响，因此其读写性能极高。
@@ -556,20 +557,12 @@ SortedSet的常见命令有：
 
 在Redis官网中提供了各种语言的客户端，地址：https://redis.io/docs/clients/
 
-![](https://i.imgur.com/9f68ivq.png)
 
-其中Java客户端也包含很多：
-
-![image-20220609102817435](assets/image-20220609102817435.png)
-
-标记为❤的就是推荐使用的java客户端，包括：
-
-- Jedis和Lettuce：这两个主要是提供了Redis命令对应的API，方便我们操作Redis，而SpringDataRedis又对这两种做了抽象和封装，因此我们后期会直接以SpringDataRedis来学习。
-- Redisson：是在Redis基础上实现了分布式的可伸缩的java数据结构，例如Map.Queue等，而且支持跨进程的同步机制：Lock.Semaphore等待，比较适合用来实现特殊的功能需求。
+其中Java客户端也包含很多但在开发中用的最多的还是Jedis，接下来就让我们以Jedis开始我们的快速实战。
 
 
 
-### 5.1 Jedis快速入门
+## Jedis快速入门
 
 **入门案例详细步骤**
 
@@ -577,26 +570,27 @@ SortedSet的常见命令有：
 
 0）创建工程：
 
-![1652959239813](\Redis.assets\1652959239813.png)
-
-
+创建一个maven管理的java项目
+![Alt text](image-2.png)
 
 1）引入依赖：
-
+在pom.xml文件下添加以下依赖
 ```xml
-<!--jedis-->
-<dependency>
-    <groupId>redis.clients</groupId>
-    <artifactId>jedis</artifactId>
-    <version>3.7.0</version>
-</dependency>
-<!--单元测试-->
-<dependency>
-    <groupId>org.junit.jupiter</groupId>
-    <artifactId>junit-jupiter</artifactId>
-    <version>5.7.0</version>
-    <scope>test</scope>
-</dependency>
+
+<dependencies>
+    <!--jedis-->
+    <dependency>
+        <groupId>redis.clients</groupId>
+        <artifactId>jedis</artifactId>
+        <version>4.4.3</version>
+    </dependency>
+    <dependency>
+        <groupId>org.junit.jupiter</groupId>
+        <artifactId>junit-jupiter</artifactId>
+        <version>RELEASE</version>
+        <scope>test</scope>
+    </dependency>
+</dependencies>
 ```
 
 
@@ -611,10 +605,10 @@ private Jedis jedis;
 @BeforeEach
 void setUp() {
     // 1.建立连接
-    // jedis = new Jedis("192.168.150.101", 6379);
-    jedis = JedisConnectionFactory.getJedis();
+    jedis = new Jedis("192.168.218.134", 6379);
+   // jedis = JedisConnectionFactory.getJedis();
     // 2.设置密码
-    jedis.auth("123321");
+    jedis.auth("123456");
     // 3.选择库
     jedis.select(0);
 }
@@ -628,7 +622,7 @@ void setUp() {
 @Test
 void testString() {
     // 存入数据
-    String result = jedis.set("name", "虎哥");
+    String result = jedis.set("name", "onenewcode");
     System.out.println("result = " + result);
     // 获取数据
     String name = jedis.get("name");
@@ -664,7 +658,7 @@ void tearDown() {
 
 
 
-### 5.2 Jedis连接池
+###  Jedis连接池
 
 Jedis本身是线程不安全的，并且频繁的创建和销毁连接会有性能损耗，因此我们推荐大家使用Jedis连接池代替Jedis的直连方式
 
@@ -672,9 +666,8 @@ Jedis本身是线程不安全的，并且频繁的创建和销毁连接会有性
 
 
 
-#### 5.2.1.创建Jedis的连接池
+#### 创建Jedis的连接池
 
-- 
 
 ```java
 public class JedisConnectionFacotry {
@@ -690,7 +683,7 @@ public class JedisConnectionFacotry {
          poolConfig.setMaxWaitMillis(1000);
          //创建连接池对象
          jedisPool = new JedisPool(poolConfig,
-                 "192.168.150.101",6379,1000,"123321");
+                 "192.168.218.134",6379,1000,"123456");
      }
 
      public static Jedis getJedis(){
@@ -709,7 +702,7 @@ public class JedisConnectionFacotry {
 
 
 
-#### 5.2.2.改造原始代码
+#### 改造原始代码
 
 **代码说明:**
 
@@ -739,7 +732,7 @@ public class JedisConnectionFacotry {
 
 
 
-## 6.Redis的Java客户端-SpringDataRedis
+## Redis的Java客户端-SpringDataRedis
 
 SpringData是Spring中数据操作的模块，包含对各种数据库的集成，其中对Redis的集成模块就叫做SpringDataRedis，官网地址：https://spring.io/projects/spring-data-redis
 
@@ -753,41 +746,43 @@ SpringData是Spring中数据操作的模块，包含对各种数据库的集成�
 
 SpringDataRedis中提供了RedisTemplate工具类，其中封装了各种对Redis的操作。并且将不同数据类型的操作API封装到了不同的类型中：
 
-![1652976773295](.\Redis.assets\1652976773295.png)
+![Alt text](image-3.png)
 
 
-
-### 6.1.快速入门
+### 快速入门
 
 SpringBoot已经提供了对SpringDataRedis的支持，使用非常简单：
 
-#### 6.1.1.导入pom坐标
+#### 导入pom坐标
 
 ```xml
 <?xml version="1.0" encoding="UTF-8"?>
 <project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
          xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
     <modelVersion>4.0.0</modelVersion>
-    <parent>
-        <groupId>org.springframework.boot</groupId>
-        <artifactId>spring-boot-starter-parent</artifactId>
-        <version>2.5.7</version>
-        <relativePath/> <!-- lookup parent from repository -->
-    </parent>
-    <groupId>com.heima</groupId>
-    <artifactId>redis-demo</artifactId>
+    <groupId>com.onenewcode</groupId>
+    <artifactId>MyRedis</artifactId>
     <version>0.0.1-SNAPSHOT</version>
-    <name>redis-demo</name>
-    <description>Demo project for Spring Boot</description>
+    <name>MyRedis</name>
+    <description>MyRedis</description>
     <properties>
-        <java.version>1.8</java.version>
+        <java.version>17</java.version>
+        <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+        <project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
+        <spring-boot.version>3.0.2</spring-boot.version>
     </properties>
     <dependencies>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter</artifactId>
+        </dependency>
+
         <!--redis依赖-->
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-data-redis</artifactId>
         </dependency>
+
         <!--common-pool-->
         <dependency>
             <groupId>org.apache.commons</groupId>
@@ -808,62 +803,97 @@ SpringBoot已经提供了对SpringDataRedis的支持，使用非常简单：
             <artifactId>spring-boot-starter-test</artifactId>
             <scope>test</scope>
         </dependency>
+        <dependency>
+            <groupId>org.projectlombok</groupId>
+            <artifactId>lombok</artifactId>
+            <version>1.18.30</version>
+        </dependency>
     </dependencies>
+    <dependencyManagement>
+        <dependencies>
+            <dependency>
+                <groupId>org.springframework.boot</groupId>
+                <artifactId>spring-boot-dependencies</artifactId>
+                <version>${spring-boot.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+        </dependencies>
+    </dependencyManagement>
 
     <build>
         <plugins>
             <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-compiler-plugin</artifactId>
+                <version>3.8.1</version>
+                <configuration>
+                    <source>17</source>
+                    <target>17</target>
+                    <encoding>UTF-8</encoding>
+                </configuration>
+            </plugin>
+            <plugin>
                 <groupId>org.springframework.boot</groupId>
                 <artifactId>spring-boot-maven-plugin</artifactId>
+                <version>${spring-boot.version}</version>
                 <configuration>
-                    <excludes>
-                        <exclude>
-                            <groupId>org.projectlombok</groupId>
-                            <artifactId>lombok</artifactId>
-                        </exclude>
-                    </excludes>
+                    <mainClass>com.onenewcode.myredis.MyRedisApplication</mainClass>
+                    <skip>true</skip>
                 </configuration>
+                <executions>
+                    <execution>
+                        <id>repackage</id>
+                        <goals>
+                            <goal>repackage</goal>
+                        </goals>
+                    </execution>
+                </executions>
             </plugin>
         </plugins>
     </build>
 
 </project>
+
 ```
 
-#### 6.1.2 .配置文件
+#### 配置文件
 
 ```yaml
 spring:
-  redis:
-    host: 192.168.150.101
-    port: 6379
-    password: 123321
-    lettuce:
-      pool:
-        max-active: 8  #最大连接
-        max-idle: 8   #最大空闲连接
-        min-idle: 0   #最小空闲连接
-        max-wait: 100ms #连接等待时间
+  data:
+    redis:
+      host: 192.168.218.134
+      port: 6379
+      password: 123456
+      lettuce:
+        pool:
+          max-active: 8  #最大连接
+          max-idle: 8   #最大空闲连接
+          min-idle: 0   #最小空闲连接
+          max-wait: 100ms #连接等待时间
+
 ```
 
-#### 6.1.3.测试代码
+#### 测试代码
 
 ```java
 @SpringBootTest
-class RedisDemoApplicationTests {
+class MyRedisApplicationTests {
 
-    @Autowired
+    @Resource
     private RedisTemplate<String, Object> redisTemplate;
 
     @Test
     void testString() {
         // 写入一条String数据
-        redisTemplate.opsForValue().set("name", "虎哥");
+        redisTemplate.opsForValue().set("name", "onenewcode");
         // 获取string数据
         Object name = redisTemplate.opsForValue().get("name");
         System.out.println("name = " + name);
     }
 }
+
 ```
 
 **贴心小提示：SpringDataJpa使用起来非常简单，记住如下几个步骤即可**
@@ -874,22 +904,15 @@ SpringDataRedis的使用步骤：
 * 在application.yml配置Redis信息
 * 注入RedisTemplate
 
+**目录结构**
 
+![Alt text](image-4.png)
 
-### 6.2 .数据序列化器
+### 数据序列化器
 
-RedisTemplate可以接收任意Object作为值写入Redis：
+RedisTemplate可以接收任意Object作为值写入Redis，只不过写入前会把Object序列化为字节形式，默认是采用JDK序列化，得到的结果是这样的：
 
-![](https://i.imgur.com/OEMcbuu.png)
-
-
-
-只不过写入前会把Object序列化为字节形式，默认是采用JDK序列化，得到的结果是这样的：
-
-![](https://i.imgur.com/5FjtWk5.png)
-
-
-
+![Alt text](image-5.png)
 缺点：
 
 - 可读性差
@@ -929,8 +952,8 @@ public class RedisConfig {
 
 
 这里采用了JSON序列化来代替默认的JDK序列化方式。最终结果如图：
+![Alt text](image-9.png)
 
-![](https://i.imgur.com/XOAq3cN.png)
 
 整体可读性有了很大提升，并且能将Java对象自动的序列化为JSON字符串，并且查询时能自动把JSON反序列化为Java对象。不过，其中记录了序列化时对应的class名称，目的是为了查询时实现自动反序列化。这会带来额外的内存开销。
 
@@ -938,21 +961,17 @@ public class RedisConfig {
 
 
 
-### 6.3 StringRedisTemplate
+###  StringRedisTemplate
 
-尽管JSON的序列化方式可以满足我们的需求，但依然存在一些问题，如图：
-
-![1653054602930](.\Redis.assets\1653054602930.png)
+尽管JSON的序列化方式可以满足我们的需求，但依然存在一些问题，自动进行序列化时会负载多余的信息。
 
 为了在反序列化时知道对象的类型，JSON序列化器会将类的class类型写入json结果中，存入Redis，会带来额外的内存开销。
 
 为了减少内存的消耗，我们可以采用手动序列化的方式，换句话说，就是不借助默认的序列化器，而是我们自己来控制序列化的动作，同时，我们只采用String的序列化器，这样，在存储value时，我们就不需要在内存中就不用多存储数据，从而节约我们的内存空间
+![Alt text](image-7.png)
 
-![1653054744832](.\Redis.assets\1653054744832.png)
 
 这种用法比较普遍，因此SpringDataRedis就提供了RedisTemplate的子类：StringRedisTemplate，它的key和value的序列化方式默认就是String方式。
-
-![](https://i.imgur.com/zXH6Qn6.png)
 
 
 
@@ -960,26 +979,26 @@ public class RedisConfig {
 
 ```java
 @SpringBootTest
-class RedisStringTests {
+class MyRedisApplicationTests {
 
+    @Resource
+    private RedisTemplate<String, Object> redisTemplate;
     @Autowired
     private StringRedisTemplate stringRedisTemplate;
-
+    // JSON工具
+    private static final ObjectMapper mapper = new ObjectMapper();
     @Test
     void testString() {
         // 写入一条String数据
-        stringRedisTemplate.opsForValue().set("verify:phone:13600527634", "124143");
+        redisTemplate.opsForValue().set("1", "onenewcode");
         // 获取string数据
-        Object name = stringRedisTemplate.opsForValue().get("name");
+        Object name = redisTemplate.opsForValue().get("name");
         System.out.println("name = " + name);
     }
-
-    private static final ObjectMapper mapper = new ObjectMapper();
-
     @Test
     void testSaveUser() throws JsonProcessingException {
         // 创建对象
-        User user = new User("虎哥", 21);
+        User user = new User("onenewcode", 21);
         // 手动序列化
         String json = mapper.writeValueAsString(user);
         // 写入数据
@@ -991,13 +1010,13 @@ class RedisStringTests {
         User user1 = mapper.readValue(jsonUser, User.class);
         System.out.println("user1 = " + user1);
     }
-
 }
+
 ```
 
 此时我们再来看一看存储的数据，小伙伴们就会发现那个class数据已经不在了，节约了我们的空间~
 
-![1653054945211](.\Redis.assets\1653054945211.png)
+![Alt text](image-8.png)
 
 最后小总结：
 
@@ -1013,7 +1032,7 @@ RedisTemplate的两种序列化实践方案：
   * 读取Redis时，手动把读取到的JSON反序列化为对象
 
 
-### 6.4 Hash结构操作
+###  Hash结构操作
 
 在基础篇的最后，咱们对Hash结构操作一下，收一个小尾巴，这个代码咱们就不再解释啦
 
@@ -1023,13 +1042,10 @@ RedisTemplate的两种序列化实践方案：
 @SpringBootTest
 class RedisStringTests {
 
-    @Autowired
-    private StringRedisTemplate stringRedisTemplate;
-
-
+···
     @Test
     void testHash() {
-        stringRedisTemplate.opsForHash().put("user:400", "name", "虎哥");
+        stringRedisTemplate.opsForHash().put("user:400", "name", "onenewcode");
         stringRedisTemplate.opsForHash().put("user:400", "age", "21");
 
         Map<Object, Object> entries = stringRedisTemplate.opsForHash().entries("user:400");

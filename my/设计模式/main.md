@@ -122,9 +122,567 @@ class Context
 **智能指引** ：指当调用真实的对象，代理处理另外一些事。
 
 # 工厂模式
-简单工厂模式的最大优点在于工厂类中包含了必要的判断逻辑，根据客户端的选择条件动态实列相关的类，对于客户端来说，去除了与具体产品的太依赖。
+工厂模式（Factory Pattern）是最常用的设计模式之一。这种类型的设计模式属于创建型模式，它提供了一种创建对象的最佳方式。
 
-工厂方法模式，定义一个用于创建对象的接口，让子类决定实例化哪一个类。工厂方法使一个类实例化延迟到子类。
+工厂模式提供了一种将对象的实例化过程封装在工厂类中的方式。通过使用工厂模式，可以将对象的创建与使用代码分离，提供一种统一的接口来创建不同类型的对象。
+## 特点介绍
+
+**应用实例**： 1、您需要一辆汽车，可以直接从工厂里面提货，而不用去管这辆汽车是怎么做出来的，以及这个汽车里面的具体实现。 2、Hibernate 换数据库只需换方言和驱动就可以。
+
+**优点**： 1、一个调用者想创建一个对象，只要知道其名称就可以了。 2、扩展性高，如果想增加一个产品，只要扩展一个工厂类就可以。 3、屏蔽产品的具体实现，调用者只关心产品的接口。
+
+**缺点**：每次增加一个产品时，都需要增加一个具体类和对象实现工厂，使得系统中类的个数成倍增加，在一定程度上增加了系统的复杂度，同时也增加了系统具体类的依赖。这并不是什么好事。
+
+**使用场景**： 1、日志记录器：记录可能记录到本地硬盘、系统事件、远程服务器等，用户可以选择记录日志到什么地方。 2、数据库访问，当用户不知道最后系统采用哪一类数据库，以及数据库可能有变化时。 3、设计一个连接服务器的框架，需要三个协议，"POP3"、"IMAP"、"HTTP"，可以把这三个作为产品类，共同实现一个接口。
+
+
+
+## 工厂模式包含以下几个核心角色：
+
+- **抽象产品（Abstract Product）**：定义了产品的共同接口或抽象类。它可以是具体产品类的父类或接口，规定了产品对象的共同方法。
+**具体产品（Concrete Product）**：实现了抽象产品接口，定义了具体产品的特定行为和属性。
+**抽象工厂（Abstract Factory）**：声明了创建产品的抽象方法，可以是接口或抽象类。它可以有多个方法用于创建不同类型的产品。
+**具体工厂（Concrete Factory）**：实现了抽象工厂接口，负责实际创建具体产品的对象。
+
+## 实现架构
+我们将创建一个 Shape 接口和实现 Shape 接口的实体类。下一步是定义工厂类 ShapeFactory。
+
+FactoryPatternDemo 类使用 ShapeFactory 来获取 Shape 对象。它将向 ShapeFactory 传递信息（CIRCLE / RECTANGLE / SQUARE），以便获取它所需对象的类型。
+![Alt text](image-11.png)
+## java 实现
+**步骤 1**
+创建一个接口:
+```rust
+Shape.java
+public interface Shape {
+   void draw();
+}
+```
+
+**步骤 2**
+创建实现接口的实体类。
+```java
+Rectangle.java
+public class Rectangle implements Shape {
+ 
+   @Override
+   public void draw() {
+      System.out.println("Inside Rectangle::draw() method.");
+   }
+}
+Square.java
+public class Square implements Shape {
+ 
+   @Override
+   public void draw() {
+      System.out.println("Inside Square::draw() method.");
+   }
+}
+Circle.java
+public class Circle implements Shape {
+ 
+   @Override
+   public void draw() {
+      System.out.println("Inside Circle::draw() method.");
+   }
+}
+
+```
+
+**步骤 3**
+创建一个工厂，生成基于给定信息的实体类的对象。
+```rust
+ShapeFactory.java
+public class ShapeFactory {
+    
+   //使用 getShape 方法获取形状类型的对象
+   public Shape getShape(String shapeType){
+      if(shapeType == null){
+         return null;
+      }        
+      if(shapeType.equalsIgnoreCase("CIRCLE")){
+         return new Circle();
+      } else if(shapeType.equalsIgnoreCase("RECTANGLE")){
+         return new Rectangle();
+      } else if(shapeType.equalsIgnoreCase("SQUARE")){
+         return new Square();
+      }
+      return null;
+   }
+}
+
+```
+
+**步骤 4**
+使用该工厂，通过传递类型信息来获取实体类的对象。
+```java
+FactoryPatternDemo.java
+public class FactoryPatternDemo {
+ 
+   public static void main(String[] args) {
+      ShapeFactory shapeFactory = new ShapeFactory();
+ 
+      //获取 Circle 的对象，并调用它的 draw 方法
+      Shape shape1 = shapeFactory.getShape("CIRCLE");
+ 
+      //调用 Circle 的 draw 方法
+      shape1.draw();
+ 
+      //获取 Rectangle 的对象，并调用它的 draw 方法
+      Shape shape2 = shapeFactory.getShape("RECTANGLE");
+ 
+      //调用 Rectangle 的 draw 方法
+      shape2.draw();
+ 
+      //获取 Square 的对象，并调用它的 draw 方法
+      Shape shape3 = shapeFactory.getShape("SQUARE");
+ 
+      //调用 Square 的 draw 方法
+      shape3.draw();
+   }
+}
+```
+
+## rust实现
+由于设计思想是一致的，关于rust的实现就不再赘述上述的步骤，直接贴上完整的代码。
+```rust
+
+// 定义接口
+pub  trait Shape {
+    fn draw(&self);  
+}
+// 创建实体类
+struct Rectangle;
+struct Square;
+struct  Circle;
+impl Shape for Rectangle {
+    fn draw(&self) {
+        println!("Inside Rectangle::draw() method.");
+    }
+}
+impl Shape for Square {
+    fn draw(&self) {
+        println!("Inside Square::draw() method.");
+    }
+}
+impl Shape for Circle {
+    fn draw(&self) {
+        println!("Inside Circle::draw() method.");
+    }
+}
+struct ShapeFactory ;
+impl ShapeFactory {
+    fn get_shape(shape_type: &str)->Box<dyn Shape>{
+        if shape_type=="CIRCLE" {
+            Box::new(Circle{})
+        }else if shape_type=="RECTANGLE" {
+            Box::new(Rectangle{})
+        }else if  shape_type=="SQUARE"{
+            Box::new(Square{})
+        }else {
+            panic!("输入的类型不存在");
+        }
+  
+    }
+
+}
+
+fn main() {
+
+    let shape1=ShapeFactory::get_shape("CIRCLE");
+    shape1.draw();
+    let shape2=ShapeFactory::get_shape("RECTANGLE");
+    shape2.draw();
+    let shape3=ShapeFactory::get_shape("SQUARE");
+    shape3.draw();
+}
+
+```
+# 抽象工厂模式
+抽象工厂模式（Abstract Factory Pattern）是围绕一个超级工厂创建其他工厂。该超级工厂又称为其他工厂的工厂。
+
+在抽象工厂模式中，接口是负责创建一个相关对象的工厂，不需要显式指定它们的类。每个生成的工厂都能按照工厂模式提供对象。
+
+抽象工厂模式提供了一种创建一系列相关或相互依赖对象的接口，而无需指定具体实现类。通过使用抽象工厂模式，可以将客户端与具体产品的创建过程解耦，使得客户端可以通过工厂接口来创建一族产品。
+## 介绍
+**意图**：提供一个创建一系列相关或相互依赖对象的接口，而无需指定它们具体的类。
+
+**主要解决**：主要解决接口选择的问题。
+
+**何时使用**：系统的产品有多于一个的产品族，而系统只消费其中某一族的产品。
+
+如何解决：在一个产品族里面，定义多个产品。
+
+关键代码：在一个工厂里聚合多个同类产品。
+
+**应用实例**：工作了，为了参加一些聚会，肯定有两套或多套衣服吧，比如说有商务装（成套，一系列具体产品）、时尚装（成套，一系列具体产品），甚至对于一个家庭来说，可能有商务女装、商务男装、时尚女装、时尚男装，这些也都是成套的，即一系列具体产品。假设一种情况（现实中是不存在的，但有利于说明抽象工厂模式），在您的家中，某一个衣柜（具体工厂）只能存放某一种这样的衣服（成套，一系列具体产品），每次拿这种成套的衣服时也自然要从这个衣柜中取出了。用 OOP 的思想去理解，所有的衣柜（具体工厂）都是衣柜类的（抽象工厂）某一个，而每一件成套的衣服又包括具体的上衣（某一具体产品），裤子（某一具体产品），这些具体的上衣其实也都是上衣（抽象产品），具体的裤子也都是裤子（另一个抽象产品）。
+
+**优点**：当一个产品族中的多个对象被设计成一起工作时，它能保证客户端始终只使用同一个产品族中的对象。
+
+**缺点**：产品族扩展非常困难，要增加一个系列的某一产品，既要在抽象的 Creator 里加代码，又要在具体的里面加代码。
+
+**使用场景**： 1、皮肤系统，一整套一起换。 
+
+
+
+## 抽象工厂模式包含以下几个核心角色：
+**抽象工厂（Abstract Factory）**：声明了一组用于创建产品对象的方法，每个方法对应一种产品类型。抽象工厂可以是接口或抽象类。
+**具体工厂（Concrete Factory）**：实现了抽象工厂接口，负责创建具体产品对象的实例。
+**抽象产品（Abstract Product）**：定义了一组产品对象的共同接口或抽象类，描述了产品对象的公共方法。
+**具体产品（Concrete Product）**：实现了抽象产品接口，定义了具体产品的特定行为和属性。
+抽象工厂模式通常涉及一族相关的产品，每个具体工厂类负责创建该族中的具体产品。客户端通过使用抽象工厂接口来创建产品对象，而不需要直接使用具体产品的实现类。
+
+## 实现架构图
+我们将创建 Shape 和 Color 接口和实现这些接口的实体类。下一步是创建抽象工厂类 AbstractFactory。接着定义工厂类 ShapeFactory 和 ColorFactory，这两个工厂类都是扩展了 AbstractFactory。然后创建一个工厂创造器/生成器类 FactoryProducer。
+
+AbstractFactoryPatternDemo 类使用 FactoryProducer 来获取 AbstractFactory 对象。它将向 AbstractFactory 传递形状信息 Shape（CIRCLE / RECTANGLE / SQUARE），以便获取它所需对象的类型。同时它还向 AbstractFactory 传递颜色信息 Color（RED / GREEN / BLUE），以便获取它所需对象的类型。
+
+抽象工厂模式的 UML 图
+![Alt text](image-12.png)
+## java实现
+**步骤 1**
+为形状创建一个接口。
+```java
+Shape.java
+public interface Shape {
+   void draw();
+}
+```
+
+**步骤 2**
+创建实现接口的实体类。
+```java
+Rectangle.java
+
+Rectangle.java
+public class Rectangle implements Shape {
+ 
+   @Override
+   public void draw() {
+      System.out.println("Inside Rectangle::draw() method.");
+   }
+}
+Square.java
+public class Square implements Shape {
+ 
+   @Override
+   public void draw() {
+      System.out.println("Inside Square::draw() method.");
+   }
+}
+Circle.java
+public class Circle implements Shape {
+ 
+   @Override
+   public void draw() {
+      System.out.println("Inside Circle::draw() method.");
+   }
+}
+```
+
+**步骤 3**
+为颜色创建一个接口。
+```java
+Color.java
+public interface Color {
+   void fill();
+}
+```
+
+**步骤4**
+创建实现接口的实体类。
+```java
+Red.java
+public class Red implements Color {
+ 
+   @Override
+   public void fill() {
+      System.out.println("Inside Red::fill() method.");
+   }
+}
+Green.java
+public class Green implements Color {
+ 
+   @Override
+   public void fill() {
+      System.out.println("Inside Green::fill() method.");
+   }
+}
+Blue.java
+public class Blue implements Color {
+ 
+   @Override
+   public void fill() {
+      System.out.println("Inside Blue::fill() method.");
+   }
+}
+```
+**步骤 5**
+为 Color 和 Shape 对象创建抽象类来获取工厂。
+```java
+AbstractFactory.java
+public abstract class AbstractFactory {
+   public abstract Color getColor(String color);
+   public abstract Shape getShape(String shape);
+}
+```
+
+**步骤 6**
+创建扩展了 AbstractFactory 的工厂类，基于给定的信息生成实体类的对象。
+```java
+
+ShapeFactory.java
+public class ShapeFactory extends AbstractFactory {
+    
+   @Override
+   public Shape getShape(String shapeType){
+      if(shapeType == null){
+         return null;
+      }        
+      if(shapeType.equalsIgnoreCase("CIRCLE")){
+         return new Circle();
+      } else if(shapeType.equalsIgnoreCase("RECTANGLE")){
+         return new Rectangle();
+      } else if(shapeType.equalsIgnoreCase("SQUARE")){
+         return new Square();
+      }
+      return null;
+   }
+   
+   @Override
+   public Color getColor(String color) {
+      return null;
+   }
+}
+ColorFactory.java
+public class ColorFactory extends AbstractFactory {
+    
+   @Override
+   public Shape getShape(String shapeType){
+      return null;
+   }
+   
+   @Override
+   public Color getColor(String color) {
+      if(color == null){
+         return null;
+      }        
+      if(color.equalsIgnoreCase("RED")){
+         return new Red();
+      } else if(color.equalsIgnoreCase("GREEN")){
+         return new Green();
+      } else if(color.equalsIgnoreCase("BLUE")){
+         return new Blue();
+      }
+      return null;
+   }
+}
+```
+
+**步骤 7**
+创建一个工厂创造器/生成器类，通过传递形状或颜色信息来获取工厂。
+```java
+FactoryProducer.java
+public class FactoryProducer {
+   public static AbstractFactory getFactory(String choice){
+      if(choice.equalsIgnoreCase("SHAPE")){
+         return new ShapeFactory();
+      } else if(choice.equalsIgnoreCase("COLOR")){
+         return new ColorFactory();
+      }
+      return null;
+   }
+}
+```
+
+**步骤 8**
+使用 FactoryProducer 来获取 AbstractFactory，通过传递类型信息来获取实体类的对象。
+```java
+AbstractFactoryPatternDemo.java
+public class AbstractFactoryPatternDemo {
+   public static void main(String[] args) {
+ 
+      //获取形状工厂
+      AbstractFactory shapeFactory = FactoryProducer.getFactory("SHAPE");
+ 
+      //获取形状为 Circle 的对象
+      Shape shape1 = shapeFactory.getShape("CIRCLE");
+ 
+      //调用 Circle 的 draw 方法
+      shape1.draw();
+ 
+      //获取形状为 Rectangle 的对象
+      Shape shape2 = shapeFactory.getShape("RECTANGLE");
+ 
+      //调用 Rectangle 的 draw 方法
+      shape2.draw();
+      
+      //获取形状为 Square 的对象
+      Shape shape3 = shapeFactory.getShape("SQUARE");
+ 
+      //调用 Square 的 draw 方法
+      shape3.draw();
+ 
+      //获取颜色工厂
+      AbstractFactory colorFactory = FactoryProducer.getFactory("COLOR");
+ 
+      //获取颜色为 Red 的对象
+      Color color1 = colorFactory.getColor("RED");
+ 
+      //调用 Red 的 fill 方法
+      color1.fill();
+ 
+      //获取颜色为 Green 的对象
+      Color color2 = colorFactory.getColor("GREEN");
+ 
+      //调用 Green 的 fill 方法
+      color2.fill();
+ 
+      //获取颜色为 Blue 的对象
+      Color color3 = colorFactory.getColor("BLUE");
+ 
+      //调用 Blue 的 fill 方法
+      color3.fill();
+   }
+}
+```
+
+
+**步骤 9**
+执行程序，输出结果：
+```shell
+Inside Circle::draw() method.
+Inside Rectangle::draw() method.
+Inside Square::draw() method.
+Inside Red::fill() method.
+Inside Green::fill() method.
+Inside Blue::fill() method.
+
+```
+## rust实现
+```rust
+// 定义接口
+
+// 创建实体类
+struct Rectangle;
+struct Square;
+struct  Circle;
+struct ShapeFactory ;
+struct ColorFactory ;
+struct  FactoryProducer ;
+struct Red;
+struct Blue;
+struct  Green;
+pub trait Color{
+    fn fill(&self);  
+}
+impl Color for Red {
+    fn fill(&self) {
+        println!("Inside Red::fill() method.");
+    }
+}
+impl Color for Blue {
+    fn fill(&self) {
+        println!("Inside Blue::fill() method.");
+    }
+}
+impl Color for Green {
+    fn fill(&self) {
+        println!("Inside Green::fill() method.");
+    }
+}
+
+
+pub  trait Shape {
+    fn draw(&self);  
+}
+impl Shape for Rectangle {
+    fn draw(&self) {
+        println!("Inside Rectangle::draw() method.");
+    }
+}
+impl Shape for Square {
+    fn draw(&self) {
+        println!("Inside Square::draw() method.");
+    }
+}
+impl Shape for Circle {
+    fn draw(&self) {
+        println!("Inside Circle::draw() method.");
+    }
+}
+pub trait AbstractFactory {
+    fn get_color(&self,color: &str)->Result<Box<dyn Color>>;
+    fn get_shape(&self,shape: &str)->Box<dyn Shape>;
+ }
+
+impl AbstractFactory for ShapeFactory {
+    fn get_shape(&self,shape_type: &str)->Box<dyn Shape>{
+        if shape_type=="CIRCLE" {
+            Box::new(Circle{})
+        }else if shape_type=="RECTANGLE" {
+            Box::new(Rectangle{})
+        }else if  shape_type=="SQUARE"{
+            Box::new(Square{})
+        }else {
+            panic!("输入的类型不存在");
+        }
+  
+    }
+    fn get_color(&self,_shape_type: &str)->Box<dyn Color>{
+
+        panic!("输入的类型不存在");
+  
+    }
+}
+impl AbstractFactory for ColorFactory {
+    fn get_color(&self,shape_type: &str)->Box<dyn Color>{
+        if shape_type=="RED" {
+            Box::new(Red{})
+        }else if shape_type=="BLUE" {
+            Box::new(Blue{})
+        }else if  shape_type=="GREEN"{
+            Box::new(Green{})
+        }else {
+            panic!("输入的类型不存在");
+        }
+    }
+    fn get_shape(&self,_shape_type: &str)->Box<dyn Shape>{
+
+        panic!("输入的类型不存在");
+    }
+
+}
+
+impl  FactoryProducer {
+    fn get_factory(choice: &str)-> Box<dyn AbstractFactory>{
+        if choice=="COLOR" {
+            Box::new(ColorFactory{})
+        }else if choice=="SHAPE" {
+            Box::new(ShapeFactory{})
+        }else {
+            panic!("输入的类型不存在");
+        }
+    }
+}
+
+fn main() {
+    let shape=FactoryProducer::get_factory("SHAPE");
+    let shape1=shape.get_shape("CIRCLE");
+    shape1.draw();
+    let shape2=shape.get_shape("RECTANGLE");
+    shape2.draw();
+    let shape3=shape.get_shape("SQUARE");
+    shape3.draw();
+    let color=FactoryProducer::get_factory("COLOR");
+    let color1=color.get_color("RED");
+    color1.fill();
+    let color2=color.get_color("BLUE");
+    color2.fill();
+    let color3=color.get_color("GREEN");
+    color3.fill();
+}
+```
 
 # 原型模式
 
@@ -153,12 +711,7 @@ class Context
 ## 事件委托
 委托就是一种引用方法的类型。一旦为委托分配了方法，委托将于该方法具有完全相同的行为，委托方法的使用，可以像其他任何方法一样，具有参数和返回值。委托可以看作是对函数的抽象，是函数的“类”，委托的实例将代表一个具体的函数。  
 
-# 抽象工厂模式
-**抽象工厂模式**，提供一个创建一系列相关或相互依赖的对象接口，而无需指定他们具体的类。
 
-## 好处
-1. 易于交换产品系列，由于具体工厂类，在一个应用中只需要初始化一次，这就使得改变一个应用的具体工厂变得十分容易。
-2. 它让具体的创建实例过程与客户端分离，客户端是通过它们的抽象接口操作实例，产品的具体名称，也被具体工厂的实现分离，不会出现在客户端的代码中。
 
 
 # 状态模式

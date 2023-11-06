@@ -579,7 +579,7 @@ fn main() {
 
 ```
 ##  泛型和特征
-### 泛型 Generics泛型详解
+### 泛型 Generics泛型
 
 使用泛型参数，有一个先决条件，必需在使用前对其进行声明：
 ```rs
@@ -652,8 +652,8 @@ fn main() {
 
 这里有两点需要特别的注意：
 
-提前声明，跟泛型函数定义类似，首先我们在使用泛型参数之前必需要进行声明 Point&lt;T>，接着就可以在结构体的字段类型中使用 T 来替代具体的类型
-x 和 y 是相同的类型
+- 提前声明，跟泛型函数定义类似，首先我们在使用泛型参数之前必需要进行声明 Point&lt;T>，接着就可以在结构体的字段类型中使用 T 来替代具体的类型
+- x 和 y 是相同的类型
 第二点非常重要，如果使用不同的类型，那么它会导致下面代码的报错：
 
 
@@ -716,7 +716,7 @@ fn main() {
 
 
 
-使用泛型参数前，依然需要提前声明：impl&lt;T>，只有提前声明了，我们才能在Point&ltT>中使用它，这样 Rust 就知道 Point 的尖括号中的类型是泛型而不是具体类型。需要注意的是，这里的 Point&ltT> 不再是泛型声明，而是一个完整的结构体类型，因为我们定义的结构体就是 Point&ltT> 而不再是 Point。
+使用泛型参数前，依然需要提前声明：impl&lt;T>，只有提前声明了，我们才能在Point&lt;T>中使用它，这样 Rust 就知道 Point 的尖括号中的类型是泛型而不是具体类型。需要注意的是，这里的 Point&lt;T> 不再是泛型声明，而是一个完整的结构体类型，因为我们定义的结构体就是 Point&lt;T> 而不再是 Point。
 
 除了结构体中的泛型参数，我们还能在该结构体的方法中定义额外的泛型参数，就跟泛型函数一样：
 ```rs
@@ -759,7 +759,7 @@ impl Point<f32> {
 这段代码意味着 Point&lt;f32> 类型会有一个方法 distance_from_origin，而其他 T 不是 f32 类型的 Point&lt;T> 实例则没有定义此方法。这个方法计算点实例与坐标(0.0, 0.0) 之间的距离，并使用了只能用于浮点型的数学运算符。
 
 #### const 泛型
- const 泛型，也就是针对值的泛型，正好可以用于处理数组长度的问题：
+const 泛型，也就是针对值的泛型，正好可以用于处理数组长度的问题：
 ```rs
 fn display_array<T: std::fmt::Debug, const N: usize>(arr: [T; N]) {
     println!("{:?}", arr);
@@ -813,12 +813,28 @@ pub trait IsTrue {
 impl IsTrue for Assert<true> {
     //
 }
-const fn
-@todo
 ```
 
 
 ### 特征 Trait
+#### 定义特征
+如果不同的类型具有相同的行为，那么我们就可以定义一个特征，然后为这些类型实现该特征。定义特征是把一些方法组合在一起，目的是定义一个实现某些目标所必需的行为的集合。
+
+例如，我们现在有文章 Post 和微博 Weibo 两种内容载体，而我们想对相应的内容进行总结，也就是无论是文章内容，还是微博内容，都可以在某个时间点进行总结，那么总结这个行为就是共享的，因此可以用特征来定义：
+```rust
+pub trait Summary {
+    fn summarize(&self) -> String;
+}
+```
+
+这里使用 trait 关键字来声明一个特征，Summary 是特征名。在大括号中定义了该特征的所有方法，在这个例子中是： fn summarize(&self) -> String。
+
+特征只定义行为看起来是什么样的，而不定义行为具体是怎么样的。因此，我们只定义特征方法的签名，而不进行实现，此时方法签名结尾是 ;，而不是一个 {}。
+
+#### 为类型实现特征
+因为特征只定义行为看起来是什么样的，因此我们需要为类型实现具体的特征，定义行为具体是怎么样的。
+
+首先来为 Post 和 Weibo 实现 Summary 特征：
 ```rs
 pub trait Summary {
     fn summarize(&self) -> String;
@@ -846,9 +862,84 @@ impl Summary for Weibo {
     }
 }
 ```
+实现特征的语法与为结构体、枚举实现方法很像：impl Summary for Post，读作“为 Post 类型实现 Summary 特征”，然后在 impl 的花括号中实现该特征的具体方法。
+
+接下来就可以在这个类型上调用特征的方法：
+```rust
+fn main() {
+    let post = Post{title: "Rust语言简介".to_string(),author: "Sunface".to_string(), content: "Rust棒极了!".to_string()};
+    let weibo = Weibo{username: "sunface".to_string(),content: "好像微博没Tweet好用".to_string()};
+
+    println!("{}",post.summarize());
+    println!("{}",weibo.summarize());
+}
+```
+运行输出：
+```shell
+文章 Rust 语言简介, 作者是Sunface
+sunface发表了微博好像微博没Tweet好用
+```
 
 #### 特征定义与实现的位置(孤儿规则)
-关于特征实现与定义的位置，有一条非常重要的原则：如果你想要为类型 A 实现特征 T，那么 A 或者 T 至少有一个是在当前作用域中定义的！
+上面我们将 Summary 定义成了 pub 公开的。这样，如果他人想要使用我们的 Summary 特征，则可以引入到他们的包中，然后再进行实现。
+
+关于特征实现与定义的位置，有一条非常重要的原则：如果你想要为类型 A 实现特征 T，那么 A 或者 T 至少有一个是在当前作用域中定义的！ 例如我们可以为上面的 Post 类型实现标准库中的 Display 特征，这是因为 Post 类型定义在当前的作用域中。同时，我们也可以在当前包中为 String 类型实现 Summary 特征，因为 Summary 定义在当前作用域中。
+#### 默认实现
+你可以在特征中定义具有默认实现的方法，这样其它类型无需再实现该方法，或者也可以选择重载该方法：
+```rsut
+pub trait Summary {
+    fn summarize(&self) -> String {
+        String::from("(Read more...)")
+    }
+}
+```
+
+上面为 Summary 定义了一个默认实现，下面我们编写段代码来测试下：
+```rust
+impl Summary for Post {}
+
+impl Summary for Weibo {
+    fn summarize(&self) -> String {
+        format!("{}发表了微博{}", self.username, self.content)
+    }
+}
+```
+
+可以看到，Post 选择了默认实现，而 Weibo 重载了该方法，调用和输出如下：
+```rust
+    println!("{}",post.summarize());
+    println!("{}",weibo.summarize());
+
+```
+```shell
+(Read more...)
+sunface发表了微博好像微博没Tweet好用
+
+```
+
+默认实现允许调用相同特征中的其他方法，哪怕这些方法没有默认实现。如此，特征可以提供很多有用的功能而只需要实现指定的一小部分内容。例如，我们可以定义 Summary 特征，使其具有一个需要实现的 summarize_author 方法，然后定义一个 summarize 方法，此方法的默认实现调用 summarize_author 方法：
+```rust
+pub trait Summary {
+    fn summarize_author(&self) -> String;
+
+    fn summarize(&self) -> String {
+        format!("(Read more from {}...)", self.summarize_author())
+    }
+}
+```
+
+为了使用 Summary，只需要实现 summarize_author 方法即可：
+```rust
+impl Summary for Weibo {
+    fn summarize_author(&self) -> String {
+        format!("@{}", self.username)
+    }
+}
+println!("1 new weibo: {}", weibo.summarize());
+```
+
+
+weibo.summarize() 会先调用 Summary 特征默认实现的 summarize 方法，通过该方法进而调用 Weibo 为 Summary 实现的 summarize_author 方法，最终输出：1 new weibo: (Read more from @horse_ebooks...)。
 #### 使用特征作为函数参数
 ```rs
 pub fn notify(item: &impl Summary) {
@@ -861,25 +952,55 @@ impl Summary，只能说想出这个类型的人真的是起名鬼才，简直�
 你可以使用任何实现了 Summary 特征的类型作为该函数的参数，同时在函数体内，还可以调用该特征的方法，例如 summarize 方法。具体的说，可以传递 Post 或 Weibo 的实例来作为参数，而其它类如 String 或者 i32 的类型则不能用做该函数的参数，因为它们没有实现 Summary 特征。
 
 #### 特征约束(trait bound)
-```rs
+虽然 impl Trait 这种语法非常好理解，但是实际上它只是一个语法糖：
+```rust
 pub fn notify<T: Summary>(item: &T) {
     println!("Breaking news! {}", item.summarize());
 }
+```
+真正的完整书写形式如上所述，形如 T: Summary 被称为特征约束。
 
+在简单的场景下 impl Trait 这种语法糖就足够使用，但是对于复杂的场景，特征约束可以让我们拥有更大的灵活性和语法表现能力，例如一个函数接受两个 impl Summary 的参数：
+```rust
+pub fn notify(item1: &impl Summary, item2: &impl Summary) {}
+```
+
+如果函数两个参数是不同的类型，那么上面的方法很好，只要这两个类型都实现了 Summary 特征即可。但是如果我们想要强制函数的两个参数是同一类型呢？上面的语法就无法做到这种限制，此时我们只能使特征约束来实现：
+```rust
+pub fn notify<T: Summary>(item1: &T, item2: &T) {}
+```
+
+泛型类型 T 说明了 item1 和 item2 必须拥有同样的类型，同时 T: Summary 说明了 T 必须实现 Summary 特征。
+
+##### 多重约束
+除了单个约束条件，我们还可以指定多个约束条件，例如除了让参数实现 Summary 特征外，还可以让参数实现 Display 特征以控制它的格式化输出：
+```rust
 pub fn notify(item: &(impl Summary + Display)) {}
+```
 
-
+除了上述的语法糖形式，还能使用特征约束的形式：
+```rust
 pub fn notify<T: Summary + Display>(item: &T) {}
+```
+通过这两个特征，就可以使用 item.summarize 方法，以及通过 println!("{}", item) 来格式化输出 item。
 
+##### Where 约束
+当特征约束变得很多时，函数的签名将变得很复杂：
+```rust
+fn some_function<T: Display + Clone, U: Clone + Debug>(t: &T, u: &U) -> i32 {}
+```
 
+严格来说，上面的例子还是不够复杂，但是我们还是能对其做一些形式上的改进，通过 where：
+```rust
 fn some_function<T, U>(t: &T, u: &U) -> i32
     where T: Display + Clone,
           U: Clone + Debug
 {}
+```
 
-
-
-
+##### 使用特征约束有条件地实现方法或特征
+特征约束，可以让我们在指定类型 + 指定特征的条件下去实现方法，例如：
+```rust
 use std::fmt::Display;
 
 struct Pair<T> {
@@ -905,9 +1026,26 @@ impl<T: Display + PartialOrd> Pair<T> {
         }
     }
 }
+
 ```
+
+cmp_display 方法，并不是所有的 Pair&lt;T> 结构体对象都可以拥有，只有 T 同时实现了 Display + PartialOrd 的 Pair&lt;T> 才可以拥有此方法。 该函数可读性会更好，因为泛型参数、参数、返回值都在一起，可以快速的阅读，同时每个泛型参数的特征也在新的代码行中通过特征约束进行了约束。
+
+也可以有条件地实现特征, 例如，标准库为任何实现了 Display 特征的类型实现了 ToString 特征：
+```rust
+impl<T: Display> ToString for T {
+    // --snip--
+}
+```
+
+我们可以对任何实现了 Display 特征的类型调用由 ToString 定义的 to_string 方法。例如，可以将整型转换为对应的 String 值，因为整型实现了 Display：
+```rust
+let s = 3.to_string();
+```
+
 #### 函数返回中的 impl Trait
-```rs
+可以通过 impl Trait 来说明一个函数返回了一个类型，该类型实现了某个特征：
+```rust
 fn returns_summarizable() -> impl Summary {
     Weibo {
         username: String::from("sunface"),
@@ -917,6 +1055,36 @@ fn returns_summarizable() -> impl Summary {
     }
 }
 ```
+
+因为 Weibo 实现了 Summary，因此这里可以用它来作为返回值。要注意的是，虽然我们知道这里是一个 Weibo 类型，但是对于 returns_summarizable 的调用者而言，他只知道返回了一个实现了 Summary 特征的对象，但是并不知道返回了一个 Weibo 类型。
+
+这种 impl Trait 形式的返回值，在一种场景下非常非常有用，那就是返回的真实类型非常复杂，你不知道该怎么声明时(毕竟 Rust 要求你必须标出所有的类型)，此时就可以用 impl Trait 的方式简单返回。例如，闭包和迭代器就是很复杂，只有编译器才知道那玩意的真实类型，如果让你写出来它们的具体类型，估计内心有一万只草泥马奔腾，好在你可以用 impl Iterator 来告诉调用者，返回了一个迭代器，因为所有迭代器都会实现 Iterator 特征。
+
+但是这种返回值方式有一个很大的限制：只能有一个具体的类型，例如：
+```rust
+fn returns_summarizable(switch: bool) -> impl Summary {
+    if switch {
+        Post {
+            title: String::from(
+                "Penguins win the Stanley Cup Championship!",
+            ),
+            author: String::from("Iceburgh"),
+            content: String::from(
+                "The Pittsburgh Penguins once again are the best \
+                 hockey team in the NHL.",
+            ),
+        }
+    } else {
+        Weibo {
+            username: String::from("horse_ebooks"),
+            content: String::from(
+                "of course, as you probably already know, people",
+            ),
+        }
+    }
+}
+```
+
 #### 通过 derive 派生特征
 形如 #[derive(Debug)] 的代码已经出现了很多次，这种是一种特征派生语法，被 derive 标记的对象会自动实现对应的默认特征代码，继承相应的功能。
 
@@ -927,6 +1095,7 @@ fn returns_summarizable() -> impl Summary {
 总之，derive 派生出来的是 Rust 默认给我们提供的特征，在开发过程中极大的简化了自己手动实现相应特征的需求，当然，如果你有特殊的需求，还可以自己手动重载该实现。
 
 #### 调用方法需要引入特征
+在一些场景中，使用 as 关键字做类型转换会有比较大的限制，因为你想要在类型转换上拥有完全的控制，例如处理转换错误，那么你将需要 TryInto：
 ```rs
 use std::convert::TryInto;
 
@@ -973,6 +1142,365 @@ impl Draw for SelectBox {
 
 ```
 ### 深入了解特征
+
+#### 关联类型
+
+关联类型是在特征定义的语句块中，申明一个自定义类型，这样就可以在特征的方法签名中使用该类型：
+```rust
+pub trait Iterator {
+    type Item;
+
+    fn next(&mut self) -> Option<Self::Item>;
+}
+```
+
+以上是标准库中的迭代器特征 Iterator，它有一个 Item 关联类型，用于替代遍历的值的类型。
+
+同时，next 方法也返回了一个 Item 类型，不过使用 Option 枚举进行了包裹，假如迭代器中的值是 i32 类型，那么调用 next 方法就将获取一个 Option&lt;i32> 的值。
+
+：
+```rust
+impl Iterator for Counter {
+    type Item = u32;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        // --snip--
+    }
+}
+
+fn main() {
+    let c = Counter{..}
+    c.next()
+}
+```
+
+在上述代码中，我们为 Counter 类型实现了 Iterator 特征，变量 c 是特征 Iterator 的实例，也是 next 方法的调用者。 结合之前的黑体内容可以得出：对于 next 方法而言，Self 是调用者 c 的具体类型： Counter，而 Self::Item 是 Counter 中定义的 Item 类型: u32。
+
+
+```rust
+pub trait Iterator<Item> {
+    fn next(&mut self) -> Option<Item>;
+}
+```
+
+答案其实很简单，为了代码的可读性，当你使用了泛型后，你需要在所有地方都写 Iterator&lt;Item>，而使用了关联类型，你只需要写 Iterator，当类型定义复杂时，这种写法可以极大的增加可读性：
+```rust
+pub trait CacheableItem: Clone + Default + fmt::Debug + Decodable + Encodable {
+  type Address: AsRef<[u8]> + Clone + fmt::Debug + Eq + Hash;
+  fn is_null(&self) -> bool;
+}
+```
+
+例如上面的代码，Address 的写法自然远比 AsRef<[u8]> + Clone + fmt::Debug + Eq + Hash 要简单的多，而且含义清晰。
+
+再例如，如果使用泛型，你将得到以下的代码：
+```rust
+trait Container<A,B> {
+    fn contains(&self,a: A,b: B) -> bool;
+}
+
+fn difference<A,B,C>(container: &C) -> i32
+  where
+    C : Container<A,B> {...}
+```
+
+可以看到，由于使用了泛型，导致函数头部也必须增加泛型的声明，而使用关联类型，将得到可读性好得多的代码：
+```rust
+trait Container{
+    type A;
+    type B;
+    fn contains(&self, a: &Self::A, b: &Self::B) -> bool;
+}
+
+fn difference<C: Container>(container: &C) {}
+```
+
+#### 默认泛型类型参数
+当使用泛型类型参数时，可以为其指定一个默认的具体类型，例如标准库中的 std::ops::Add 特征：
+```rust
+trait Add<RHS=Self> {
+    type Output;
+
+    fn add(self, rhs: RHS) -> Self::Output;
+}
+```
+
+它有一个泛型参数 RHS，但是与我们以往的用法不同，这里它给 RHS 一个默认值，也就是当用户不指定 RHS 时，默认使用两个同样类型的值进行相加，然后返回一个关联类型 Output。
+
+可能上面那段不太好理解，下面我们用代码来举例：
+```rust
+use std::ops::Add;
+
+#[derive(Debug, PartialEq)]
+struct Point {
+    x: i32,
+    y: i32,
+}
+
+impl Add for Point {
+    type Output = Point;
+
+    fn add(self, other: Point) -> Point {
+        Point {
+            x: self.x + other.x,
+            y: self.y + other.y,
+        }
+    }
+}
+
+fn main() {
+    assert_eq!(Point { x: 1, y: 0 } + Point { x: 2, y: 3 },
+               Point { x: 3, y: 3 });
+}
+```
+
+上面的代码主要干了一件事，就是为 Point 结构体提供 + 的能力，这就是运算符重载，不过 Rust 并不支持创建自定义运算符，你也无法为所有运算符进行重载，目前来说，只有定义在 std::ops 中的运算符才能进行重载。
+
+跟 + 对应的特征是 std::ops::Add，我们在之前也看过它的定义 trait Add&lt;RHS=Self>，但是上面的例子中并没有为 Point 实现 Add&lt;RHS> 特征，而是实现了 Add 特征（没有默认泛型类型参数），这意味着我们使用了 RHS 的默认类型，也就是 Self。换句话说，我们这里定义的是两个相同的 Point 类型相加，因此无需指定 RHS。
+
+与上面的例子相反，下面的例子，我们来创建两个不同类型的相加：
+```rust
+use std::ops::Add;
+
+struct Millimeters(u32);
+struct Meters(u32);
+
+impl Add<Meters> for Millimeters {
+    type Output = Millimeters;
+
+    fn add(self, other: Meters) -> Millimeters {
+        Millimeters(self.0 + (other.0 * 1000))
+    }
+}
+```
+
+这里，是进行 Millimeters + Meters 两种数据类型的 + 操作，因此此时不能再使用默认的 RHS，否则就会变成 Millimeters + Millimeters 的形式。使用 Add&lt;Meters> 可以将 RHS 指定为 Meters，那么 fn add(self, rhs: RHS) 自然而言的变成了 Millimeters 和 Meters 的相加。
+
+默认类型参数主要用于两个方面：
+
+1. 减少实现的样板代码
+2. 扩展类型但是无需大幅修改现有的代码
+
+
+
+
+#### 调用同名的方法
+不同特征拥有同名的方法是很正常的事情，你没有任何办法阻止这一点；甚至除了特征上的同名方法外，在你的类型上，也有同名方法：
+```rust
+trait Pilot {
+    fn fly(&self);
+}
+
+trait Wizard {
+    fn fly(&self);
+}
+
+struct Human;
+
+impl Pilot for Human {
+    fn fly(&self) {
+        println!("This is your captain speaking.");
+    }
+}
+
+impl Wizard for Human {
+    fn fly(&self) {
+        println!("Up!");
+    }
+}
+
+impl Human {
+    fn fly(&self) {
+        println!("*waving arms furiously*");
+    }
+}
+
+```
+
+这里，不仅仅两个特征 Pilot 和 Wizard 有 fly 方法，就连实现那两个特征的 Human 单元结构体，也拥有一个同名方法 fly 
+##### 优先调用类型上的方法
+当调用 Human 实例的 fly 时，编译器默认调用该类型中定义的方法：
+```rust
+fn main() {
+    let person = Human;
+    person.fly();
+}
+```
+
+这段代码会打印 *waving arms furiously*，说明直接调用了类型上定义的方法。
+
+##### 调用特征上的方法
+为了能够调用两个特征的方法，需要使用显式调用的语法：
+```rust
+fn main() {
+    let person = Human;
+    Pilot::fly(&person); // 调用Pilot特征上的方法
+    Wizard::fly(&person); // 调用Wizard特征上的方法
+    person.fly(); // 调用Human类型自身的方法
+}
+
+```
+
+运行后依次输出：
+```shell
+This is your captain speaking.
+Up!
+*waving arms furiously*
+```
+
+因为 fly 方法的参数是 self，当显式调用时，编译器就可以根据调用的类型( self 的类型)决定具体调用哪个方法。
+
+这个时候问题又来了，如果方法没有 self 参数呢？稍等，估计有读者会问：还有方法没有 self 参数？
+
+```rust
+trait Animal {
+    fn baby_name() -> String;
+}
+
+struct Dog;
+
+impl Dog {
+    fn baby_name() -> String {
+        String::from("Spot")
+    }
+}
+
+impl Animal for Dog {
+    fn baby_name() -> String {
+        String::from("puppy")
+    }
+}
+
+fn main() {
+    println!("A baby dog is called a {}", Dog::baby_name());
+}
+```
+
+
+
+
+Dog::baby_name() 的调用方式显然不行，因为这只是狗妈妈对宝宝的爱称，可能你会想到通过下面的方式查询其他动物对狗狗的称呼：
+```rust
+fn main() {
+    println!("A baby dog is called a {}", Animal::baby_name());
+}
+```
+
+```shell
+error[E0283]: type annotations needed // 需要类型注释
+  --> src/main.rs:20:43
+   |
+20 |     println!("A baby dog is called a {}", Animal::baby_name());
+   |                                           ^^^^^^^^^^^^^^^^^ cannot infer type // 无法推断类型
+   |
+   = note: cannot satisfy `_: Animal`
+
+```
+
+#### 完全限定语法
+完全限定语法是调用函数最为明确的方式：
+```rust
+fn main() {
+    println!("A baby dog is called a {}", <Dog as Animal>::baby_name());
+}
+```
+
+在尖括号中，通过 as 关键字，我们向 Rust 编译器提供了类型注解，也就是 Animal 就是 Dog，而不是其他动物，因此最终会调用 impl Animal for Dog 中的方法，获取到其它动物对狗宝宝的称呼：puppy。
+
+
+#### 特征定义中的特征约束
+有时，我们会需要让某个特征 A 能使用另一个特征 B 的功能(另一种形式的特征约束)，这种情况下，不仅仅要为类型实现特征 A，还要为类型实现特征 B 才行，这就是 supertrait (实在不知道该如何翻译，有大佬指导下嘛？)
+
+例如有一个特征 OutlinePrint，它有一个方法，能够对当前的实现类型进行格式化输出：
+```rust
+use std::fmt::Display;
+
+trait OutlinePrint: Display {
+    fn outline_print(&self) {
+        let output = self.to_string();
+        let len = output.len();
+        println!("{}", "*".repeat(len + 4));
+        println!("*{}*", " ".repeat(len + 2));
+        println!("* {} *", output);
+        println!("*{}*", " ".repeat(len + 2));
+        println!("{}", "*".repeat(len + 4));
+    }
+}
+```
+
+等等，这里有一个眼熟的语法: OutlinePrint: Display，感觉很像之前讲过的特征约束，只不过用在了特征定义中而不是函数的参数中，是的，在某种意义上来说，这和特征约束非常类似，都用来说明一个特征需要实现另一个特征，这里就是：如果你想要实现 OutlinePrint 特征，首先你需要实现 Display 特征。
+
+想象一下，假如没有这个特征约束，那么 self.to_string 还能够调用吗（ to_string 方法会为实现 Display 特征的类型自动实现）？编译器肯定是不愿意的，会报错说当前作用域中找不到用于 &Self 类型的方法 to_string ：
+```rust
+struct Point {
+    x: i32,
+    y: i32,
+}
+
+impl OutlinePrint for Point {}
+```
+
+
+因为 Point 没有实现 Display 特征，会得到下面的报错：
+```shell
+error[E0277]: the trait bound `Point: std::fmt::Display` is not satisfied
+  --> src/main.rs:20:6
+   |
+20 | impl OutlinePrint for Point {}
+   |      ^^^^^^^^^^^^ `Point` cannot be formatted with the default formatter;
+try using `:?` instead if you are using a format string
+   |
+   = help: the trait `std::fmt::Display` is not implemented for `Point`
+```
+
+既然我们有求于编译器，那只能选择满足它咯：
+```rust
+use std::fmt;
+
+impl fmt::Display for Point {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "({}, {})", self.x, self.y)
+    }
+}
+```
+
+上面代码为 Point 实现了 Display 特征，那么 to_string 方法也将自动实现：最终获得字符串是通过这里的 fmt 方法获得的。
+
+#### 在外部类型上实现外部特征(newtype)
+有提到孤儿规则，简单来说，就是特征或者类型必需至少有一个是本地的，才能在此类型上定义特征。
+
+这里提供一个办法来绕过孤儿规则，那就是使用newtype 模式，简而言之：就是为一个元组结构体创建新类型。该元组结构体封装有一个字段，该字段就是希望实现特征的具体类型。
+
+该封装类型是本地的，因此我们可以为此类型实现外部的特征。
+
+newtype 不仅仅能实现以上的功能，而且它在运行时没有任何性能损耗，因为在编译期，该类型会被自动忽略。
+
+```rust
+use std::fmt;
+
+struct Wrapper(Vec<String>);
+
+impl fmt::Display for Wrapper {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "[{}]", self.0.join(", "))
+    }
+}
+
+fn main() {
+    let w = Wrapper(vec![String::from("hello"), String::from("world")]);
+    println!("w = {}", w);
+}
+```
+
+其中，struct Wrapper(Vec&lt;String>) 就是一个元组结构体，它定义了一个新类型 Wrapper，代码很简单，相信大家也很容易看懂。
+
+既然 new type 有这么多好处，它有没有不好的地方呢？答案是肯定的。注意到我们怎么访问里面的数组吗？self.0.join(", ")，是的，很啰嗦，因为需要先从 Wrapper 中取出数组: self.0，然后才能执行 join 方法。
+
+类似的，任何数组上的方法，你都无法直接调用，需要先用 self.0 取出数组，然后再进行调用。
+
+当然，解决办法还是有的，要不怎么说 Rust 是极其强大灵活的编程语言！Rust 提供了一个特征叫 Deref，实现该特征后，可以自动做一层类似类型转换的操作，可以将 Wrapper 变成 Vec&lt;String> 来使用。这样就会像直接使用数组那样去使用 Wrapper，而无需为每一个操作都添加上 self.0。
+
+同时，如果不想 Wrapper 暴露底层数组的所有方法，我们还可以为 Wrapper 去重载这些方法，实现隐藏的目的。
 
 ## 集合类型
 ### 动态数组 Vector
@@ -1337,7 +1865,7 @@ fn read_username_from_file() -> Result<String, io::Error> {
 }
 ```
 
-从文件读取数据到字符串中，是比较常见的操作，因此 Rust 标准库为我们提供了 fs::read_to_string 函数，该函数内部会打开一个文件、创建 String、读取文件内容最后写入字符串并返回，因为该函数其实与本章讲的内容关系不大，因此放在最后来讲，其实只是我想震你们一下 :)
+从文件读取数据到字符串中，是比较常见的操作，因此 Rust 标准库为我们提供了 fs::read_to_string 函数，该函数内部会打开一个文件、创建 String、读取文件内容最后写入字符串并返回，因为该函数其实与本章讲的内容关系不大，因此放在最后来讲，其实只是我想震你们一下 :
 
 ##### ? 用于 Option 的返回
 ? 不仅仅可以用于 Result 的传播，还能用于 Option 的传播，再来回忆下 Option 的定义：
