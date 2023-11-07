@@ -103,29 +103,13 @@ class Context
 **依赖倒转**：可以说是面向对象设计的标志，用那种语言来编写程序并不重要，如果编写时考虑的如何针对抽象编程而不是针对细节编程，即程序中所有依赖关系都是终止抽象类或接口，那就是面向对象的设计，反之就是过程化的设计。
 **里氏代换原则**：子类必须能够替换掉它们的符类型。
 
+# 创建型模式
 
-# 装饰模式
-**装饰模式**：动态的给一个对象添加一些额外的职责，就增加功能来说，装饰模式比生成子类更为灵活。
-
-装饰类的核心就是把类的核心职责和装饰功能区分开，而且可以去除相关的类中的重复的装饰逻辑。
-
-# 代理模式
-**代理模式**为其他对象提供一种代理控制对这个对象访问。
-
-
-**远程代理**:也就是为一个对象在不同的地址空间提供局部代表。这样可以隐藏对象在于不同地址空间的事实。
-
-**虚拟代理**:根据需要创建开销很大的对象，通过他来存放实例化需要很长时间的真实对象。
-
-**安全代理**:用来控制真实对象访问时的权限。
-
-**智能指引** ：指当调用真实的对象，代理处理另外一些事。
-
-# 工厂模式
+## 工厂模式
 工厂模式（Factory Pattern）是最常用的设计模式之一。这种类型的设计模式属于创建型模式，它提供了一种创建对象的最佳方式。
 
 工厂模式提供了一种将对象的实例化过程封装在工厂类中的方式。通过使用工厂模式，可以将对象的创建与使用代码分离，提供一种统一的接口来创建不同类型的对象。
-## 特点介绍
+### 特点介绍
 
 **应用实例**： 1、您需要一辆汽车，可以直接从工厂里面提货，而不用去管这辆汽车是怎么做出来的，以及这个汽车里面的具体实现。 2、Hibernate 换数据库只需换方言和驱动就可以。
 
@@ -137,19 +121,19 @@ class Context
 
 
 
-## 工厂模式包含以下几个核心角色：
+### 工厂模式包含以下几个核心角色：
 
 - **抽象产品（Abstract Product）**：定义了产品的共同接口或抽象类。它可以是具体产品类的父类或接口，规定了产品对象的共同方法。
 **具体产品（Concrete Product）**：实现了抽象产品接口，定义了具体产品的特定行为和属性。
 **抽象工厂（Abstract Factory）**：声明了创建产品的抽象方法，可以是接口或抽象类。它可以有多个方法用于创建不同类型的产品。
 **具体工厂（Concrete Factory）**：实现了抽象工厂接口，负责实际创建具体产品的对象。
 
-## 实现架构
+### 实现架构
 我们将创建一个 Shape 接口和实现 Shape 接口的实体类。下一步是定义工厂类 ShapeFactory。
 
 FactoryPatternDemo 类使用 ShapeFactory 来获取 Shape 对象。它将向 ShapeFactory 传递信息（CIRCLE / RECTANGLE / SQUARE），以便获取它所需对象的类型。
 ![Alt text](image-11.png)
-## java 实现
+### java 实现
 **步骤 1**
 创建一个接口:
 ```rust
@@ -243,7 +227,7 @@ public class FactoryPatternDemo {
 }
 ```
 
-## rust实现
+### rust实现
 由于设计思想是一致的，关于rust的实现就不再赘述上述的步骤，直接贴上完整的代码。
 ```rust
 
@@ -298,13 +282,13 @@ fn main() {
 }
 
 ```
-# 抽象工厂模式
+## 抽象工厂模式
 抽象工厂模式（Abstract Factory Pattern）是围绕一个超级工厂创建其他工厂。该超级工厂又称为其他工厂的工厂。
 
 在抽象工厂模式中，接口是负责创建一个相关对象的工厂，不需要显式指定它们的类。每个生成的工厂都能按照工厂模式提供对象。
 
 抽象工厂模式提供了一种创建一系列相关或相互依赖对象的接口，而无需指定具体实现类。通过使用抽象工厂模式，可以将客户端与具体产品的创建过程解耦，使得客户端可以通过工厂接口来创建一族产品。
-## 介绍
+### 介绍
 **意图**：提供一个创建一系列相关或相互依赖对象的接口，而无需指定它们具体的类。
 
 **主要解决**：主要解决接口选择的问题。
@@ -325,14 +309,14 @@ fn main() {
 
 
 
-## 抽象工厂模式包含以下几个核心角色：
+### 抽象工厂模式包含以下几个核心角色：
 **抽象工厂（Abstract Factory）**：声明了一组用于创建产品对象的方法，每个方法对应一种产品类型。抽象工厂可以是接口或抽象类。
 **具体工厂（Concrete Factory）**：实现了抽象工厂接口，负责创建具体产品对象的实例。
 **抽象产品（Abstract Product）**：定义了一组产品对象的共同接口或抽象类，描述了产品对象的公共方法。
 **具体产品（Concrete Product）**：实现了抽象产品接口，定义了具体产品的特定行为和属性。
 抽象工厂模式通常涉及一族相关的产品，每个具体工厂类负责创建该族中的具体产品。客户端通过使用抽象工厂接口来创建产品对象，而不需要直接使用具体产品的实现类。
 
-## 实现架构图
+### 实现架构图
 我们将创建 Shape 和 Color 接口和实现这些接口的实体类。下一步是创建抽象工厂类 AbstractFactory。接着定义工厂类 ShapeFactory 和 ColorFactory，这两个工厂类都是扩展了 AbstractFactory。然后创建一个工厂创造器/生成器类 FactoryProducer。
 
 AbstractFactoryPatternDemo 类使用 FactoryProducer 来获取 AbstractFactory 对象。它将向 AbstractFactory 传递形状信息 Shape（CIRCLE / RECTANGLE / SQUARE），以便获取它所需对象的类型。同时它还向 AbstractFactory 传递颜色信息 Color（RED / GREEN / BLUE），以便获取它所需对象的类型。
@@ -559,7 +543,7 @@ Inside Green::fill() method.
 Inside Blue::fill() method.
 
 ```
-## rust实现
+### rust实现
 ```rust
 // 定义接口
 
@@ -683,7 +667,286 @@ fn main() {
     color3.fill();
 }
 ```
+## 单例模式
+**单例模式**（Singleton Pattern）是最简单的设计模式之一。这种类型的设计模式属于创建型模式，它提供了一种创建对象的最佳方式。
 
+这种模式涉及到一个单一的类，该类负责创建自己的对象，同时确保只有单个对象被创建。这个类提供了一种访问其唯一的对象的方式，可以直接访问，不需要实例化该类的对象。
+
+单例模式是一种创建型设计模式，它确保一个类只有一个实例，并提供了一个全局访问点来访问该实例。
+
+**注意**：
+
+1. 单例类只能有一个实例。
+2. 单例类必须自己创建自己的唯一实例。
+3. 单例类必须给所有其他对象提供这一实例。
+
+### 介绍
+**意图**：保证一个类仅有一个实例，并提供一个访问它的全局访问点。
+
+**主要解决**：一个全局使用的类频繁地创建与销毁。
+
+**何时使用**：当您想控制实例数目，节省系统资源的时候。
+
+**如何解决**：判断系统是否已经有这个单例，如果有则返回，如果没有则创建。
+
+**关键代码**：构造函数是私有的。
+
+####  应用实例：
+1. 一个班级只有一个班主任。
+2. Windows 是多进程多线程的，在操作一个文件的时候，就不可避免地出现多个进程或线程同时操作一个文件的现象，所以所有文件的处理必须通过唯一的实例来进行。
+3. 一些设备管理器常常设计为单例模式，比如一个电脑有两台打印机，在输出的时候就要处理不能两台打印机打印同一个文件。
+
+#### 优点
+1. 在内存里只有一个实例，减少了内存的开销，尤其是频繁的创建和销毁实例（比如管理学院首页页面缓存）。
+2. 避免对资源的多重占用（比如写文件操作）。
+缺点：没有接口，不能继承，与单一职责原则冲突，一个类应该只关心内部逻辑，而不关心外面怎么样来实例化。
+
+#### 使用场景
+
+1. 要求生产唯一序列号。
+2. WEB 中的计数器，不用每次刷新都在数据库里加一次，用单例先缓存起来。
+3. 创建的一个对象需要消耗的资源过多，比如 I/O 与数据库的连接等。
+
+
+### 架构图
+我们将创建一个 SingleObject 类。SingleObject 类有它的私有构造函数和本身的一个静态实例。
+
+SingleObject 类提供了一个静态方法，供外界获取它的静态实例。SingletonPatternDemo 类使用 SingleObject 类来获取 SingleObject 对象。
+
+**单例模式的 UML 图**
+![Alt text](image-13.png)
+**步骤 1**
+### JAVA 实现
+创建一个 Singleton 类。
+SingleObject.java
+```java
+public class SingleObject {
+ 
+   //创建 SingleObject 的一个对象
+   private static SingleObject instance = new SingleObject();
+ 
+   //让构造函数为 private，这样该类就不会被实例化
+   private SingleObject(){}
+ 
+   //获取唯一可用的对象
+   public static SingleObject getInstance(){
+      return instance;
+   }
+ 
+   public void showMessage(){
+      System.out.println("Hello World!");
+   }
+}
+```
+
+
+***步骤 2***
+从 singleton 类获取唯一的对象。
+
+SingletonPatternDemo.java
+```java
+public class SingletonPatternDemo {
+   public static void main(String[] args) {
+ 
+      //不合法的构造函数
+      //编译时错误：构造函数 SingleObject() 是不可见的
+      //SingleObject object = new SingleObject();
+ 
+      //获取唯一可用的对象
+      SingleObject object = SingleObject.getInstance();
+ 
+      //显示消息
+      object.showMessage();
+   }
+}
+```
+
+**步骤 3**
+执行程序，输出结果：
+
+Hello World!
+#### 单例模式的几种实现方式
+单例模式的实现有多种方式，如下所示：
+
+1、**懒汉式**，线程不安全
+- 是否 Lazy 初始化：是
+- 是否多线程安全：否
+- 实现难度：易
+- 描述：这种方式是最基本的实现方式，这种实现最大的问题就是不支持多线程。因为没有加锁 synchronized，所以严格意义上它并不算单例模式。
+这种方式 lazy loading 很明显，不要求线程安全，在多线程不能正常工作。
+
+**实例**
+```java
+public class Singleton {  
+    private static Singleton instance;  
+    private Singleton (){}  
+  
+    public static Singleton getInstance() {  
+        if (instance == null) {  
+            instance = new Singleton();  
+        }  
+        return instance;  
+    }  
+}
+```
+
+接下来介绍的几种实现方式都支持多线程，但是在性能上有所差异。
+
+2、**懒汉式**，线程安全
+- 是否 Lazy 初始化：是
+- 是否多线程安全：是
+- 实现难度：易
+- 描述：这种方式具备很好的 lazy loading，能够在多线程中很好的工作，但是，效率很低，99% 情况下不需要同步。
+- 优点：第一次调用才初始化，避免内存浪费。
+- 缺点：必须加锁 synchronized 才能保证单例，但加锁会影响效率。
+
+
+**实例**
+```java
+public class Singleton {  
+    private static Singleton instance;  
+    private Singleton (){}  
+    public static synchronized Singleton getInstance() {  
+        if (instance == null) {  
+            instance = new Singleton();  
+        }  
+        return instance;  
+    }  
+}
+```
+
+3、**饿汉式**
+- 是否 Lazy 初始化：否
+- 是否多线程安全：是
+- 实现难度：易
+- 描述：这种方式比较常用，但容易产生垃圾对象。
+- 优点：没有加锁，执行效率会提高。
+- 缺点：类加载时就初始化，浪费内存。
+
+它基于 classloader 机制避免了多线程的同步问题，不过，instance 在类装载时就实例化，虽然导致类装载的原因有很多种，在单例模式中大多数都是调用 getInstance 方法， 但是也不能确定有其他的方式（或者其他的静态方法）导致类装载，这时候初始化 instance 显然没有达到 lazy loading 的效果。
+
+**实例**
+```java
+public class Singleton {  
+    private static Singleton instance = new Singleton();  
+    private Singleton (){}  
+    public static Singleton getInstance() {  
+    return instance;  
+    }  
+}
+```
+
+4、**双检锁/双重校验锁（DCL，即 double-checked locking）**
+- 是否 Lazy 初始化：是
+- 是否多线程安全：是
+- 实现难度：较复杂
+- 描述：这种方式采用双锁机制，安全且在多线程情况下能保持高性能。
+
+实例
+```java
+public class Singleton {  
+    private volatile static Singleton singleton;  
+    private Singleton (){}  
+    public static Singleton getSingleton() {  
+    if (singleton == null) {  
+        synchronized (Singleton.class) {  
+            if (singleton == null) {  
+                singleton = new Singleton();  
+            }  
+        }  
+    }  
+    return singleton;  
+    }  
+}
+
+```
+
+5、**登记式/静态内部类**
+- 是否 Lazy 初始化：是
+- 是否多线程安全：是
+- 实现难度：一般
+- 描述：这种方式能达到双检锁方式一样的功效，但实现更简单。对静态域使用延迟初始化，应使用这种方式而不是双检锁方式。这种方式只适用于静态域的情况，双检锁方式可在实例域需要延迟初始化时使用。
+
+这种方式同样利用了 classloader 机制来保证初始化 instance 时只有一个线程，它跟第 3 种方式不同的是：第 3 种方式只要 Singleton 类被装载了，那么 instance 就会被实例化（没有达到 lazy loading 效果），而这种方式是 Singleton 类被装载了，instance 不一定被初始化。因为 SingletonHolder 类没有被主动使用，只有通过显式调用 getInstance 方法时，才会显式装载 SingletonHolder 类，从而实例化 instance。想象一下，如果实例化 instance 很消耗资源，所以想让它延迟加载，另外一方面，又不希望在 Singleton 类加载时就实例化，因为不能确保 Singleton 类还可能在其他的地方被主动使用从而被加载，那么这个时候实例化 instance 显然是不合适的。这个时候，这种方式相比第 3 种方式就显得很合理。
+
+**实例**
+```java
+public class Singleton {  
+    private static class SingletonHolder {  
+    private static final Singleton INSTANCE = new Singleton();  
+    }  
+    private Singleton (){}  
+    public static final Singleton getInstance() {  
+        return SingletonHolder.INSTANCE;  
+    }  
+}
+```
+
+6、**枚举**
+- 是否 Lazy 初始化：否
+- 是否多线程安全：是
+- 实现难度：易
+- 描述：这种实现方式还没有被广泛采用，但这是实现单例模式的最佳方法。它更简洁，自动支持序列化机制，绝对防止多次实例化。
+这种方式是 Effective Java 作者 Josh Bloch 提倡的方式，它不仅能避免多线程同步问题，而且还自动支持序列化机制，防止反序列化重新创建新的对象，绝对防止多次实例化。不过，由于 JDK1.5 之后才加入 enum 特性，用这种方式写不免让人感觉生疏，在实际工作中，也很少用。
+**实例**
+```java
+public enum Singleton {  
+    INSTANCE;  
+    public void whateverMethod() {  
+    }  
+}
+```
+### rust实现
+在用rust进行懒加载时，最方便的还是用第三方库，本人运用的是`lazy_static`库，在用这社区库时，需要引入在Cargo.toml文件下的`[dependencies]`项目下引lazy_static = "1.4.0"。如图
+![Alt text](image-14.png)
+
+```rust
+use std::sync::{Arc, Mutex};
+use lazy_static::lazy_static;
+ struct Singleton;
+ impl Singleton {
+    //关联方法， 获取单例实例的方法
+    fn get_instance() -> Arc<Mutex<Singleton>> {
+        // 使用懒加载创建单例实例
+        // 这里使用了 Arc 和 Mutex 来实现线程安全的单例
+        // 只有第一次调用 get_instance 时会创建实例，之后都会返回已创建的实例
+        static mut INSTANCE: Option<Arc<Mutex<Singleton>>> = None;//静态初始化，只运行一次
+         unsafe {
+            // get_or_insert_with ,如果是 None ，则将从data计算的值插入选项中，然后返回对包含值的可变引用。
+            INSTANCE.get_or_insert_with(|| {
+                Arc::new(Mutex::new(Singleton {}))}).clone()
+        }
+    }
+    fn show_message(&self){
+        println!("Hello World!");
+     }
+}
+
+// 使用lazy_static的懒加载
+struct SingletonL;
+impl SingletonL {
+    fn show_message(&self){
+        println!("Hello World!");
+     }
+}
+lazy_static! {
+    static ref INSTANCE: Mutex<SingletonL> = Mutex::new(SingletonL {   });
+}
+
+fn main() {
+  // 获取单例实例,自定义
+  let instance1 = Singleton::get_instance();
+  
+   // 修改单例数据
+  {
+      let instance = instance1.lock().unwrap();
+      instance.show_message();
+  }
+  // 获取单例实例,社区lazy_static
+  let instance = INSTANCE.lock().unwrap();
+  instance.show_message();
+}
+```                                                                             
 # 原型模式
 
 **原型模式**:用原型实例指定创建对象的种类，并且通过拷贝这些原型创建新的对象。
