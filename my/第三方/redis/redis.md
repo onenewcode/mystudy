@@ -1305,11 +1305,6 @@ master会将自己的replid和offset都发送给这个slave，slave保存这些�
 ![Alt text](image-20.png)
 
 
-
-那么master怎么知道slave与自己的数据差异在哪里呢?
-
-
-
 ### repl_backlog原理
 
 master怎么知道slave与自己的数据差异在哪里呢?
@@ -1373,8 +1368,6 @@ slave与master的offset之间的差异，就是salve需要增量拷贝的数据�
 
 ## 小结
 
-简述全量同步和增量同步区别？
-
 - 全量同步：master将完整内存数据生成RDB，发送RDB到slave。后续命令则记录在repl_baklog，逐个发送给slave。
 - 增量同步：slave提交自己的offset到master，master获取repl_baklog中从offset之后的命令给slave
 
@@ -1388,3 +1381,507 @@ slave与master的offset之间的差异，就是salve需要增量拷贝的数据�
 - slave节点断开又恢复，并且在repl_baklog中能找到offset时
 
 
+
+
+# Redis哨兵
+
+Redis提供了哨兵（Sentinel）机制来实现主从集群的自动故障恢复。
+
+## 哨兵原理
+
+### 集群结构和作用
+
+哨兵的结构如图：
+
+![Alt text](image-28.png)
+哨兵的作用如下：
+
+- **监控**：Sentinel 会不断检查您的master和slave是否按预期工作
+- **自动故障恢复**：如果master故障，Sentinel会将一个slave提升为master。当故障实例恢复后也以新的master为主
+- **通知**：Sentinel充当Redis客户端的服务发现来源，当集群发生故障转移时，会将最新信息推送给Redis的客户端
+
+
+
+### 集群监控原理
+
+Sentinel基于心跳机制监测服务状态，每隔1秒向集群的每个实例发送ping命令：
+
+•主观下线：如果某sentinel节点发现某实例未在规定时间响应，则认为该实例**主观下线**。
+
+•客观下线：若超过指定数量（quorum）的sentinel都认为该实例主观下线，则该实例**客观下线**。quorum值最好超过Sentinel实例数量的一半。
+
+![Alt text](image-29.png)
+
+
+
+### 集群故障恢复原理
+
+一旦发现master故障，sentinel需要在salve中选择一个作为新的master，选择依据是这样的：
+
+- 首先会判断slave节点与master节点断开时间长短，如果超过指定值（down-after-milliseconds * 10）则会排除该slave节点
+- 然后判断slave节点的slave-priority值，越小优先级越高，如果是0则永不参与选举
+- 如果slave-prority一样，则判断slave节点的offset值，越大说明数据越新，优先级越高
+- 最后是判断slave节点的运行id大小，越小优先级越高。
+
+
+
+当选出一个新的master后，该如何实现切换呢？
+
+流程如下：
+
+- sentinel给备选的slave1节点发送slaveof no one命令，让该节点成为master
+- sentinel给所有其它slave发送slaveof 192.168.150.101 7002 命令，让这些slave成为新master的从节点，开始从新的master上同步数据。
+- 最后，sentinel将故障节点标记为slave，当故障节点恢复后会自动成为新的master的slave节点
+
+
+![Alt text](image-30.png)
+
+
+
+
+
+
+
+
+
+
+### 小结
+
+Sentinel的三个作用是
+
+- 监控
+- 故障转移
+- 通知
+
+Sentinel如何判断一个redis实例是否健康？
+
+- 每隔1秒发送一次ping命令，如果超过一定时间没有相向则认为是主观下线
+- 如果大多数sentinel都认为实例主观下线，则判定服务下线
+
+故障转移步骤有哪些？
+
+- 首先选定一个slave作为新的master，执行slaveof no one
+- 然后让所有节点都执行slaveof 新master
+- 修改故障节点配置，添加slaveof 新master
+
+
+
+## 搭建哨兵集群
+
+
+
+
+## RedisTemplate
+
+在Sentinel集群监管下的Redis主从集群，其节点会因为自动故障转移而发生变化，Redis的客户端必须感知这种变化，及时更新连接信息。Spring的RedisTemplate底层利用lettuce实现了节点的感知和自动切换。
+
+下面，我们通过一个测试来实现RedisTemplate集成哨兵机制。
+
+### 3.3.1.导入Demo工程
+
+首先，我们引入课前资料提供的Demo工程：
+
+![image-20210725155124958](assets/image-20210725155124958.png) 
+
+
+
+### 3.3.2.引入依赖
+
+在项目的pom文件中引入依赖：
+
+```xml
+<dependency>
+    <groupId>org.springframework.boot</groupId>
+    <artifactId>spring-boot-starter-data-redis</artifactId>
+</dependency>
+```
+
+
+
+### 3.3.3.配置Redis地址
+
+然后在配置文件application.yml中指定redis的sentinel相关信息：
+
+```java
+spring:
+  redis:
+    sentinel:
+      master: mymaster
+      nodes:
+        - 192.168.150.101:27001
+        - 192.168.150.101:27002
+        - 192.168.150.101:27003
+```
+
+
+
+### 3.3.4.配置读写分离
+
+在项目的启动类中，添加一个新的bean：
+
+```java
+@Bean
+public LettuceClientConfigurationBuilderCustomizer clientConfigurationBuilderCustomizer(){
+    return clientConfigurationBuilder -> clientConfigurationBuilder.readFrom(ReadFrom.REPLICA_PREFERRED);
+}
+```
+
+
+
+这个bean中配置的就是读写策略，包括四种：
+
+- MASTER：从主节点读取
+- MASTER_PREFERRED：优先从master节点读取，master不可用才读取replica
+- REPLICA：从slave（replica）节点读取
+- REPLICA _PREFERRED：优先从slave（replica）节点读取，所有的slave都不可用才读取master
+
+
+
+
+
+# 4.Redis分片集群
+
+
+
+## 4.1.搭建分片集群
+
+主从和哨兵可以解决高可用、高并发读的问题。但是依然有两个问题没有解决：
+
+- 海量数据存储问题
+
+- 高并发写的问题
+
+使用分片集群可以解决上述问题，如图:
+
+![image-20210725155747294](assets/image-20210725155747294.png)
+
+
+
+分片集群特征：
+
+- 集群中有多个master，每个master保存不同数据
+
+- 每个master都可以有多个slave节点
+
+- master之间通过ping监测彼此健康状态
+
+- 客户端请求可以访问集群任意节点，最终都会被转发到正确节点
+
+
+
+具体搭建流程参考课前资料《Redis集群.md》：
+
+![image-20210725155806288](assets/image-20210725155806288.png) 
+
+
+
+## 4.2.散列插槽
+
+### 4.2.1.插槽原理
+
+Redis会把每一个master节点映射到0~16383共16384个插槽（hash slot）上，查看集群信息时就能看到：
+
+![image-20210725155820320](assets/image-20210725155820320.png)
+
+
+
+数据key不是与节点绑定，而是与插槽绑定。redis会根据key的有效部分计算插槽值，分两种情况：
+
+- key中包含"{}"，且“{}”中至少包含1个字符，“{}”中的部分是有效部分
+- key中不包含“{}”，整个key都是有效部分
+
+
+
+
+
+例如：key是num，那么就根据num计算，如果是{itcast}num，则根据itcast计算。计算方式是利用CRC16算法得到一个hash值，然后对16384取余，得到的结果就是slot值。
+
+![image-20210725155850200](assets/image-20210725155850200.png) 
+
+如图，在7001这个节点执行set a 1时，对a做hash运算，对16384取余，得到的结果是15495，因此要存储到103节点。
+
+到了7003后，执行`get num`时，对num做hash运算，对16384取余，得到的结果是2765，因此需要切换到7001节点
+
+
+
+### 4.2.1.小结
+
+Redis如何判断某个key应该在哪个实例？
+
+- 将16384个插槽分配到不同的实例
+- 根据key的有效部分计算哈希值，对16384取余
+- 余数作为插槽，寻找插槽所在实例即可
+
+如何将同一类数据固定的保存在同一个Redis实例？
+
+- 这一类数据使用相同的有效部分，例如key都以{typeId}为前缀
+
+
+
+
+
+
+
+## 4.3.集群伸缩
+
+redis-cli --cluster提供了很多操作集群的命令，可以通过下面方式查看：
+
+![image-20210725160138290](assets/image-20210725160138290.png)
+
+比如，添加节点的命令：
+
+![image-20210725160448139](assets/image-20210725160448139.png)
+
+
+
+### 4.3.1.需求分析
+
+需求：向集群中添加一个新的master节点，并向其中存储 num = 10
+
+- 启动一个新的redis实例，端口为7004
+- 添加7004到之前的集群，并作为一个master节点
+- 给7004节点分配插槽，使得num这个key可以存储到7004实例
+
+
+
+这里需要两个新的功能：
+
+- 添加一个节点到集群中
+- 将部分插槽分配到新插槽
+
+
+
+### 4.3.2.创建新的redis实例
+
+创建一个文件夹：
+
+```sh
+mkdir 7004
+```
+
+拷贝配置文件：
+
+```sh
+cp redis.conf /7004
+```
+
+修改配置文件：
+
+```sh
+sed /s/6379/7004/g 7004/redis.conf
+```
+
+启动
+
+```sh
+redis-server 7004/redis.conf
+```
+
+
+
+### 4.3.3.添加新节点到redis
+
+添加节点的语法如下：
+
+![image-20210725160448139](assets/image-20210725160448139.png)
+
+
+
+执行命令：
+
+```sh
+redis-cli --cluster add-node  192.168.150.101:7004 192.168.150.101:7001
+```
+
+
+
+通过命令查看集群状态：
+
+```sh
+redis-cli -p 7001 cluster nodes
+```
+
+
+
+如图，7004加入了集群，并且默认是一个master节点：
+
+![image-20210725161007099](assets/image-20210725161007099.png)
+
+但是，可以看到7004节点的插槽数量为0，因此没有任何数据可以存储到7004上
+
+
+
+### 4.3.4.转移插槽
+
+我们要将num存储到7004节点，因此需要先看看num的插槽是多少：
+
+![image-20210725161241793](assets/image-20210725161241793.png)
+
+如上图所示，num的插槽为2765.
+
+
+
+我们可以将0~3000的插槽从7001转移到7004，命令格式如下：
+
+![image-20210725161401925](assets/image-20210725161401925.png)
+
+
+
+具体命令如下：
+
+建立连接：
+
+![image-20210725161506241](assets/image-20210725161506241.png)
+
+得到下面的反馈：
+
+![image-20210725161540841](assets/image-20210725161540841.png)
+
+
+
+询问要移动多少个插槽，我们计划是3000个：
+
+新的问题来了：
+
+![image-20210725161637152](assets/image-20210725161637152.png)
+
+那个node来接收这些插槽？？
+
+显然是7004，那么7004节点的id是多少呢？
+
+![image-20210725161731738](assets/image-20210725161731738.png)
+
+复制这个id，然后拷贝到刚才的控制台后：
+
+![image-20210725161817642](assets/image-20210725161817642.png)
+
+这里询问，你的插槽是从哪里移动过来的？
+
+- all：代表全部，也就是三个节点各转移一部分
+- 具体的id：目标节点的id
+- done：没有了
+
+
+
+这里我们要从7001获取，因此填写7001的id：
+
+![image-20210725162030478](assets/image-20210725162030478.png)
+
+填完后，点击done，这样插槽转移就准备好了：
+
+![image-20210725162101228](assets/image-20210725162101228.png)
+
+确认要转移吗？输入yes：
+
+然后，通过命令查看结果：
+
+![image-20210725162145497](assets/image-20210725162145497.png) 
+
+可以看到： 
+
+![image-20210725162224058](assets/image-20210725162224058.png)
+
+目的达成。
+
+
+
+
+
+## 4.4.故障转移
+
+集群初识状态是这样的：
+
+![image-20210727161152065](assets/image-20210727161152065.png)
+
+其中7001、7002、7003都是master，我们计划让7002宕机。
+
+
+
+### 4.4.1.自动故障转移
+
+当集群中有一个master宕机会发生什么呢？
+
+直接停止一个redis实例，例如7002：
+
+```sh
+redis-cli -p 7002 shutdown
+```
+
+
+
+1）首先是该实例与其它实例失去连接
+
+2）然后是疑似宕机：
+
+![image-20210725162319490](assets/image-20210725162319490.png)
+
+3）最后是确定下线，自动提升一个slave为新的master：
+
+![image-20210725162408979](assets/image-20210725162408979.png)
+
+4）当7002再次启动，就会变为一个slave节点了：
+
+![image-20210727160803386](assets/image-20210727160803386.png)
+
+
+
+### 4.4.2.手动故障转移
+
+利用cluster failover命令可以手动让集群中的某个master宕机，切换到执行cluster failover命令的这个slave节点，实现无感知的数据迁移。其流程如下：
+
+![image-20210725162441407](assets/image-20210725162441407.png)
+
+
+
+这种failover命令可以指定三种模式：
+
+- 缺省：默认的流程，如图1~6歩
+- force：省略了对offset的一致性校验
+- takeover：直接执行第5歩，忽略数据一致性、忽略master状态和其它master的意见
+
+
+
+**案例需求**：在7002这个slave节点执行手动故障转移，重新夺回master地位
+
+步骤如下：
+
+1）利用redis-cli连接7002这个节点
+
+2）执行cluster failover命令
+
+如图：
+
+![image-20210727160037766](assets/image-20210727160037766.png)
+
+
+
+效果：
+
+![image-20210727161152065](assets/image-20210727161152065.png)
+
+
+
+## 4.5.RedisTemplate访问分片集群
+
+RedisTemplate底层同样基于lettuce实现了分片集群的支持，而使用的步骤与哨兵模式基本一致：
+
+1）引入redis的starter依赖
+
+2）配置分片集群地址
+
+3）配置读写分离
+
+与哨兵模式相比，其中只有分片集群的配置方式略有差异，如下：
+
+```yaml
+spring:
+  redis:
+    cluster:
+      nodes:
+        - 192.168.150.101:7001
+        - 192.168.150.101:7002
+        - 192.168.150.101:7003
+        - 192.168.150.101:8001
+        - 192.168.150.101:8002
+        - 192.168.150.101:8003
+```
