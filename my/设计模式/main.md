@@ -13,95 +13,6 @@
 
 <img src="./img/2023-09-11 110311.png" >
 
-# 简单工厂模式
-工厂模式有一种非常形象的描述，建立对象的类就如一个工厂，而需要被建立的对象就是一个个产品；在工厂中加工产品，使用产品的人，不用在乎产品是如何生产出来的。从软件开发的角度来说，这样就有效的降低了模块之间的耦合。
-
-就如同写一个计算器，我们只需要为每个运算符添加指定的处理逻辑,然后再需要时实例化指定的操作符，进行解耦处理，防止在一个运算类中添加过多的代码，造成过耦合
-```java
-class OperationAdd:Operation
-{
-....
-}
-class OperationSub:Operation
-{
-....
-}
-....
-public class OperationFactorty 
-{
-    public static Operation createOperate(string operate)
-    {
-        Opertaion oper = null ;
-        switch(operate){
-            case "+":
-                oper=new OperationAddd();
-            case "-":
-                oper=new OperationSub();
-            ......       
-        }
-    }
-}
-```
-
-# 策略模式
-
-**策略模式**：它定义了算法家族，分别封装起来，让他们之间可以互相转换，减少了各种算法类与使用算法类之间的耦合,此模式让算法发生变化，不会影响到使用算法的用户.
-此外,策略模式简化了单元测试,因为每个算法都有自己的类,可以通过自己的接口进行单独测试.
-
-<img src="./img/2023-09-11 161435.png">
-
-```java
-//抽象类算法
-abstract class Strategy
-{
-    //算法方法
-    public override void  AlgorithmInterface();
-}
-// 具体算法B
-class ConcreteStrategyA:Strategy
-{
-    //算法B实现方法
-    public override void  AlgorithmInterface();
-
-}
-class ConcreteStrategyC:Strategy
-{
-    //算法B实现方法
-    public override void  AlgorithmInterface();
-
-}
-
-// Context,用一个ConcreteStrategy来配置，维护对一个Strategy对象的引用
-class Context
-{
-    Strategy strategy;
-    // 初始化，传入具体的策略对象
-    public Context(Strategy strategy){
-        this.strategy=strategy;
-    }
-    // 上下文接口，根据具体的策略对象，调用相应的算法
-    public void ContextInterface()
-    {
-        strategy. AlgorithmInterface();
-    }
-}
-```
-# 单一职责原则
-
-单一职责原则：就一个类而言，应该仅有一个引起它变化的原因。
-
-如果一个类承担的责任过多，就等于把这些职责耦合在一起，一个职责的变化可能削弱或者抑制这个类完成其他职责的能力。这种耦合会导致脆弱的设计，发生变化时，设计会遭受意想不到的破坏。
-
-# 开放-封闭原则
-开放-封闭原则：软件实体（类，模块，函数等等）是可以扩展的，但是不可修改。
-
-无论模块是多么 的封闭，都会存在一些无法对之封闭的目录，既然不可能完全封闭，设计人员必须对于他设计的模块应该对哪种变化封闭做出选择。他必须先猜测出最有可能发生变化的种类，然后用抽象隔离那些变化。
-
-在我们编写程序时，假设变化不会发生，当变化发生时，我们就创建抽象来隔离以后发生的同类变化。
-
-# 依赖倒转原则
-**依赖倒转**：可以说是面向对象设计的标志，用那种语言来编写程序并不重要，如果编写时考虑的如何针对抽象编程而不是针对细节编程，即程序中所有依赖关系都是终止抽象类或接口，那就是面向对象的设计，反之就是过程化的设计。
-**里氏代换原则**：子类必须能够替换掉它们的符类型。
 
 # 创建型模式
 
@@ -323,7 +234,7 @@ AbstractFactoryPatternDemo 类使用 FactoryProducer 来获取 AbstractFactory �
 
 抽象工厂模式的 UML 图
 ![Alt text](image-12.png)
-## java实现
+### java实现
 **步骤 1**
 为形状创建一个接口。
 ```java
@@ -1335,10 +1246,525 @@ fn main() {
 }
 ```
 
-# 原型模式
+## 原型模式
+原型模式（Prototype Pattern）是用于创建重复的对象，同时又能保证性能。
 
-**原型模式**:用原型实例指定创建对象的种类，并且通过拷贝这些原型创建新的对象。
+这种模式是实现了一个原型接口，该接口用于创建当前对象的克隆。当直接创建对象的代价比较大时，则采用这种模式。例如，一个对象需要在一个高代价的数据库操作之后被创建。我们可以缓存该对象，在下一个请求时返回它的克隆，在需要的时候更新数据库，以此来减少数据库调用。
 
+### 介绍
+- **意图**：用原型实例指定创建对象的种类，并且通过拷贝这些原型创建新的对象。
+- **主要解决**：在运行期建立和删除原型。
+- **何时使用**： 1、当一个系统应该独立于它的产品创建，构成和表示时。 2、当要实例化的类是在运行时刻指定时，例如，通过动态装载。 3、为了避免创建一个与产品类层次平行的工厂类层次时。 4、当一个类的实例只能有几个不同状态组合中的一种时。建立相应数目的原型并克隆它们可能比每次用合适的状态手工实例化该类更方便一些。
+- 如何解决：利用已有的一个原型对象，快速地生成和原型对象一样的实例。
+- **关键代码**： 1、实现克隆操作，在 JAVA 实现 Cloneable 接口，重写 clone()，在 rust中可以使用clone（） 方法来实现对象的深拷贝。 2、原型模式同样用于隔离类对象的使用者和具体类型（易变类）之间的耦合关系，它同样要求这些"易变类"拥有稳定的接口。
+- **应用实例**： 1、细胞分裂。 2、考试中为每个考生分发相同的试卷。
+####  优点
+1、性能提高。 
+2、逃避构造函数的约束。
+#### 缺点
+1、配备克隆方法需要对类的功能进行通盘考虑，这对于全新的类不是很难，但对于已有的类不一定很容易，特别当一个类引用不支持串行化的间接对象，或者引用含有循环结构的时候。 
+
+####  使用场景
+1、资源优化场景。
+2、类初始化需要消化非常多的资源，这个资源包括数据、硬件资源等。 3、性能和安全要求的场景。 
+4、通过 new 产生一个对象需要非常繁琐的数据准备或访问权限，则可以使用原型模式。 5、一个对象多个修改者的场景。 
+6、一个对象需要提供给其他对象访问，而且各个调用者可能都需要修改其值时，可以考虑使用原型模式拷贝多个对象供调用者使用。 
+7、在实际项目中，原型模式很少单独出现，一般是和工厂方法模式一起出现，通过 clone 的方法创建一个对象，然后由工厂方法提供给调用者。
+
+
+
+### 实现
+我们将创建一个抽象类 Shape 和扩展了 Shape 类的实体类。下一步是定义类 ShapeCache，该类把 shape 对象存储在一个 Hashtable 中，并在请求的时候返回它们的克隆。
+
+PrototypePatternDemo 类使用 ShapeCache 类来获取 Shape 对象。
+
+原型模式的 UML 图
+![Alt text](image-16.png)
+### java 实现
+**步骤 1**
+创建一个实现了 Cloneable 接口的抽象类。
+Shape.java
+```java
+public abstract class Shape implements Cloneable {
+   
+   private String id;
+   protected String type;
+   
+   abstract void draw();
+   
+   public String getType(){
+      return type;
+   }
+   
+   public String getId() {
+      return id;
+   }
+   
+   public void setId(String id) {
+      this.id = id;
+   }
+   
+   public Object clone() {
+      Object clone = null;
+      try {
+         clone = super.clone();
+      } catch (CloneNotSupportedException e) {
+         e.printStackTrace();
+      }
+      return clone;
+   }
+}
+```
+
+**步骤 2**
+创建扩展了上面抽象类的实体类。
+Rectangle.java
+```java
+public class Rectangle extends Shape {
+ 
+   public Rectangle(){
+     type = "Rectangle";
+   }
+ 
+   @Override
+   public void draw() {
+      System.out.println("Inside Rectangle::draw() method.");
+   }
+}
+```
+
+
+Square.java
+```java
+public class Square extends Shape {
+ 
+   public Square(){
+     type = "Square";
+   }
+ 
+   @Override
+   public void draw() {
+      System.out.println("Inside Square::draw() method.");
+   }
+}
+```
+
+Circle.java
+```java
+public class Circle extends Shape {
+ 
+   public Circle(){
+     type = "Circle";
+   }
+ 
+   @Override
+   public void draw() {
+      System.out.println("Inside Circle::draw() method.");
+   }
+}
+```
+**步骤 3**
+创建一个类，从数据库获取实体类，并把它们存储在一个 Hashtable 中。
+ShapeCache.java
+```java
+import java.util.Hashtable;
+ 
+public class ShapeCache {
+    
+   private static Hashtable<String, Shape> shapeMap 
+      = new Hashtable<String, Shape>();
+ 
+   public static Shape getShape(String shapeId) {
+      Shape cachedShape = shapeMap.get(shapeId);
+      return (Shape) cachedShape.clone();
+   }
+ 
+   // 对每种形状都运行数据库查询，并创建该形状
+   // shapeMap.put(shapeKey, shape);
+   // 例如，我们要添加三种形状
+   public static void loadCache() {
+      Circle circle = new Circle();
+      circle.setId("1");
+      shapeMap.put(circle.getId(),circle);
+ 
+      Square square = new Square();
+      square.setId("2");
+      shapeMap.put(square.getId(),square);
+ 
+      Rectangle rectangle = new Rectangle();
+      rectangle.setId("3");
+      shapeMap.put(rectangle.getId(),rectangle);
+   }
+}
+```
+
+**步骤 4**
+PrototypePatternDemo 使用 ShapeCache 类来获取存储在 Hashtable 中的形状的克隆。
+
+PrototypePatternDemo.java
+```java
+public class PrototypePatternDemo {
+   public static void main(String[] args) {
+      ShapeCache.loadCache();
+ 
+      Shape clonedShape = (Shape) ShapeCache.getShape("1");
+      System.out.println("Shape : " + clonedShape.getType());        
+ 
+      Shape clonedShape2 = (Shape) ShapeCache.getShape("2");
+      System.out.println("Shape : " + clonedShape2.getType());        
+ 
+      Shape clonedShape3 = (Shape) ShapeCache.getShape("3");
+      System.out.println("Shape : " + clonedShape3.getType());        
+   }
+}
+```
+**步骤 5**
+执行程序，输出结果：
+```shell
+Shape : Circle
+Shape : Square
+Shape : Rectangle
+```
+### rust 实现
+```rs
+#[derive(Clone)]
+struct Shape{
+    id:String,
+    mtype:String
+}
+impl Shape{
+    fn set_id(&mut self,id:String){
+        self.id=id;
+    }
+    fn get_id(&self)->&str{
+        &self.id
+    }
+}
+#[derive(Clone)]
+struct  Rectangle{
+    shape:Shape
+}
+impl Rectangle {
+    fn new()->Rectangle {
+        Rectangle{shape:Shape{
+            id:String::from("value"),
+            mtype:String::from("Rectangle")
+        }}
+    }
+    fn draw() {
+        println!("Inside Rectangle::draw() method.");
+    }
+}
+#[derive(Clone)]
+struct  Square {
+    shape:Shape
+}
+impl Square  {
+    fn new()->Square  {
+        Square {shape:Shape{
+            id:String::from("value"),
+            mtype:String::from("Square ")
+        }}
+    }
+    fn draw() {
+        println!("Inside Square ::draw() method.");
+    }
+}
+#[derive(Clone)]
+struct  Circle {
+    shape:Shape
+}
+impl Circle  {
+    fn new()->Circle {
+        Circle {shape:Shape{
+            id:String::from("value"),
+            mtype:String::from("Square ")
+        }}
+    }
+    fn draw() {
+        println!("Inside Circle ::draw() method.");
+    }
+}
+
+fn main(){
+    let s=Circle::new();
+    let mut s1=s.clone();
+    s1.shape.set_id(String::from("dsf"));
+    println!("{}",s.shape.id);
+    println!("{}",s1.shape.id);
+
+}
+```
+# 结构型模式
+## 适配器模式
+适配器模式（Adapter Pattern）是作为两个不兼容的接口之间的桥梁。这种类型的设计模式属于结构型模式，它结合了两个独立接口的功能。
+
+这种模式涉及到一个单一的类，该类负责加入独立的或不兼容的接口功能。举个真实的例子，读卡器是作为内存卡和笔记本之间的适配器。您将内存卡插入读卡器，再将读卡器插入笔记本，这样就可以通过笔记本来读取内存卡。
+
+
+
+### 介绍
+- **意图**：将一个类的接口转换成客户希望的另外一个接口。适配器模式使得原本由于接口不兼容而不能一起工作的那些类可以一起工作。
+- **主要解决**：主要解决在软件系统中，常常要将一些"现存的对象"放到新的环境中，而新环境要求的接口是现对象不能满足的。
+- **关键代码**：适配器继承或依赖已有的对象，实现想要的目标接口。
+
+#### 何时使用
+1、系统需要使用现有的类，而此类的接口不符合系统的需要。
+2、想要建立一个可以重复使用的类，用于与一些彼此之间没有太大关联的一些类，包括一些可能在将来引进的类一起工作，这些源类不一定有一致的接口。 
+3、通过接口转换，将一个类插入另一个类系中。（比如老虎和飞禽，现在多了一个飞虎，在不增加实体的需求下，增加一个适配器，在里面包容一个虎对象，实现飞的接口。）
+
+
+
+#### 应用实例
+1、美国电器 110V，中国 220V，就要有一个适配器将 110V 转化为 220V。 
+2、在 LINUX 上运行 WINDOWS 程序。 
+3、JAVA 中的 jdbc。
+
+####  优点
+1、可以让任何两个没有关联的类一起运行。 
+2、提高了类的复用。 
+3、增加了类的透明度。 
+4、灵活性好。
+
+#### 缺点
+1、过多地使用适配器，会让系统非常零乱，不易整体进行把握。比如，明明看到调用的是 A 接口，其实内部被适配成了 B 接口的实现，一个系统如果太多出现这种情况，无异于一场灾难。因此如果不是很有必要，可以不使用适配器，而是直接对系统进行重构。 
+2.由于 JAVA 至多继承一个类，所以至多只能适配一个适配者类，而且目标类必须是抽象类。
+
+#### 使用场景
+有动机地修改一个正常运行的系统的接口，这时应该考虑使用适配器模式。
+
+
+
+### 实现
+我们有一个 MediaPlayer 接口和一个实现了 MediaPlayer 接口的实体类 AudioPlayer。默认情况下，AudioPlayer 可以播放 mp3 格式的音频文件。
+
+我们还有另一个接口 AdvancedMediaPlayer 和实现了 AdvancedMediaPlayer 接口的实体类。该类可以播放 vlc 和 mp4 格式的文件。
+
+我们想要让 AudioPlayer 播放其他格式的音频文件。为了实现这个功能，我们需要创建一个实现了 MediaPlayer 接口的适配器类 MediaAdapter，并使用 AdvancedMediaPlayer 对象来播放所需的格式。
+
+AudioPlayer 使用适配器类 MediaAdapter 传递所需的音频类型，不需要知道能播放所需格式音频的实际类。AdapterPatternDemo 类使用 AudioPlayer 类来播放各种格式。
+
+适配器模式的 UML 图
+![Alt text](image-17.png)
+### java实现
+**步骤 1**
+为媒体播放器和更高级的媒体播放器创建接口。
+
+MediaPlayer.java
+```java
+public interface MediaPlayer {
+   public void play(String audioType, String fileName);
+}
+AdvancedMediaPlayer.java
+public interface AdvancedMediaPlayer { 
+   public void playVlc(String fileName);
+   public void playMp4(String fileName);
+}
+```
+
+**步骤 2**
+创建实现了 AdvancedMediaPlayer 接口的实体类。
+
+VlcPlayer.java
+```java
+public class VlcPlayer implements AdvancedMediaPlayer{
+   @Override
+   public void playVlc(String fileName) {
+      System.out.println("Playing vlc file. Name: "+ fileName);      
+   }
+ 
+   @Override
+   public void playMp4(String fileName) {
+      //什么也不做
+   }
+}
+```
+
+Mp4Player.java
+```java
+public class Mp4Player implements AdvancedMediaPlayer{
+ 
+   @Override
+   public void playVlc(String fileName) {
+      //什么也不做
+   }
+ 
+   @Override
+   public void playMp4(String fileName) {
+      System.out.println("Playing mp4 file. Name: "+ fileName);      
+   }
+}
+```
+
+**步骤 3**
+创建实现了 MediaPlayer 接口的适配器类。
+
+MediaAdapter.java
+```java
+public class MediaAdapter implements MediaPlayer {
+ 
+   AdvancedMediaPlayer advancedMusicPlayer;
+ 
+   public MediaAdapter(String audioType){
+      if(audioType.equalsIgnoreCase("vlc") ){
+         advancedMusicPlayer = new VlcPlayer();       
+      } else if (audioType.equalsIgnoreCase("mp4")){
+         advancedMusicPlayer = new Mp4Player();
+      }  
+   }
+ 
+   @Override
+   public void play(String audioType, String fileName) {
+      if(audioType.equalsIgnoreCase("vlc")){
+         advancedMusicPlayer.playVlc(fileName);
+      }else if(audioType.equalsIgnoreCase("mp4")){
+         advancedMusicPlayer.playMp4(fileName);
+      }
+   }
+}
+```
+
+**步骤 4**
+创建实现了 MediaPlayer 接口的实体类。
+
+AudioPlayer.java
+```java
+public class AudioPlayer implements MediaPlayer {
+   MediaAdapter mediaAdapter; 
+ 
+   @Override
+   public void play(String audioType, String fileName) {    
+ 
+      //播放 mp3 音乐文件的内置支持
+      if(audioType.equalsIgnoreCase("mp3")){
+         System.out.println("Playing mp3 file. Name: "+ fileName);         
+      } 
+      //mediaAdapter 提供了播放其他文件格式的支持
+      else if(audioType.equalsIgnoreCase("vlc") 
+         || audioType.equalsIgnoreCase("mp4")){
+         mediaAdapter = new MediaAdapter(audioType);
+         mediaAdapter.play(audioType, fileName);
+      }
+      else{
+         System.out.println("Invalid media. "+
+            audioType + " format not supported");
+      }
+   }   
+}
+```
+
+**步骤 5**
+使用 AudioPlayer 来播放不同类型的音频格式。
+
+AdapterPatternDemo.java
+```java
+public class AdapterPatternDemo {
+   public static void main(String[] args) {
+      AudioPlayer audioPlayer = new AudioPlayer();
+ 
+      audioPlayer.play("mp3", "beyond the horizon.mp3");
+      audioPlayer.play("mp4", "alone.mp4");
+      audioPlayer.play("vlc", "far far away.vlc");
+      audioPlayer.play("avi", "mind me.avi");
+   }
+}
+```
+
+**步骤 6**
+执行程序，输出结果：
+```shell
+Playing mp3 file. Name: beyond the horizon.mp3
+Playing mp4 file. Name: alone.mp4
+Playing vlc file. Name: far far away.vlc
+Invalid media. avi format not supported
+```
+
+### rust 实现
+```rust
+
+use std::error::Error;
+// 播放器接口
+trait  MediaPlayer{
+    fn paly(&mut self,audio_type:String, file_name:String);
+}
+// 适配器接口
+trait AdvancedMediaPlayer {
+    fn play_vlc(&self ,file_name:String);
+    fn play_mp4(&self,file_name:String );
+}
+// vlc播器放实体类
+struct  VlcPlayer {}
+impl AdvancedMediaPlayer for VlcPlayer {
+    fn play_vlc(&self ,file_name:String) {
+        println!("Playing vlc file. Name: {}",file_name)
+    }
+
+    fn play_mp4(&self,file_name:String ) {
+        todo!()
+    }
+}
+// MP4播放器实体类
+struct  Mp4Player {}
+impl AdvancedMediaPlayer for Mp4Player {
+    fn play_mp4(&self ,file_name:String) {
+        println!("Playing mp4 file. Name: {}",file_name)
+    }
+
+    fn play_vlc(&self,file_name:String ) {
+        todo!()
+    }
+}
+// 播放器适配器实体类
+struct MediaAdapter{
+    advanced_music_player:Box<dyn AdvancedMediaPlayer>
+}
+impl MediaPlayer for MediaAdapter {
+    fn paly(&mut self,audio_type:String, file_name:String) {
+        match &audio_type as &str{
+            "vlc"=> self.advanced_music_player.play_vlc(file_name),
+            "mp4"=>self.advanced_music_player.play_mp4(file_name),
+            _ =>println!("不支持此格式文件")
+        }
+    }
+}
+impl MediaAdapter {
+    fn new (audio_type:String )->Result<MediaAdapter,Box<dyn Error>>{
+        //进行字符产匹配
+        match &audio_type as &str{
+            "vlc"=> Ok(MediaAdapter{advanced_music_player:Box::new(VlcPlayer{})}),
+            "mp4"=>Ok(MediaAdapter{advanced_music_player:Box::new(Mp4Player{})}),
+            _ =>Err(panic!("输入运行格式错误"))
+        }
+    }
+}
+struct AudioPlayer{
+    media_adapter:MediaAdapter 
+}
+impl AudioPlayer {
+    fn new()->AudioPlayer{
+        AudioPlayer{media_adapter:MediaAdapter { advanced_music_player:Box::new(Mp4Player{})}}
+    }
+}
+impl  MediaPlayer for AudioPlayer {
+    fn paly(&mut self,audio_type:String, file_name:String) {
+        match &audio_type as &str{
+            "vlc"|"mp4"=>{
+                self.media_adapter=MediaAdapter::new(audio_type.clone()).unwrap();
+                self.media_adapter.paly(audio_type, file_name);
+            },
+            _ =>println!("不支持此格式文件")
+        }
+    }
+}
+    
+fn main() {
+    let mut audioPlayer =AudioPlayer::new();
+    // 进行不同文件的播放测试
+    audioPlayer.paly(String::from("mp3"), String::from("beyond the horizon.mp3"));
+    audioPlayer.paly(String::from("mp4"), String::from("alone.mp4"));
+    audioPlayer.paly(String::from("mp4"), String::from("far far away.vlc"));
+}
+```
 # 模板方法
 **模板方法**定义一个操作中的算法的骨架，而将这一些步骤延迟到子类中。模板方式使得子类可以不改变一个算法的结构可重新定义该算法的某些特定步骤。
 # 迪米特法则
