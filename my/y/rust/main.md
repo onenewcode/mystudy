@@ -2193,6 +2193,67 @@ tests 目录
 
 ## 函数式编程
 ### 闭包
+闭包是一种匿名函数，它可以赋值给变量也可以作为参数传递给其它函数，不同于函数的是，它允许捕获调用者作用域中的值，例如：
+```rs
+fn main() {
+   let x = 1;
+   let sum = |y| x + y;
+
+    assert_eq!(3, sum(2));
+}
+```
+
+上面的代码展示了非常简单的闭包 sum，它拥有一个入参 y，同时捕获了作用域中的 x 的值，因此调用 sum(2) 意味着将 2（参数 y）跟 1（x）进行相加,最终返回它们的和：3。
+
+可以看到 sum 非常符合闭包的定义：可以赋值给变量，允许捕获调用者作用域中的值。
+#### 使用闭包来简化代码
+##### 传统函数实现
+想象一下，我们要进行健身，用代码怎么实现,这里是我的想法：
+```rs
+use std::thread;
+use std::time::Duration;
+
+// 开始健身，好累，我得发出声音：muuuu...
+fn muuuuu(intensity: u32) -> u32 {
+    println!("muuuu.....");
+    thread::sleep(Duration::from_secs(2));
+    intensity
+}
+
+fn workout(intensity: u32, random_number: u32) {
+    if intensity < 25 {
+        println!(
+            "今天活力满满，先做 {} 个俯卧撑!",
+            muuuuu(intensity)
+        );
+        println!(
+            "旁边有妹子在看，俯卧撑太low，再来 {} 组卧推!",
+            muuuuu(intensity)
+        );
+    } else if random_number == 3 {
+        println!("昨天练过度了，今天还是休息下吧！");
+    } else {
+        println!(
+            "昨天练过度了，今天干干有氧，跑步 {} 分钟!",
+            muuuuu(intensity)
+        );
+    }
+}
+
+fn main() {
+    // 强度
+    let intensity = 10;
+    // 随机值用来决定某个选择
+    let random_number = 7;
+
+    // 开始健身
+    workout(intensity, random_number);
+}
+```
+
+可以看到，在健身时我们根据想要的强度来调整具体的动作，然后调用 muuuuu 函数来开始健身。这个程序本身很简单，没啥好说的，但是假如未来不用 muuuuu 函数了，是不是得把所有 muuuuu 都替换成，比如说 woooo ？如果 muuuuu 出现了几十次，那意味着我们要修改几十处地方。
+#### 闭包实现
+
 ```rs
 use std::thread;
 use std::time::Duration;
@@ -2233,15 +2294,53 @@ FnOnce，该类型的闭包会拿走被捕获变量的所有权。Once 顾名思
     workout(intensity, random_number);
 }
 ```
+在上面代码中，无论你要修改什么，只要修改闭包 action 的实现即可，其它地方只负责调用，完美解决了我们的问题！
+
+Rust 闭包在形式上借鉴了 Smalltalk 和 Ruby 语言，与函数最大的不同就是它的参数是通过 |parm1| 的形式进行声明，如果是多个参数就 |param1, param2,...|， 下面给出闭包的形式定义：
+```rs
+|param1, param2,...| {
+    语句1;
+    语句2;
+    返回表达式
+}
+```
+
 #### 闭包的类型推导
+与函数相反，闭包并不会作为 API 对外提供，因此它可以享受编译器的类型推导能力，无需标注参数和返回值的类型。
+下面展示了同一个功能的函数和闭包实现形式：
 ```rs
 fn  add_one_v1   (x: u32) -> u32 { x + 1 }
 let add_one_v2 = |x: u32| -> u32 { x + 1 };
 let add_one_v3 = |x|             { x + 1 };
 let add_one_v4 = |x|               x + 1  ;
 ```
+虽然类型推导很好用，但是它不是泛型，当编译器推导出一种类型后，它就会一直使用该类型：
+```rs
+let example_closure = |x| x;
+
+let s = example_closure(String::from("hello"));
+let n = example_closure(5);
+```
+
+首先，在 s 中，编译器为 x 推导出类型 String，但是紧接着 n 试图用 5 这个整型去调用闭包，跟编译器之前推导的 String 类型不符，因此报错：
+```shell
+error[E0308]: mismatched types
+ --> src/main.rs:5:29
+  |
+5 |     let n = example_closure(5);
+  |                             ^
+  |                             |
+  |                             expected struct `String`, found integer // 期待String类型，却发现一个整数
+  |                             help: try using a conversion method: `5.to_string()`
+
+```
+
 
 #### 结构体中的闭包
+假设我们要实现一个简易缓存，功能是获取一个值，然后将其缓存起来，那么可以这样设计：
+- 一个闭包用于获取值
+- 一个变量，用于存储该值
+可以使用结构体来代表缓存对象，最终设计如下：
 ```rs
 struct Cacher<T>
 where
@@ -2251,8 +2350,81 @@ where
     value: Option<u32>,
 }
 ```
-标准库提供的 Fn 系列特征，再结合特征约束，就能很好的解决了这个问题. T: Fn(u32) -> u32 意味着 query 的类型是 T，该类型必须实现了相应的闭包特征 Fn(u32) -> u32。从
+特征 Fn(u32) -> u32 从表面来看，就对闭包形式进行了显而易见的限制：该闭包拥有一个u32类型的参数，同时返回一个u32类型的值。
 
+接着，为缓存实现方法：
+```rs
+impl<T> Cacher<T>
+where
+    T: Fn(u32) -> u32,
+{
+    fn new(query: T) -> Cacher<T> {
+        Cacher {
+            query,
+            value: None,
+        }
+    }
+
+    // 先查询缓存值 `self.value`，若不存在，则调用 `query` 加载
+    fn value(&mut self, arg: u32) -> u32 {
+        match self.value {
+            Some(v) => v,
+            None => {
+                let v = (self.query)(arg);
+                self.value = Some(v);
+                v
+            }
+        }
+    }
+}
+
+```
+
+上面的缓存有一个很大的问题：只支持 u32 类型的值，若我们想要缓存 &str 类型，显然就行不通了，因此需要将 u32 替换成泛型 E，该练习就留给读者自己完成，具体代码可以参考这里
+
+#### 捕获作用域中的值
+
+在之前代码中，我们一直在用闭包的匿名函数特性（赋值给变量），然而闭包还拥有一项函数所不具备的特性：捕获作用域中的值。
+
+```rs
+fn main() {
+    let x = 4;
+
+    let equal_to_x = |z| z == x;
+
+    let y = 4;
+
+    assert!(equal_to_x(y));
+}
+```
+
+上面代码中，x 并不是闭包 equal_to_x 的参数，但是它依然可以去使用 x，因为 equal_to_x 在 x 的作用域范围内。
+
+对于函数来说，就算你把函数定义在 main 函数体中，它也不能访问 x：
+```rs
+fn main() {
+    let x = 4;
+
+    fn equal_to_x(z: i32) -> bool {
+        z == x
+    }
+
+    let y = 4;
+
+    assert!(equal_to_x(y));
+}
+```
+
+报错如下：
+```shell
+error[E0434]: can't capture dynamic environment in a fn item // 在函数中无法捕获动态的环境
+ --> src/main.rs:5:14
+  |
+5 |         z == x
+  |              ^
+  |
+  = help: use the `|| { ... }` closure form instead // 使用
+```
 
 #### 三种 Fn 特征
 1. **FnOnce**，该类型的闭包会拿走被捕获变量的所有权。Once 顾名思义，说明该闭包只能运行一次：
@@ -2297,6 +2469,88 @@ fn exec<'a, F: Fn(&'a str)>(mut f: F)  {
     f("hello")
 }
 ```
+#### 闭包作为函数返回值
+但是如果要使用闭包作为函数返回值，该如何做？
+
+先来看一段代码：
+```rs
+fn factory() -> Fn(i32) -> i32 {
+    let num = 5;
+
+    |x| x + num
+}
+
+let f = factory();
+
+let answer = f(1);
+assert_eq!(6, answer);
+```
+
+上面这段代码看起来还是蛮正常的，用 Fn(i32) -> i32 特征来代表 |x| x + num，非常合理嘛，肯定可以编译通过, 可惜理想总是难以照进现实，编译器给我们报了一大堆错误，先挑几个重点来看看：
+```shell
+fn factory<T>() -> Fn(i32) -> i32 {
+  |                    ^^^^^^^^^^^^^^ doesn't have a size known at compile-time // 该类型在编译器没有固定的大小
+```
+
+Rust 要求函数的参数和返回类型，必须有固定的内存大小，例如 i32 就是 4 个字节，引用类型是 8 个字节，总之，绝大部分类型都有固定的大小，但是不包括特征，因为特征类似接口，对于编译器来说，无法知道它后面藏的真实类型是什么，因为也无法得知具体的大小。
+
+同样，我们也无法知道闭包的具体类型，该怎么办呢？再看看报错提示：
+```shell
+help: use `impl Fn(i32) -> i32` as the return type, as all return paths are of type `[closure@src/main.rs:11:5: 11:21]`, which implements `Fn(i32) -> i32`
+  |
+8 | fn factory<T>() -> impl Fn(i32) -> i32 {
+```
+
+嗯，编译器提示我们加一个 impl 关键字，哦，这样一说，读者可能就想起来了，impl Trait 可以用来返回一个实现了指定特征的类型，那么这里 impl Fn(i32) -> i32 的返回值形式，说明我们要返回一个闭包类型，它实现了 Fn(i32) -> i32 特征。
+
+完美解决，但是，在特征那一章，我们提到过，impl Trait 的返回方式有一个非常大的局限，就是你只能返回同样的类型，例如：
+```rs
+fn factory(x:i32) -> impl Fn(i32) -> i32 {
+
+    let num = 5;
+
+    if x > 1{
+        move |x| x + num
+    } else {
+        move |x| x - num
+    }
+}
+```
+
+运行后，编译器报错：
+```shell
+error[E0308]: `if` and `else` have incompatible types
+  --> src/main.rs:15:9
+   |
+12 | /     if x > 1{
+13 | |         move |x| x + num
+   | |         ---------------- expected because of this
+14 | |     } else {
+15 | |         move |x| x - num
+   | |         ^^^^^^^^^^^^^^^^ expected closure, found a different closure
+16 | |     }
+   | |_____- `if` and `else` have incompatible types
+   |
+```
+
+嗯，提示很清晰：if 和 else 分支中返回了不同的闭包类型，这就很奇怪了，明明这两个闭包长的一样的，好在细心的读者应该回想起来，本章节前面咱们有提到：就算签名一样的闭包，类型也是不同的，因此在这种情况下，就无法再使用 impl Trait 的方式去返回闭包。
+
+只需要用 Box 的方式即可实现：
+```rs
+fn factory(x:i32) -> Box<dyn Fn(i32) -> i32> {
+    let num = 5;
+
+    if x > 1{
+        Box::new(move |x| x + num)
+    } else {
+        Box::new(move |x| x - num)
+    }
+}
+
+```
+
+至此，闭包作为函数返回值就已完美解决，若以后你再遇到报错时，一定要仔细阅读编译器的提示，很多时候，转角都能遇到爱。
+
 ### 迭代器 Iterator
 迭代器允许我们迭代一个连续的集合，例如数组、动态数组 Vec、HashMap 等，在此过程中，只需关心集合中的元素如何处理，而无需关心如何开始、如何结束、按照什么样的索引去访问等问题。
 
