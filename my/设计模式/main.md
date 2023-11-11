@@ -1765,6 +1765,526 @@ fn main() {
     audioPlayer.paly(String::from("mp4"), String::from("far far away.vlc"));
 }
 ```
+## 桥接模式
+桥接（Bridge）是用于把抽象化与实现化解耦，使得二者可以独立变化。这种类型的设计模式属于结构型模式，它通过提供抽象化和实现化之间的桥接结构，来实现二者的解耦。
+
+这种模式涉及到一个作为桥接的接口，使得实体类的功能独立于接口实现类，这两种类型的类可被结构化改变而互不影响。
+
+桥接模式的目的是将抽象与实现分离，使它们可以独立地变化，该模式通过将一个对象的抽象部分与它的实现部分分离，使它们可以独立地改变。它通过组合的方式，而不是继承的方式，将抽象和实现的部分连接起来。
+
+### 介绍
+- **意图**：将抽象部分与实现部分分离，使它们都可以独立的变化。
+- **主要解决**：在有多种可能会变化的情况下，用继承会造成类爆炸问题，扩展起来不灵活。
+- **何时使用**：实现系统可能有多个角度分类，每一种角度都可能变化。
+- **如何解决**：把这种多角度分类分离出来，让它们独立变化，减少它们之间耦合。
+
+
+#### 应用实例
+1、猪八戒从天蓬元帅转世投胎到猪，转世投胎的机制将尘世划分为两个等级，即：灵魂和肉体，前者相当于抽象化，后者相当于实现化。生灵通过功能的委派，调用肉体对象的功能，使得生灵可以动态地选择。
+2、墙上的开关，可以看到的开关是抽象的，不用管里面具体怎么实现的。
+
+#### 优点
+1、抽象和实现的分离。 
+2、优秀的扩展能力。 
+3、实现细节对客户透明。
+
+#### 缺点
+桥接模式的引入会增加系统的理解与设计难度，由于聚合关联关系建立在抽象层，要求开发者针对抽象进行设计与编程。
+
+#### 使用场景
+1、如果一个系统需要在构件的抽象化角色和具体化角色之间增加更多的灵活性，避免在两个层次之间建立静态的继承联系，通过桥接模式可以使它们在抽象层建立一个关联关系。 
+2、对于那些不希望使用继承或因为多层次继承导致系统类的个数急剧增加的系统，桥接模式尤为适用。 
+3、一个类存在两个独立变化的维度，且这两个维度都需要进行扩展。
+
+
+
+#### 关键角色
+- **抽象（Abstraction）**：定义抽象接口，通常包含对实现接口的引用。
+-  **扩展抽象（Refined Abstraction）**：对抽象的扩展，可以是抽象类的子类或具体实现类。
+- **实现（Implementor）**：定义实现接口，提供基本操作的接口。
+- **具体实现（Concrete Implementor）**：实现实现接口的具体类。
+### 实现
+我们有一个作为桥接实现的 DrawAPI 接口和实现了 DrawAPI 接口的实体类 RedCircle、GreenCircle。Shape 是一个抽象类，将使用 DrawAPI 的对象。BridgePatternDemo 类使用 Shape 类来画出不同颜色的圆。
+桥接模式的 UML 图
+![Alt text](image-18.png)
+###  java
+**步骤 1**
+创建桥接实现接口。
+
+DrawAPI.java
+```java
+public interface DrawAPI {
+   public void drawCircle(int radius, int x, int y);
+}
+```
+
+**步骤 2**
+创建实现了 DrawAPI 接口的实体桥接实现类。
+
+RedCircle.java
+```java
+public class RedCircle implements DrawAPI {
+   @Override
+   public void drawCircle(int radius, int x, int y) {
+      System.out.println("Drawing Circle[ color: red, radius: "
+         + radius +", x: " +x+", "+ y +"]");
+   }
+}
+```
+
+GreenCircle.java
+```java
+public class GreenCircle implements DrawAPI {
+   @Override
+   public void drawCircle(int radius, int x, int y) {
+      System.out.println("Drawing Circle[ color: green, radius: "
+         + radius +", x: " +x+", "+ y +"]");
+   }
+}
+```
+
+**步骤 3**
+使用 DrawAPI 接口创建抽象类 Shape。
+
+Shape.java
+```java
+public abstract class Shape {
+   protected DrawAPI drawAPI;
+   protected Shape(DrawAPI drawAPI){
+      this.drawAPI = drawAPI;
+   }
+   public abstract void draw();  
+}
+```
+
+**步骤 4**
+创建实现了 Shape 抽象类的实体类。
+
+Circle.java
+```java
+public class Circle extends Shape {
+   private int x, y, radius;
+ 
+   public Circle(int x, int y, int radius, DrawAPI drawAPI) {
+      super(drawAPI);
+      this.x = x;  
+      this.y = y;  
+      this.radius = radius;
+   }
+ 
+   public void draw() {
+      drawAPI.drawCircle(radius,x,y);
+   }
+}
+```
+
+**步骤 5**
+使用 Shape 和 DrawAPI 类画出不同颜色的圆。
+
+BridgePatternDemo.java
+```java
+public class BridgePatternDemo {
+   public static void main(String[] args) {
+      Shape redCircle = new Circle(100,100, 10, new RedCircle());
+      Shape greenCircle = new Circle(100,100, 10, new GreenCircle());
+ 
+      redCircle.draw();
+      greenCircle.draw();
+   }
+}
+```
+
+**步骤 6**
+执行程序，输出结果：
+```shell
+Drawing Circle[ color: red, radius: 10, x: 100, 100]
+Drawing Circle[  color: green, radius: 10, x: 100, 100]
+```
+### rsut
+```rs
+// 画图的接口
+trait DrawAPI {
+    fn draw_circle(&self,radius:i32,x:i32, y:i32);      
+}
+// 画h
+struct RedCircle {}
+impl DrawAPI for RedCircle {
+    fn draw_circle(&self,radius:i32,x:i32, y:i32) {
+        println!("Drawing Circle[ color: red, radius: {}, x: {}, {}]",radius,x,y);
+    }
+}
+struct GreenCircle {}
+impl DrawAPI for GreenCircle  {
+    fn draw_circle(&self,radius:i32,x:i32, y:i32) {
+        println!("Drawing Circle[ color: green, radius: {}, x: {}, {}]",radius,x,y);
+    }
+}
+trait Shape{
+    fn draw(&self);
+}
+struct Circle{
+    // // pub(crate) 使得函数只在当前 crate 中可见
+    // 抽象方法的实现
+    draw_api:Box<dyn DrawAPI>,
+    x:i32,
+    y:i32,
+    radius:i32
+}
+impl Circle {
+    fn new(draw_api:Box<dyn DrawAPI>,x:i32, y:i32, radius:i32)->Circle {
+        Circle{
+            draw_api,
+            x,
+            y,
+            radius
+        }
+    }
+}
+impl Shape for Circle  {
+    fn draw(&self) {
+        self.draw_api.draw_circle(self.radius, self.x, self.y)
+    }
+}
+fn main(){
+    let r=Circle::new(Box::new(RedCircle{}),100,100, 10);
+    let g=Circle::new(Box::new(GreenCircle{}),100,100, 10);
+    r.draw();
+    g.draw();
+
+}
+```
+## 过滤器模式
+过滤器模式（Filter Pattern）或标准模式（Criteria Pattern）是一种设计模式，这种模式允许开发人员使用不同的标准来过滤一组对象，通过逻辑运算以解耦的方式把它们连接起来。这种类型的设计模式属于结构型模式，它结合多个标准来获得单一标准。
+
+### 实现
+我们将创建一个 Person 对象、Criteria 接口和实现了该接口的实体类，来过滤 Person 对象的列表。CriteriaPatternDemo 类使用 Criteria 对象，基于各种标准和它们的结合来过滤 Person 对象的列表。
+我们制作一个Person实体类，Criteria为标准条件，CriteriaMale等为实现的具体判断器，是需要为person类使用meetCriteria方法便可以进行不同条件的判断。
+过滤器模式的 UML 图
+![Alt text](image-19.png)
+### java
+**步骤 1**
+创建一个类，在该类上应用标准。
+
+Person.java
+```java
+public class Person {
+   
+   private String name;
+   private String gender;
+   private String maritalStatus;
+ 
+   public Person(String name,String gender,String maritalStatus){
+      this.name = name;
+      this.gender = gender;
+      this.maritalStatus = maritalStatus;    
+   }
+ 
+   public String getName() {
+      return name;
+   }
+   public String getGender() {
+      return gender;
+   }
+   public String getMaritalStatus() {
+      return maritalStatus;
+   }  
+}
+```
+**步骤 2**
+为标准（Criteria）创建一个接口。
+
+Criteria.java
+```java
+import java.util.List;
+ 
+public interface Criteria {
+   public List<Person> meetCriteria(List<Person> persons);
+}
+```
+**步骤 3**
+创建实现了 Criteria 接口的实体类。
+
+CriteriaMale.java
+```java
+import java.util.ArrayList;
+import java.util.List;
+ 
+public class CriteriaMale implements Criteria {
+ 
+   @Override
+   public List<Person> meetCriteria(List<Person> persons) {
+      List<Person> malePersons = new ArrayList<Person>(); 
+      for (Person person : persons) {
+         if(person.getGender().equalsIgnoreCase("MALE")){
+            malePersons.add(person);
+         }
+      }
+      return malePersons;
+   }
+}
+```
+CriteriaFemale.java
+```java
+import java.util.ArrayList;
+import java.util.List;
+ 
+public class CriteriaFemale implements Criteria {
+ 
+   @Override
+   public List<Person> meetCriteria(List<Person> persons) {
+      List<Person> femalePersons = new ArrayList<Person>(); 
+      for (Person person : persons) {
+         if(person.getGender().equalsIgnoreCase("FEMALE")){
+            femalePersons.add(person);
+         }
+      }
+      return femalePersons;
+   }
+}
+```
+
+CriteriaSingle.java
+```java
+import java.util.ArrayList;
+import java.util.List;
+ 
+public class CriteriaSingle implements Criteria {
+ 
+   @Override
+   public List<Person> meetCriteria(List<Person> persons) {
+      List<Person> singlePersons = new ArrayList<Person>(); 
+      for (Person person : persons) {
+         if(person.getMaritalStatus().equalsIgnoreCase("SINGLE")){
+            singlePersons.add(person);
+         }
+      }
+      return singlePersons;
+   }
+}
+```
+AndCriteria.java
+```java
+import java.util.List;
+ 
+public class AndCriteria implements Criteria {
+ 
+   private Criteria criteria;
+   private Criteria otherCriteria;
+ 
+   public AndCriteria(Criteria criteria, Criteria otherCriteria) {
+      this.criteria = criteria;
+      this.otherCriteria = otherCriteria; 
+   }
+ 
+   @Override
+   public List<Person> meetCriteria(List<Person> persons) {
+      List<Person> firstCriteriaPersons = criteria.meetCriteria(persons);     
+      return otherCriteria.meetCriteria(firstCriteriaPersons);
+   }
+}
+```
+OrCriteria.java
+```java
+import java.util.List;
+ 
+public class OrCriteria implements Criteria {
+ 
+   private Criteria criteria;
+   private Criteria otherCriteria;
+ 
+   public OrCriteria(Criteria criteria, Criteria otherCriteria) {
+      this.criteria = criteria;
+      this.otherCriteria = otherCriteria; 
+   }
+ 
+   @Override
+   public List<Person> meetCriteria(List<Person> persons) {
+      List<Person> firstCriteriaItems = criteria.meetCriteria(persons);
+      List<Person> otherCriteriaItems = otherCriteria.meetCriteria(persons);
+ 
+      for (Person person : otherCriteriaItems) {
+         if(!firstCriteriaItems.contains(person)){
+           firstCriteriaItems.add(person);
+         }
+      }  
+      return firstCriteriaItems;
+   }
+}
+```
+**步骤4**
+使用不同的标准（Criteria）和它们的结合来过滤 Person 对象的列表。
+CriteriaPatternDemo.java
+```java
+import java.util.ArrayList; 
+import java.util.List;
+ 
+public class CriteriaPatternDemo {
+   public static void main(String[] args) {
+      List<Person> persons = new ArrayList<Person>();
+ 
+      persons.add(new Person("Robert","Male", "Single"));
+      persons.add(new Person("John","Male", "Married"));
+      persons.add(new Person("Laura","Female", "Married"));
+      persons.add(new Person("Diana","Female", "Single"));
+      persons.add(new Person("Mike","Male", "Single"));
+      persons.add(new Person("Bobby","Male", "Single"));
+ 
+      Criteria male = new CriteriaMale();
+      Criteria female = new CriteriaFemale();
+      Criteria single = new CriteriaSingle();
+      Criteria singleMale = new AndCriteria(single, male);
+      Criteria singleOrFemale = new OrCriteria(single, female);
+ 
+      System.out.println("Males: ");
+      printPersons(male.meetCriteria(persons));
+ 
+      System.out.println("\nFemales: ");
+      printPersons(female.meetCriteria(persons));
+ 
+      System.out.println("\nSingle Males: ");
+      printPersons(singleMale.meetCriteria(persons));
+ 
+      System.out.println("\nSingle Or Females: ");
+      printPersons(singleOrFemale.meetCriteria(persons));
+   }
+ 
+   public static void printPersons(List<Person> persons){
+      for (Person person : persons) {
+         System.out.println("Person : [ Name : " + person.getName() 
+            +", Gender : " + person.getGender() 
+            +", Marital Status : " + person.getMaritalStatus()
+            +" ]");
+      }
+   }      
+}
+```
+
+**步骤 5**
+执行程序，输出结果：
+```shell
+Males: 
+Person : [ Name : Robert, Gender : Male, Marital Status : Single ]
+Person : [ Name : John, Gender : Male, Marital Status : Married ]
+Person : [ Name : Mike, Gender : Male, Marital Status : Single ]
+Person : [ Name : Bobby, Gender : Male, Marital Status : Single ]
+
+Females: 
+Person : [ Name : Laura, Gender : Female, Marital Status : Married ]
+Person : [ Name : Diana, Gender : Female, Marital Status : Single ]
+
+Single Males: 
+Person : [ Name : Robert, Gender : Male, Marital Status : Single ]
+Person : [ Name : Mike, Gender : Male, Marital Status : Single ]
+Person : [ Name : Bobby, Gender : Male, Marital Status : Single ]
+
+Single Or Females: 
+Person : [ Name : Robert, Gender : Male, Marital Status : Single ]
+Person : [ Name : Diana, Gender : Female, Marital Status : Single ]
+Person : [ Name : Mike, Gender : Male, Marital Status : Single ]
+Person : [ Name : Bobby, Gender : Male, Marital Status : Single ]
+Person : [ Name : Laura, Gender : Female, Marital Status : Married ]
+```
+
+### rust
+由于时间关系，并没有实现or条件，大家有兴趣可以自行补充
+```rust
+// 设置人类实体类
+#[derive(Clone)]
+struct Person{
+    name:String,
+    gender:String,
+    marital_status:String
+}
+impl Person {
+ 
+    fn get_gender(&self)->&str {
+        self.gender.as_ref()
+    }
+    fn get_marital_status(&self)->&str {
+        self.marital_status.as_ref()
+    }
+}
+// 设置过滤标准特征
+trait Criteria {
+  fn meet_criteria(&self,persons:Vec<Person>)->Vec<Person>; 
+}
+// 设置男性
+struct CriteriaMale{}
+// 重写男性评判标准
+impl   Criteria for CriteriaMale {
+    fn meet_criteria(&self,persons:Vec<Person>)->Vec<Person>{
+        persons.into_iter().filter(|x| x.get_gender().eq_ignore_ascii_case("MALE")).collect()
+    }
+}
+// 设置女性
+struct CriteriaFemale{}
+// 设置女性标准
+impl   Criteria for CriteriaFemale{
+    fn meet_criteria(&self,persons:Vec<Person>)->Vec<Person>{
+        persons.into_iter().filter(|x| x.get_gender().eq_ignore_ascii_case("FEMALE")).collect()
+    }
+}
+// 设置单身标准
+struct CriteriaSingle{}
+
+impl   Criteria for CriteriaSingle{
+    fn meet_criteria(&self,persons:Vec<Person>)->Vec<Person>{
+        persons.into_iter().filter(|x| x.get_marital_status().eq_ignore_ascii_case("SINGLE")).collect()
+    }
+}
+// 设置and标准，求交集
+struct AndCriteria  {
+    criteria:Box<dyn Criteria>,
+    other_criteria:Box<dyn Criteria>
+}
+
+impl Criteria for AndCriteria {
+    fn meet_criteria(&self,persons:Vec<Person>)->Vec<Person> {
+        self.other_criteria.meet_criteria(self.criteria.meet_criteria(persons))
+    }
+}
+// struct OrCriteria {
+//     criteria:Box<dyn Criteria>,
+//     other_criteria:Box<dyn Criteria>
+// }
+
+// impl Criteria for OrCriteria{
+//     fn meet_criteria(&self,persons:Vec<Person>)->Vec<Person> {
+//         let mut first_criteria_items = self.criteria.meet_criteria(persons);
+//         let other_criteria_items = self.other_criteria.meet_criteria(persons);
+//         for o in other_criteria_items  {
+//             if !other_criteria_items.contains(&o) {
+//                 first_criteria_items.push(o);
+//             }
+//         }
+//         first_criteria_items
+
+//     }
+// }
+fn print_persons(persons:Vec<Person>) {
+    persons.into_iter().for_each(|x| println!("Person : [NAME: {},Gender : {} ,Maeital Status : {} ]",x.name,x.gender,x.marital_status));
+}
+fn main() {
+    let mut persons=Vec::new();
+    persons.push(Person{name:String::from("Robert"),gender:String::from("Male"),marital_status:String::from("Single")});
+    persons.push(Person{name:String::from("John"),gender:String::from("Male"),marital_status:String::from("Married")});
+    persons.push(Person{name:String::from("Laura"),gender:String::from("Female"),marital_status:String::from("Married")});
+    persons.push(Person{name:String::from("Diana"),gender:String::from("Female"),marital_status:String::from("Single")});
+
+    let male=Box::new(CriteriaMale{});
+    let female=Box::new(CriteriaFemale{});
+    let single_male=AndCriteria{criteria:Box::new(CriteriaSingle{}),other_criteria:Box::new(CriteriaMale{})};
+    // let single_or_female=OrCriteria{criteria:Box::new(CriteriaMale{}),other_criteria:Box::new(CriteriaFemale{})};
+    println!("男士");
+    print_persons(male.meet_criteria(persons.clone()));
+    println!("女士");
+    print_persons(female.meet_criteria(persons.clone()));
+    println!("单身男士");
+    print_persons(single_male.meet_criteria(persons))
+
+
+}
+```
 # 模板方法
 **模板方法**定义一个操作中的算法的骨架，而将这一些步骤延迟到子类中。模板方式使得子类可以不改变一个算法的结构可重新定义该算法的某些特定步骤。
 # 迪米特法则
