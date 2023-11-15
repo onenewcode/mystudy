@@ -2644,4 +2644,204 @@ update.inc("likenum",1);
  }
 ```
 
-# mp
+
+#  Spring Task
+
+##  介绍
+
+**Spring Task** 是Spring框架提供的任务调度工具，可以按照约定的时间自动执行某个代码逻辑。
+
+**定位**定时任务框架
+
+**作用**定时自动执行某段Java代码
+
+
+
+为什么要在Java程序中使用Spring Task？
+
+**应用场景：**
+
+1). 信用卡每月还款提醒
+
+![Alt text](image-39.png)
+
+
+
+2). 银行贷款每月还款提醒
+
+![Alt text](image-41.png)
+
+
+
+3). 火车票售票系统处理未支付订单
+
+![Alt text](image-42.png)
+
+
+
+
+
+
+**强调：**只要是需要定时处理的场景都可以使用Spring Task
+
+
+
+## cron表达式
+
+**cron表达式**其实就是一个字符串，通过cron表达式可以**定义任务触发的时间**
+
+**构成规则：**分为6或7个域，由空格分隔开，每个域代表一个含义
+
+每个域的含义分别为：秒、分钟、小时、日、月、周、年(可选)
+
+**举例：**
+
+2022年10月12日上午9点整 对应的cron表达式为：**0 0 9 12 10 ? 2022**
+
+
+**说明：**一般**日**和**周**的值不同时设置，其中一个设置，另一个用？表示。
+
+
+
+**比如：**描述2月份的最后一天，最后一天具体是几号呢？可能是28号，也有可能是29号，所以就不能写具体数字。
+
+为了描述这些信息，提供一些特殊的字符。这些具体的细节，我们就不用自己去手写，因为这个cron表达式，它其实有在线生成器。
+
+cron表达式在线生成器：https://cron.qqe2.com/
+
+![Alt text](image-43.png)
+
+
+
+可以直接在这个网站上面，只要根据自己的要求去生成corn表达式即可。所以一般就不用自己去编写这个表达式。
+
+**通配符：**
+
+\* 表示所有值； 
+
+? 表示未说明的值，即不关心它为何值； 
+
+\- 表示一个指定的范围； 
+
+, 表示附加一个可能值； 
+
+/ 符号前表示开始时间，符号后表示每次递增的值；
+
+**cron表达式案例：**
+
+*/5 * * * * ? 每隔5秒执行一次
+
+0 */1 * * * ? 每隔1分钟执行一次
+
+0 0 5-15 * * ? 每天5-15点整点触发
+
+0 0/3 * * * ? 每三分钟触发一次
+
+0 0-5 14 * * ? 在每天下午2点到下午2:05期间的每1分钟触发 
+
+0 0/5 14 * * ? 在每天下午2点到下午2:55期间的每5分钟触发
+
+0 0/5 14,18 * * ? 在每天下午2点到2:55期间和下午6点到6:55期间的每5分钟触发
+
+0 0/30 9-17 * * ? 朝九晚五工作时间内每半小时
+
+0 0 10,14,16 * * ? 每天上午10点，下午2点，4点 
+
+
+
+## 入门案例
+
+### Spring Task使用步骤
+Spring 3.0以后核心包自带了task 调度工具，我们只需要创建spring boot 3.0，然后便可以直接使用task调度工具。
+
+1). 启动类添加注解 @EnableScheduling 开启任务调度
+
+2). 自定义定时任务类
+
+### 全注解的方式
+1. 在业务方法上提供注解 **@Component** **@Scheduled**
+
+2. 在启动类上开启注解支持 **@EnableScheduling**
+
+**@Scheduled所支持的参数**： 
+
+1. cron：cron表达式，指定任务在特定时间执行； 
+
+2. fixedDelay：表示上一次任务执行完成后多久再次执行，参数类型为long，单位ms； 
+
+3. fixedDelayString：与fixedDelay含义一样，只是参数类型变为String； 
+
+4. fixedRate：表示按一定的频率执行任务，参数类型为long，单位ms； 
+
+5. fixedRateString: 与fixedRate的含义一样，只是将参数类型变为String； 
+
+6. initialDelay：表示延迟多久再第一次执行任务，参数类型为long，单位ms； 
+
+7. initialDelayString：与initialDelay的含义一样，只是将参数类型变为String； 
+
+8. zone：时区，默认为当前时区，一般没有用到。
+
+
+### 代码开发
+整体架构
+![Alt text](image-44.png)
+**编写定时任务类：**
+
+在MyTask.java文件添加以下内容
+
+```java
+package com.onenewcode.mytask.task;
+
+import org.springframework.scheduling.annotation.Scheduled;
+import org.springframework.stereotype.Component;
+
+@Component
+public class MyTask {
+    /*
+    cron表达式 30秒进行一次
+     */
+    @Scheduled(cron = "0/30 * * * * ? ")
+    public void processCorn(){
+        System.out.println("corn 测试 30秒运行一次");
+    }
+    @Scheduled(fixedDelay = 10000)
+    public void processFixedDelay(){
+        System.out.println("fixedDelay 表示上一次任务执行完成后10000ms再次执行一次");
+    }
+    @Scheduled(fixedRate = 50000)
+    public void processFixedRate(){
+        System.out.println("corn 一定的频率执行任务，50000ms执行一次");
+    }
+//    此版本会失败
+//    @Scheduled(initialDelayString = "35000")
+//    public void processInitialDelay(){
+//        System.out.println("延迟任务，35000ms执行一次");
+//    }
+}
+
+```
+
+**开启任务调度：**
+
+启动类添加注解 @EnableScheduling
+
+```java
+package com.onenewcode.mytask;
+
+import org.springframework.boot.SpringApplication;
+import org.springframework.boot.autoconfigure.SpringBootApplication;
+import org.springframework.scheduling.annotation.EnableScheduling;
+
+@SpringBootApplication
+@EnableScheduling
+public class MyTaskApplication {
+
+    public static void main(String[] args) {
+        SpringApplication.run(MyTaskApplication.class, args);
+    }
+
+}
+
+```
+### 测试结果
+![Alt text](image-45.png)

@@ -2285,6 +2285,401 @@ fn main() {
 
 }
 ```
+## 组合模式
+组合模式（Composite Pattern），又叫部分整体模式，是用于把一组相似的对象当作一个单一的对象。组合模式依据树形结构来组合对象，用来表示部分以及整体层次。这种类型的设计模式属于结构型模式，它创建了对象组的树形结构。
+
+这种模式创建了一个包含自己对象组的类。该类提供了修改相同对象组的方式。
+
+### 介绍
+- **意图**：将对象组合成树形结构以表示"部分-整体"的层次结构。组合模式使得用户对单个对象和组合对象的使用具有一致性。
+
+- **主要解决**：它在我们树型结构的问题中，模糊了简单元素和复杂元素的概念，客户程序可以像处理简单元素一样来处理复杂元素，从而使得客户程序与复杂元素的内部结构解耦。
+
+- **何时使用**：、
+1、您想表示对象的部分-整体层次结构（树形结构）。 2、您希望用户忽略组合对象与单个对象的不同，用户将统一地使用组合结构中的所有对象。
+
+**如何解决**：树枝和叶子实现统一接口，树枝内部组合该接口。
+
+
+**应用实例**： 
+1. 算术表达式包括操作数、操作符和另一个操作数，其中，另一个操作数也可以是操作数、操作符和另一个操作数。 
+
+
+**优点**： 1、高层模块调用简单。 2、节点自由增加。
+
+**缺点**：在使用组合模式时，其叶子和树枝的声明都是实现类，而不是接口，违反了依赖倒置原则。
+
+**使用场景**：部分、整体场景，如树形菜单，文件、文件夹的管理。
+
+
+### 实现
+我们有一个类 Employee，该类被当作组合模型类。CompositePatternDemo 类使用 Employee 类来添加部门层次结构，并打印所有员工,这样我们就可以实现不同的的部门进行自由组合，实现不同部门之间的即插即用。
+
+组合模式的 UML 图
+![Alt text](image-20.png)
+
+###  java
+**步骤 1**
+创建 Employee 类，该类带有 Employee 对象的列表。
+
+Employee.java
+```java
+import java.util.ArrayList;
+import java.util.List;
+ 
+public class Employee {
+   private String name;
+   private String dept;
+   private int salary;
+   private List<Employee> subordinates;
+ 
+   //构造函数
+   public Employee(String name,String dept, int sal) {
+      this.name = name;
+      this.dept = dept;
+      this.salary = sal;
+      subordinates = new ArrayList<Employee>();
+   }
+ 
+   public void add(Employee e) {
+      subordinates.add(e);
+   }
+ 
+   public void remove(Employee e) {
+      subordinates.remove(e);
+   }
+ 
+   public List<Employee> getSubordinates(){
+     return subordinates;
+   }
+ 
+   public String toString(){
+      return ("Employee :[ Name : "+ name 
+      +", dept : "+ dept + ", salary :"
+      + salary+" ]");
+   }   
+}
+```
+
+**步骤 2**
+使用 Employee 类来创建和打印员工的层次结构。
+
+CompositePatternDemo.java
+```java
+public class CompositePatternDemo {
+   public static void main(String[] args) {
+      Employee CEO = new Employee("John","CEO", 30000);
+ 
+      Employee headSales = new Employee("Robert","Head Sales", 20000);
+ 
+      Employee headMarketing = new Employee("Michel","Head Marketing", 20000);
+ 
+      Employee clerk1 = new Employee("Laura","Marketing", 10000);
+      Employee clerk2 = new Employee("Bob","Marketing", 10000);
+ 
+      Employee salesExecutive1 = new Employee("Richard","Sales", 10000);
+      Employee salesExecutive2 = new Employee("Rob","Sales", 10000);
+ 
+      CEO.add(headSales);
+      CEO.add(headMarketing);
+ 
+      headSales.add(salesExecutive1);
+      headSales.add(salesExecutive2);
+ 
+      headMarketing.add(clerk1);
+      headMarketing.add(clerk2);
+ 
+      //打印该组织的所有员工
+      System.out.println(CEO); 
+      for (Employee headEmployee : CEO.getSubordinates()) {
+         System.out.println(headEmployee);
+         for (Employee employee : headEmployee.getSubordinates()) {
+            System.out.println(employee);
+         }
+      }        
+   }
+}
+```
+
+**步骤 3**
+执行程序，输出结果为：
+```shell
+Employee :[ Name : John, dept : CEO, salary :30000 ]
+Employee :[ Name : Robert, dept : Head Sales, salary :20000 ]
+Employee :[ Name : Richard, dept : Sales, salary :10000 ]
+Employee :[ Name : Rob, dept : Sales, salary :10000 ]
+Employee :[ Name : Michel, dept : Head Marketing, salary :20000 ]
+Employee :[ Name : Laura, dept : Marketing, salary :10000 ]
+Employee :[ Name : Bob, dept : Marketing, salary :10000 ]
+```
+### rsut
+在rust中由于所有权机制，组合模式中如果不使用引用的方法在组合顺序上便有所限制，只能从低级的开始组合，否则进行组合时便会出现所有权报错问题，由于本人代码水平有限没能实现用引用实现的组合模式，只能用转移所有权的方法实现。
+```rs
+use std::fmt;
+
+// 定义雇员
+struct  Employee{
+    name:String,
+    dept:String,
+    sal:i32,
+    subordinates:Vec<Employee>
+}
+// 自定义格式化
+impl fmt::Display for Employee {
+    fn fmt(&self, f: &mut fmt::Formatter) -> std::fmt::Result {
+        write!(f,"Employee : Name{}, dept : {} ,salary : {}", self.name,self.dept,self.sal)
+    }
+}
+impl Employee {
+    fn add(&mut self,e:Employee) {
+        self.subordinates.push(e);
+    }
+    fn remove(&mut self,e:Employee) {
+        self.subordinates.retain(|x| {
+            if x.name!=e.name||x.dept==e.dept||x.sal==e.sal{
+                return true;
+            }
+            return false;
+        });
+    }
+    fn get_subordinates(&self) {
+        self.subordinates.as_ptr();
+    }
+    fn new(name:String,dept:String, sal:i32)->Employee{
+        Employee { name, dept,sal,subordinates:Vec::new() }
+    }
+    
+}
+fn pe(e:&Employee) {
+    println!("{}",e);
+    if !e.subordinates.is_empty(){
+       e.subordinates.iter().for_each(|x| pe(x));
+    }
+    
+}
+fn main(){
+    let mut ceo=Employee::new(String::from("John"), String::from("CEO"),30000);
+    let mut head_sales=Employee::new(String::from("Robert"), String::from("Head Sales"),20000);
+    let mut head_market=Employee::new(String::from("Michel"), String::from("Head Marketing"),10000);
+    let mut clerk1=Employee::new(String::from("Laura"), String::from("Marketing"),10000);
+    head_sales.add(head_market);
+    head_sales.add(clerk1);
+    ceo.add(head_sales);
+    
+    pe(&ceo)
+
+}
+```
+## 装饰器模式
+装饰器模式（Decorator Pattern）允许向一个现有的对象添加新的功能，同时又不改变其结构。
+
+装饰器模式通过将对象包装在装饰器类中，以便动态地修改其行为。
+
+这种模式创建了一个装饰类，用来包装原有的类，并在保持类方法签名完整性的前提下，提供了额外的功能。
+
+### 介绍
+- **意图**：动态地给一个对象添加一些额外的职责。就增加功能来说，装饰器模式相比生成子类更为灵活。
+
+- **主要解决**：一般的，我们为了扩展一个类经常使用继承方式实现，由于继承为类引入静态特征，并且随着扩展功能的增多，子类会很膨胀。
+
+- **何时使用**：在不想增加很多子类的情况下扩展类。
+
+
+**应用实例**： 
+1. 孙悟空有 72 变，当他变成"庙宇"后，他的根本还是一只猴子，但是他又有了庙宇的功能。 
+2. 不论一幅画有没有画框都可以挂在墙上，但是通常都是有画框的，并且实际上是画框被挂在墙上。在挂在墙上之前，画可以被蒙上玻璃，装到框子里；这时画、玻璃和画框形成了一个物体。
+
+**优点**：装饰类和被装饰类可以独立发展，不会相互耦合，装饰模式是继承的一个替代模式，装饰模式可以动态扩展一个实现类的功能。
+
+
+
+#### 装饰器模式包含以下几个核心角色
+- **抽象组件（Component）**：定义了原始对象和装饰器对象的公共接口或抽象类，可以是具体组件类的父类或接口。
+- **具体组件（Concrete Component）**：是被装饰的原始对象，它定义了需要添加新功能的对象。
+- **抽象装饰器（Decorator）**：继承自抽象组件，它包含了一个抽象组件对象，并定义了与抽象组件相同的接口，同时可以通过组合方式持有其他装饰器对象。
+**- 具体装饰器（Concrete Decorator）**：实现了抽象装饰器的接口，负责向抽象组件添加新的功能。具体装饰器通常会在调用原始对象的方法之前或之后执行自己的操作。
+
+装饰器模式通过**嵌套包装**多个装饰器对象，可以实现多层次的功能增强。每个具体装饰器类都可以选择性地增加新的功能，同时保持对象接口的一致性。
+
+### 实现
+我们将创建一个 Shape 接口和实现了 Shape 接口的实体类。然后我们创建一个实现了 Shape 接口的抽象装饰类 ShapeDecorator，并把 Shape 对象作为它的实例变量。
+
+RedShapeDecorator 是实现了 ShapeDecorator 的实体类。
+
+DecoratorPatternDemo 类使用 RedShapeDecorator 来装饰 Shape 对象。
+
+
+装饰器模式的 UML 图
+![Alt text](image-21.png)
+
+#### 大致流程
+首先我们会实现一个抽象接口Shape，是一个泛化的，目的是为了让装饰能够在继承这个接口的方法都能够被装饰类装饰，是装饰类能够泛化。装饰接口ShapeDecorator是为了相同的目的，它可以使不同的装饰实现类和实体类之间进行自由搭配，使更换装饰，就像换衣服一样容易，使之更符合现实中的方法。
+
+### java
+**步骤 1**
+创建一个接口，抽象一个可以包装包装的接口。
+Shape.java
+```java
+public interface Shape {
+   void draw();
+}
+```
+
+**步骤 2**
+创建实现接口的实体类。
+
+Rectangle.java
+```java
+public class Rectangle implements Shape {
+ 
+   @Override
+   public void draw() {
+      System.out.println("Shape: Rectangle");
+   }
+}
+```
+
+Circle.java
+```java
+public class Circle implements Shape {
+ 
+   @Override
+   public void draw() {
+      System.out.println("Shape: Circle");
+   }
+}
+```
+
+**步骤 3**
+创建实现了 Shape 接口的抽象装饰类，此举是方便实现不同的装饰实体类，使我们能够随时能够使用实现此接口的实体类，对我们的实体类进行不同形式的包装。
+
+ShapeDecorator.java
+```java
+public abstract class ShapeDecorator implements Shape {
+   protected Shape decoratedShape;
+ 
+   public ShapeDecorator(Shape decoratedShape){
+      this.decoratedShape = decoratedShape;
+   }
+ 
+   public void draw(){
+      decoratedShape.draw();
+   }  
+}
+```
+
+**步骤 4**
+创建扩展了 ShapeDecorator 类的实体装饰类。
+
+RedShapeDecorator.java
+```java
+public class RedShapeDecorator extends ShapeDecorator {
+ 
+   public RedShapeDecorator(Shape decoratedShape) {
+      super(decoratedShape);     
+   }
+ 
+   @Override
+   public void draw() {
+      decoratedShape.draw();         
+      setRedBorder(decoratedShape);
+   }
+ 
+   private void setRedBorder(Shape decoratedShape){
+      System.out.println("Border Color: Red");
+   }
+}
+```
+
+**步骤 5**
+使用 RedShapeDecorator 来装饰 Shape 对象,让他包装我们实现Shape接口的的原始内容。
+
+DecoratorPatternDemo.java
+```java
+public class DecoratorPatternDemo {
+   public static void main(String[] args) {
+ 
+      Shape circle = new Circle();
+      ShapeDecorator redCircle = new RedShapeDecorator(new Circle());
+      ShapeDecorator redRectangle = new RedShapeDecorator(new Rectangle());
+      //Shape redCircle = new RedShapeDecorator(new Circle());
+      //Shape redRectangle = new RedShapeDecorator(new Rectangle());
+      System.out.println("Circle with normal border");
+      circle.draw();
+ 
+      System.out.println("\nCircle of red border");
+      redCircle.draw();
+ 
+      System.out.println("\nRectangle of red border");
+      redRectangle.draw();
+   }
+}
+```
+
+**步骤 6**
+执行程序，输出结果：
+```shell
+Circle with normal border
+Shape: Circle
+
+Circle of red border
+Shape: Circle
+Border Color: Red
+
+Rectangle of red border
+Shape: Rectangle
+Border Color: Red
+```
+
+### rsut
+```rs
+// 创建形状接口
+trait Shape {
+    fn draw(&self);
+}
+struct  Rectangle {}
+struct Circle{}
+impl Shape for Rectangle {
+    fn draw(&self) {
+        println!("Shape: Rectangle");
+    }
+}
+impl Shape for Circle {
+    fn draw(&self) {
+        println!("Shape: Circle");
+    }
+}
+// 创建装抽象接口
+trait ShapeDecorator {
+    // 装饰方式
+    fn draw(&self);
+}
+// 创建装饰实现类
+struct RedShapeDecorator{
+    decorated_shape:Box<dyn Shape>
+}
+impl RedShapeDecorator {
+    //设置修饰方法
+    fn set_red_border(&self) {
+        println!("Border Color: Red");
+    }
+}
+// 实现装饰特征
+impl  ShapeDecorator for RedShapeDecorator{
+    fn draw(&self) {
+        self.decorated_shape.draw();
+        self.set_red_border();
+    }
+}
+fn main() {
+    let circle=Circle{};
+    let red_circle=RedShapeDecorator{decorated_shape:Box::new(Circle{})};
+    let red_rectangle=RedShapeDecorator{decorated_shape:Box::new(Rectangle{})};
+    circle.draw();
+    red_circle.draw();
+    red_rectangle.draw();
+}
+```
 # 模板方法
 **模板方法**定义一个操作中的算法的骨架，而将这一些步骤延迟到子类中。模板方式使得子类可以不改变一个算法的结构可重新定义该算法的某些特定步骤。
 # 迪米特法则

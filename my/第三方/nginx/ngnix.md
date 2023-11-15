@@ -1,39 +1,39 @@
-## Nginx简介
+# Nginx简介
 
-### 背景介绍
-Nginx（“engine x”）一个具有高性能的【HTTP】和【反向代理】的【WEB服务器】，同时也是一个【POP3/SMTP/IMAP代理服务器】
+## 背景介绍
+-Nginx（“engine x”）一个具有高性能的【HTTP】和【反向代理】的【WEB服务器】，同时也是一个【POP3/SMTP/IMAP代理服务器】
+
 **名词简介**
-POP3/SMTP/IMAP：
+**POP3/SMTP/IMAP**：
+- POP3(Post Offic Protocol 3)邮局协议的第三个版本，
+- SMTP(Simple Mail Transfer Protocol)简单邮件传输协议，
+- IMAP(Internet Mail Access Protocol)交互式邮件存取协议，
+### Nginx的优点
 
-POP3(Post Offic Protocol 3)邮局协议的第三个版本，
-
-SMTP(Simple Mail Transfer Protocol)简单邮件传输协议，
-
-IMAP(Internet Mail Access Protocol)交互式邮件存取协议，
-#### Nginx的优点
-
-##### (1)速度更快、并发更高
+#### (1)速度更快、并发更高
 
 单次请求或者高并发请求的环境下，Nginx都会比其他Web服务器响应的速度更快。一方面在正常情况下，单次请求会得到更快的响应，另一方面，在高峰期(如有数以万计的并发请求)，Nginx比其他Web服务器更快的响应请求。Nginx之所以有这么高的并发处理能力和这么好的性能原因在于Nginx采用了多进程和I/O多路复用(epoll)的底层实现。
 
-##### (2)配置简单，扩展性强
+#### (2)配置简单，扩展性强
 
 Nginx的设计极具扩展性，它本身就是由很多模块组成，这些模块的使用可以通过配置文件的配置来添加。这些模块有官方提供的也有第三方提供的模块，如果需要完全可以开发服务自己业务特性的定制模块。
 
-##### (3)高可靠性
+#### (3)高可靠性
 
 Nginx采用的是多进程模式运行，其中有一个master主进程和N多个worker进程，worker进程的数量我们可以手动设置，每个worker进程之间都是相互独立提供服务，并且master主进程可以在某一个worker进程出错时，快速去"拉起"新的worker进程提供服务。
 
-##### (4)热部署
+#### (4)热部署
 
 现在互联网项目都要求以7*24小时进行服务的提供，针对于这一要求，Nginx也提供了热部署功能，即可以在Nginx不停止的情况下，对Nginx进行文件升级、更新配置和更换日志文件等功能。
 
-##### (5)成本低、BSD许可证
-### Nginx的功能特性及常用功能
+#### (5)成本低、BSD许可证
+Nginx本身是开源的，我们不仅可以免费的将Nginx应用在商业领域，而且还可以在项目中直接修改Nginx的源码来定制自己的特殊要求。
+
+## Nginx的功能特性及常用功能
 
 Nginx提供的基本功能服务从大体上归纳为"基本HTTP服务"、“高级HTTP服务”和"邮件服务"等三大类。
 
-#### 基本HTTP服务
+### 基本HTTP服务
 
 Nginx可以提供基本HTTP服务，可以作为HTTP代理服务器和反向代理服务器，支持通过缓存加速访问，可以完成简单的负载均衡和容错，支持包过滤功能，支持SSL等。
 
@@ -44,25 +44,25 @@ Nginx可以提供基本HTTP服务，可以作为HTTP代理服务器和反向代�
 - 支持HTTP下的安全套接层安全协议SSL.
 - 支持基于加权和依赖的优先权的HTTP/2
 
-#### 高级HTTP服务
+### 高级HTTP服务
 
 - 支持基于名字和IP的虚拟主机设置
 - 支持HTTP/1.0中的KEEP-Alive模式和管线(PipeLined)模型连接
 - 自定义访问日志格式、带缓存的日志写操作以及快速日志轮转。
 - 提供3xx~5xx错误代码重定向功能
-- 支持重写（Rewrite)模块扩展
+- 支持重写（Rewrite）模块扩展
 - 支持重新加载配置以及在线升级时无需中断正在处理的请求
 - 支持网络监控
 - 支持FLV和MP4流媒体传输
 
-#### 邮件服务
+### 邮件服务
 
 Nginx提供邮件代理服务也是其基本开发需求之一，主要包含以下特性：
 
 - 支持IMPA/POP3代理服务功能
 - 支持内部SMTP代理服务功能
 
-#### Nginx常用的功能模块
+### Nginx常用的功能模块
 
 ```
 静态资源部署
@@ -77,7 +77,7 @@ Web缓存
 用户认证模块...
 ```
 
-Nginx的核心组成
+**Nginx的核心组成**
 
 ```
 nginx二进制可执行文件
@@ -86,9 +86,9 @@ error.log错误的日志记录
 access.log访问日志记录
 ```
 
-## Nginx环境准备
-### docker安装 
-1. 制作挂载卷 
+# Nginx环境准备
+## docker安装 
+1. **制作挂载卷**
 mkdir -p /mount/docker/nginx/html
 mkdir -p /mount/docker/nginx/logs
 mkdir -p /mount/docker/nginx/conf/
@@ -99,7 +99,8 @@ docker cp nginx:/etc/nginx/nginx.conf /mount/docker/nginx/conf/nginx.conf
 docker cp nginx:/etc/nginx/conf.d /mount/docker/nginx/conf.d
 docker cp nginx:/usr/share/nginx/html /mount/docker/nginx
 ```
-3. 启动容器
+3. **启动容器**
+```shell
 docker run \
 -p 80:80 \
 --name nginx \
@@ -108,7 +109,9 @@ docker run \
 -v /mount/docker/nginx/logs:/var/log/nginx \
 -v /mount/docker/nginx/html:/usr/share/nginx/html \
 -d nginx:latest
-### 乌班图安装
+```
+
+## 乌班图安装
 ```sh
 #安装
 apt-get install nginx
@@ -116,61 +119,44 @@ apt-get install nginx
 nginx -v
 service nginx start
 ```
-### Nginx目录结构分析
+## Nginx目录结构分析
 
 在使用Nginx之前，我们先对安装好的Nginx目录文件进行一个分析，在这块给大家介绍一个工具tree，通过tree我们可以很方面的去查看centos系统上的文件目录结构，当然，如果想使用tree工具，就得先通过`yum install -y tree`来进行安装，安装成功后，可以通过执行`tree /usr/local/nginx`(tree后面跟的是Nginx的安装目录)，获取的结果如下：
 
 ![1581439634265](img/1581439634265.png)
 
-conf:nginx所有配置文件目录
+**conf:nginx所有配置文件目录**
 
-​    CGI(Common Gateway Interface)通用网关【接口】，主要解决的问题是从客户端发送一个请求和数据，服务端获取到请求和数据后可以调用调用CGI【程序】处理及相应结果给客户端的一种标准规范。
+- fastcgi.conf:fastcgi相关配置文件
+- fastcgi.conf.default:fastcgi.conf的备份文件
+- fastcgi_params:fastcgi的参数文件
+- fastcgi_params.default:fastcgi的参数备份文件
+- scgi_params:scgi的参数文件
+- scgi_params.default：scgi的参数备份文件
+- uwsgi_params:uwsgi的参数文件
+- uwsgi_params.default:uwsgi的参数备份文件
+- mime.types:记录的是HTTP协议中的Content-Type的值和文件后缀名的对应关系
+- mime.types.default:mime.types的备份文件
+- nginx.conf:这个是Nginx的核心配置文件
+- nginx.conf.default:nginx.conf的备份文件
+- koi-utf、koi-win、win-utf这三个文件都是与编码转换映射相关的配置文件，用来将一种编码转换成另一种编码
 
-​	fastcgi.conf:fastcgi相关配置文件
+**html:存放nginx自带的两个静态的html页面**
+- 50x.html:访问失败后的失败页面
+- index.html:成功访问的默认首页
 
-​	fastcgi.conf.default:fastcgi.conf的备份文件
+**logs:**记录入门的文件，当nginx服务器启动后，这里面会有 access.log error.log 和nginx.pid三个文件出现。
 
-​	fastcgi_params:fastcgi的参数文件
-
-​	fastcgi_params.default:fastcgi的参数备份文件
-
-​	scgi_params:scgi的参数文件
-
-​	scgi_params.default：scgi的参数备份文件
-
-​    uwsgi_params:uwsgi的参数文件
-
-​	uwsgi_params.default:uwsgi的参数备份文件
-
-​	mime.types:记录的是HTTP协议中的Content-Type的值和文件后缀名的对应关系
-
-​	mime.types.default:mime.types的备份文件
-
-​	nginx.conf:这个是Nginx的核心配置文件，这个文件非常重要，也是我们即将要学习的重点
-
-​	nginx.conf.default:nginx.conf的备份文件
-
-​	koi-utf、koi-win、win-utf这三个文件都是与编码转换映射相关的配置文件，用来将一种编码转换成另一种编码
-
-html:存放nginx自带的两个静态的html页面
-
-​	50x.html:访问失败后的失败页面
-
-​	index.html:成功访问的默认首页
-
-logs:记录入门的文件，当nginx服务器启动后，这里面会有 access.log error.log 和nginx.pid三个文件出现。
-
-sbin:是存放执行程序文件nginx
-
-​	nginx是用来控制Nginx的启动和停止等相关的命令。
+**sbin:**是存放执行程序文件nginx
+- nginx是用来控制Nginx的启动和停止等相关的命令。
 
 
-#### 方式一:Nginx服务的信号控制
+### 方式一:Nginx服务的信号控制
 
 当将Nginx启动后，我们通过`ps -ef | grep nginx`命令可以查看到如下内容：
 ![1581444289294](img/1581444289294.png)
 
-从上图中可以看到,Nginx后台进程中包含一个master进程和多个worker进程，master进程主要用来管理worker进程，包含接收外界的信息，并将接收到的信号发送给各个worker进程，监控worker进程的状态，当worker进程出现异常退出后，会自动重新启动新的worker进程。而worker进程则是专门用来处理用户请求的，各个worker进程之间是平等的并且相互独立，处理请求的机会也是一样的。nginx的进程模型，我们可以通过下图来说明下：
+从上图中可以看到,Nginx后台进程中包含一个**master**进程和多个**worker**进程，master进程主要用来管理**worker**进程，包含接收外界的信息，并将接收到的信号发送给各个w**orker**进程，监控**worker**进程的状态，当**worker**进程出现异常退出后，会自动重新启动新的**worker**进程。而**worker**进程则是专门用来处理用户请求的，各个**worker**进程之间是平等的并且相互独立，处理请求的机会也是一样的。nginx的进程模型，我们可以通过下图来说明下：
 
 ![1581444603231](img/1581444603231.png)
 
@@ -178,11 +164,11 @@ sbin:是存放执行程序文件nginx
 
 （1）要想操作Nginx的master进程，就需要获取到master进程的进程号ID。获取方式简单介绍两个，
 
-方式一：通过`ps -ef | grep nginx`；
+**方式一**：通过`ps -ef | grep nginx`；
 
-方式二：在讲解nginx的`./configure`的配置参数的时候，有一个参数是`--pid-path=PATH`默认是`/usr/local/nginx/logs/nginx.pid`,所以可以通过查看该文件来获取nginx的master进程ID.
+**方式二**：在讲解nginx的`./configure`的配置参数的时候，有一个参数是`--pid-path=PATH`默认是`/usr/local/nginx/logs/nginx.pid`,所以可以通过查看该文件来获取nginx的master进程ID.
 
-（2）信号
+（2）**信号**
 
 | 信号     | 作用                                                       |
 | -------- | ---------------------------------------------------------- |
@@ -199,36 +185,36 @@ signal:即为信号；PID即为获取到的master线程ID
 
 1. 发送TERM/INT信号给master进程，会将Nginx服务立即关闭。
 
-```
+```shell
 kill -TERM PID / kill -TERM `cat /usr/local/nginx/logs/nginx.pid`
 kill -INT PID / kill -INT `cat /usr/local/nginx/logs/nginx.pid`
 ```
 
 2. 发送QUIT信号给master进程，master进程会控制所有的work进程不再接收新的请求，等所有请求处理完后，在把进程都关闭掉。
 
-```
+```shell
 kill -QUIT PID / kill -TERM `cat /usr/local/nginx/logs/nginx.pid`
 ```
 
 3. 发送HUP信号给master进程，master进程会把控制旧的work进程不再接收新的请求，等处理完请求后将旧的work进程关闭掉，然后根据nginx的配置文件重新启动新的work进程
 
-```
+```shell 
 kill -HUP PID / kill -TERM `cat /usr/local/nginx/logs/nginx.pid`
 ```
 
 4. 发送USR1信号给master进程，告诉Nginx重新开启日志文件
 
-```
+```shell
 kill -USR1 PID / kill -TERM `cat /usr/local/nginx/logs/nginx.pid`
 ```
 
 5. 发送USR2信号给master进程，告诉master进程要平滑升级，这个时候，会重新开启对应的master进程和work进程，整个系统中将会有两个master进程，并且新的master进程的PID会被记录在`/usr/local/nginx/logs/nginx.pid`而之前的旧的master进程PID会被记录在`/usr/local/nginx/logs/nginx.pid.oldbin`文件中，接着再次发送QUIT信号给旧的master进程，让其处理完请求后再进行关闭
 
-```
+```shell
 kill -USR2 PID / kill -USR2 `cat /usr/local/nginx/logs/nginx.pid`
 ```
 
-```
+```shell
 kill -QUIT PID / kill -QUIT `cat /usr/local/nginx/logs/nginx.pid.oldbin`
 ```
 
@@ -236,50 +222,46 @@ kill -QUIT PID / kill -QUIT `cat /usr/local/nginx/logs/nginx.pid.oldbin`
 
 6. 发送WINCH信号给master进程,让master进程控制不让所有的work进程在接收新的请求了，请求处理完后关闭work进程。注意master进程不会被关闭掉
 
-```
+```shell 
 kill -WINCH PID /kill -WINCH`cat /usr/local/nginx/logs/nginx.pid`
 ```
 
-#### 方式二:Nginx的命令行控制
+### 方式二:Nginx的命令行控制
 
 此方式是通过Nginx安装目录下的sbin下的可执行文件nginx来进行Nginx状态的控制，我们可以通过`nginx -h`来查看都有哪些参数可以用：
 
 ![1581486604517](img/1581486604517.png)
 
--?和-h:显示帮助信息
+- -?和-h:显示帮助信息
 
--v:打印版本号信息并退出
+- -v:打印版本号信息并退出
 
--V:打印版本号信息和配置信息并退出
+- -V:打印版本号信息和配置信息并退出
 
--t:测试nginx的配置文件语法是否正确并退出
+- -t:测试nginx的配置文件语法是否正确并退出
 
--T:测试nginx的配置文件语法是否正确并列出用到的配置文件信息然后退出
+- -T:测试nginx的配置文件语法是否正确并列出用到的配置文件信息然后退出
 
--q:在配置测试期间禁止显示非错误消息
+- -q:在配置测试期间禁止显示非错误消息
 
--s:signal信号，后面可以跟 ：
+- -s:signal信号，后面可以跟 ：
+	- stop[快速关闭，类似于TERM/INT信号的作用]
+	- quit[优雅的关闭，类似于QUIT信号的作用] 
+	- reopen[重新打开日志文件类似于USR1信号的作用] 
+	- reload[类似于HUP信号的作用]
 
-​	 stop[快速关闭，类似于TERM/INT信号的作用]
+- -p:prefix，指定Nginx的prefix路径，(默认为: /usr/local/nginx/)
 
-​	quit[优雅的关闭，类似于QUIT信号的作用] 
+- -c:filename,指定Nginx的配置文件路径,(默认为: conf/nginx.conf)
 
-​	reopen[重新打开日志文件类似于USR1信号的作用] 
+- -g:用来补充Nginx配置文件，向Nginx服务指定启动时应用全局的配置
 
-​	reload[类似于HUP信号的作用]
+## Nginx服务器版本升级和新增模块
 
--p:prefix，指定Nginx的prefix路径，(默认为: /usr/local/nginx/)
-
--c:filename,指定Nginx的配置文件路径,(默认为: conf/nginx.conf)
-
--g:用来补充Nginx配置文件，向Nginx服务指定启动时应用全局的配置
-
-### Nginx服务器版本升级和新增模块
-
-## Nginx核心配置文件结构
+# Nginx核心配置文件结构
 我们知道Nginx的核心配置文件默认是放在`/usr/local/nginx/conf/nginx.conf`，
 
-读取Nginx自带的Nginx配置文件，我们将其中的注释部分【学习一个技术点就是在Nginx的配置文件中可以使用`#`来注释】删除掉后，就剩下下面内容:
+读取Nginx自带的Nginx配置文件，我们将其中的注释部分删除掉后，就剩下下面核心内容:
 
 ```conf
 worker_processes  1;
@@ -310,10 +292,10 @@ http {
 }
 ```
 
-```
+```conf
 指令名	指令值;  #全局块，主要设置Nginx服务器整体运行的配置指令
 
- #events块,主要设置,Nginx服务器与用户的网络连接,这一部分对Nginx服务器的性能影响较大
+#events块,主要设置,Nginx服务器与用户的网络连接,这一部分对Nginx服务器的性能影响较大
 events {	 
     指令名	指令值;
 }
@@ -334,9 +316,10 @@ http {
 nginx.conf配置文件中默认有三大块：全局块、events块、http块
 
 http块中可以配置多个server块，每个server块又可以配置多个location块。
-### 全局块
 
-#### user指令
+## 全局块
+
+### user指令
 
 （1）user:用于配置运行Nginx服务器的worker进程的用户和用户组。
 
@@ -365,34 +348,35 @@ useradd www
 ```
 user www
 ```
-综上所述，使用user指令可以指定启动运行工作进程的用户及用户组，这样对于系统的权限访问控制的更加精细，也更加安全。
+使用user指令可以指定启动运行工作进程的用户及用户组，这样对于系统的权限访问控制的更加精细，也更加安全。
 
-#### work process指令
+### work process指令
 
-master_process:用来指定是否开启工作进程。
+**master_process**:用来指定是否开启工作进程。
 
 | 语法   | master_process on\|off; |
 | ------ | ----------------------- |
 | 默认值 | master_process on;      |
 | 位置   | 全局块                   |
 
-worker_processes:用于配置Nginx生成工作进程的数量，这个是Nginx服务器实现并发处理服务的关键所在。理论上来说workder process的值越大，可以支持的并发处理量也越多，但事实上这个值的设定是需要受到来自服务器自身的限制，建议将该值和服务器CPU的内核数保存一致。
+**worker_processes**:用于配置Nginx生成工作进程的数量，这个是Nginx服务器实现并发处理服务的关键所在。理论上来说workder process的值越大，可以支持的并发处理量也越多，但事实上这个值的设定是需要受到来自服务器自身的限制，建议将该值和服务器CPU的内核数保存一致。
 
 | 语法   | worker_processes     num/auto; |
 | ------ | ------------------------------ |
 | 默认值 | 1                              |
 | 位置   | 全局块                         |
 
-#### 其他指令
+### 其他指令
 
-daemon：设定Nginx是否以守护进程的方式启动。
+**daemon**：设定Nginx是否以守护进程的方式启动。
+- 守护进程: Daemon（守护进程）是运行在后台的一种特殊进程。它独立于控制终端并且周期性地执行某种任务或等待处理某些发生的事件。它不需要用户输入就能运行而且提供某种服务，不是对整个系统就是对某个用户程序提供服务。
 
 | 语法   | daemon on\|off; |
 | ------ | --------------- |
 | 默认值 | daemon on;      |
 | 位置   | 全局块          |
 
-pid:用来配置Nginx当前master进程的进程号ID存储的文件路径。
+**pid**:用来配置Nginx当前master进程的进程号ID存储的文件路径。
 
 | 语法   | pid file;                              |
 | ------ | -------------------------------------- |
@@ -401,8 +385,7 @@ pid:用来配置Nginx当前master进程的进程号ID存储的文件路径。
 
 该属性可以通过`./configure --pid-path=PATH`来指定
 
-error_log:用来配置Nginx的错误日志存放路径
-v
+**error_log**:用来配置Nginx的错误日志存放路径
 | 语法   | error_log  file [日志级别];     |
 | ------ | ------------------------------- |
 | 默认值 | error_log logs/error.log error; |
@@ -412,16 +395,16 @@ v
 
 其中日志级别的值有：debug|info|notice|warn|error|crit|alert|emerg，翻译过来为试|信息|通知|警告|错误|临界|警报|紧急，这块建议大家设置的时候不要设置成info以下的等级，因为会带来大量的磁盘I/O消耗，影响Nginx的性能。
 
-（5）include:用来引入其他配置文件，使Nginx的配置更加灵活
+**include**:用来引入其他配置文件，使Nginx的配置更加灵活
 
 | 语法   | include file; |
 | ------ | ------------- |
 | 默认值 | 无            |
 | 位置   | any           |
 
-### events块
+## events块
 
-（1）accept_mutex:用来设置Nginx网络连接序列化
+**accept_mutex**:用来设置Nginx网络连接序列化
 
 | 语法   | accept_mutex on\|off; |
 | ------ | --------------------- |
@@ -430,7 +413,7 @@ v
 
 这个配置主要可以用来解决常说的"惊群"问题。大致意思是在某一个时刻，客户端发来一个请求连接，Nginx后台是以多进程的工作模式，也就是说有多个worker进程会被同时唤醒，但是最终只会有一个进程可以获取到连接，如果每次唤醒的进程数目太多，就会影响Nginx的整体性能。如果将上述值设置为on(开启状态)，将会对多个Nginx进程接收连接进行序列号，一个个来唤醒接收，就防止了多个进程对连接的争抢。
 
-（2）multi_accept:用来设置是否允许同时接收多个网络连接
+**multi_accept**:用来设置是否允许同时接收多个网络连接
 
 | 语法   | multi_accept on\|off; |
 | ------ | --------------------- |
@@ -439,7 +422,7 @@ v
 
 如果multi_accept被禁止了，nginx一个工作进程只能同时接受一个新的连接。否则，一个工作进程可以同时接受所有的新连接
 
-（3）worker_connections：用来配置单个worker进程最大的连接数
+**worker_connections**：用来配置单个worker进程最大的连接数
 
 | 语法   | worker_connections number; |
 | ------ | -------------------------- |
@@ -448,14 +431,14 @@ v
 
 这里的连接数不仅仅包括和前端用户建立的连接数，而是包括所有可能的连接数。另外，number值不能大于操作系统支持打开的最大文件句柄数量。
 
-（4）use:用来设置Nginx服务器选择哪种事件驱动来处理网络消息。
+**use**:用来设置Nginx服务器选择哪种事件驱动来处理网络消息。
 
 | 语法   | use  method;   |
 | ------ | -------------- |
 | 默认值 | 根据操作系统定 |
 | 位置   | events         |
 
-注意：此处所选择事件处理模型是Nginx优化部分的一个重要内容，method的可选值有select/poll/epoll/kqueue等，之前在准备centos环境的时候，我们强调过要使用linux内核在2.6以上，就是为了能使用epoll函数来优化Nginx。
+注意：此处所选择事件处理模型是Nginx优化部分的一个重要内容，method的可选值有select/poll/epoll/kqueue等.
 
 另外这些值的选择，我们也可以在编译的时候使用
 
@@ -463,34 +446,34 @@ v
 
 ` --with-poll_module`、` --without-poll_module`来设置是否需要将对应的事件驱动模块编译到Nginx的内核。
 
-### http块
+## http块
 
-#### 定义MIME-Type
+### 定义MIME-Type
 
 我们都知道浏览器中可以显示的内容有HTML、XML、GIF等种类繁多的文件、媒体等资源，浏览器为了区分这些资源，就需要使用MIME Type。所以说MIME Type是网络资源的媒体类型。Nginx作为web服务器，也需要能够识别前端请求的资源类型。
 
 在Nginx的配置文件中，默认有两行配置
 
-```
+```conf
 include mime.types;
 default_type application/octet-stream;
 ```
-（1）default_type:用来配置Nginx响应前端请求默认的MIME类型。
+**default_type**:用来配置Nginx响应前端请求默认的MIME类型。
 
 | 语法   | default_type mime-type;   |
 | ------ | ------------------------- |
 | 默认值 | default_type text/plain； |
 | 位置   | http、server、location    |
 
-在default_type之前还有一句`include mime.types`,include之前我们已经介绍过，相当于把mime.types文件中MIMT类型与相关类型文件的文件后缀名的对应关系加入到当前的配置文件中。
+在default_type之前还有一句`include mime.types`,include相当于把mime.types文件中MIMT类型与相关类型文件的文件后缀名的对应关系加入到当前的配置文件中。
 
-举例来说明：
+**举例说明**：
 
 有些时候请求某些接口的时候需要返回指定的文本字符串或者json字符串，如果逻辑非常简单或者干脆是固定的字符串，那么可以使用nginx快速实现，这样就不用编写程序响应请求了，可以减少服务器资源占用并且响应性能非常快。
 
-如何实现:
+**实现**:
 
-```
+```conf
 location /get_text {
 	#这里也可以设置成text/plain
     default_type text/html;
@@ -501,7 +484,7 @@ location /get_json{
     return 200 '{"name":"TOM","age":18}';
 }
 ```
-#### 自定义服务日志
+### 自定义服务日志
 
 Nginx中日志的类型分access.log、error.log。
 
@@ -509,37 +492,39 @@ access.log:用来记录用户所有的访问请求。
 
 error.log:记录nginx本身运行时的错误信息，不会记录用户的访问请求。
 
-Nginx服务器支持对服务日志的格式、大小、输出等进行设置，需要使用到两个指令，分别是access_log和log_format指令。
+Nginx服务器支持对服务日志的格式、大小、输出等进行设置，需要使用到两个指令，分别是**access_log**和**log_format**指令。
 
-（1）access_log:用来设置用户访问日志的相关属性。
+**access_log**:用来设置用户访问日志的相关属性。
 
 | 语法   | access_log path[format[buffer=size]] |
 | ------ | ------------------------------------ |
 | 默认值 | access_log logs/access.log combined; |
 | 位置   | `http`, `server`, `location`         |
 
-（2）log_format:用来指定日志的输出格式。
+**log_format**:用来指定日志的输出格式。
 
 | 语法   | log_format name [escape=default\|json\|none] string....; |
 | ------ | -------------------------------------------------------- |
 | 默认值 | log_format combined "...";                               |
-| 位置   | http                                                     |
+| 位置   | http                |
 
-#### 其他配置指令
+### 其他配置指令
 
-（1）sendfile:用来设置Nginx服务器是否使用sendfile()传输文件，该属性可以大大提高Nginx处理静态资源的性能
+**sendfile**:用来设置Nginx服务器是否使用sendfile()传输文件，该属性可以大大提高Nginx处理静态资源的性能
+<!-- 启用sendfile()系统调用来替换read()和write()调用，减少系统上下文切换从而提高性能，当 nginx 是静态文件服务器时，能极大提高nginx的性能表现，而当 nginx 是反向代理服务器时，则没什么用了。下面我们来分析一下这个sendfile的工作原理： -->
 
 | 语法   | sendfile on\|off；     |
 | ------ | ---------------------- |
 | 默认值 | sendfile off;          |
 | 位置   | http、server、location |
 
-（2）keepalive_timeout:用来设置长连接的超时时间。
+**keepalive_timeout**:用来设置长连接的超时时间。
 
 》为什么要使用keepalive？
 
 ```
 我们都知道HTTP是一种无状态协议，客户端向服务端发送一个TCP请求，服务端响应完毕后断开连接。
+
 如何客户端向服务端发送多个请求，每个请求都需要重新创建一次连接，效率相对来说比较多，使用keepalive模式，可以告诉服务器端在处理完一个请求后保持这个TCP连接的打开状态，若接收到来自这个客户端的其他请求，服务端就会利用这个未被关闭的连接，而不需要重新创建一个新连接，提升效率，但是这个连接也不能一直保持，这样的话，连接如果过多，也会是服务端的性能下降，这个时候就需要我们进行设置其的超时时间。
 ```
 
@@ -548,16 +533,16 @@ Nginx服务器支持对服务日志的格式、大小、输出等进行设置，
 | 默认值 | keepalive_timeout 75s;  |
 | 位置   | http、server、location  |
 
-（3）keepalive_requests:用来设置一个keep-alive连接使用的次数。
+**keepalive_requests**:用来设置一个keep-alive连接使用的次数。
 
 | 语法   | keepalive_requests number; |
 | ------ | -------------------------- |
 | 默认值 | keepalive_requests 100;    |
 | 位置   | http、server、location     |
 
-## Nginx静态资源部署
+# Nginx静态资源部署
 
-### Nginx静态资源概述
+## Nginx静态资源概述
 
 Nginx处理静态资源的内容，我们需要考虑下面这几个问题：
 
@@ -569,19 +554,20 @@ Nginx处理静态资源的内容，我们需要考虑下面这几个问题：
 （5）静态资源的访问控制，包括跨域问题和防盗链问题
 ```
 
-### Nginx静态资源的配置指令
+## Nginx静态资源的配置指令
 
-#### listen指令
+### listen指令
 
-listen:用来配置监听端口。
+**listen**:用来配置监听端口。
 
 | 语法   | listen address[:port] [default_server]...;<br/>listen port [default_server]...; |
-| ------ | ------------------------------------------------------------ |
+| ------ | ---------------------- |
 | 默认值 | listen *:80 \| *:8000                                        |
-| 位置   | server                                                       |
-default_server属性是标识符，用来将此虚拟主机设置成默认主机。所谓的默认主机指的是如果没有匹配到对应的address:port，则会默认执行的。如果不指定默认使用的是第一个server。
+| 位置   | server              |
 
-```
+**default_server**属性是标识符，用来将此虚拟主机设置成默认主机。所谓的默认主机指的是如果没有匹配到对应的address:port，则会默认执行的。如果不指定默认使用的是第一个server。
+
+```conf
 server{
 	listen 8080;
 	server_name 127.0.0.1;
@@ -598,77 +584,75 @@ server{
 }
 ```
 
-#### server_name指令
+### server_name指令
 
 server_name：用来设置虚拟主机服务名称。
 
 127.0.0.1 、 localhost 、域名[www.baidu.com | www.jd.com]
 
 | 语法   | server_name  name ...;<br/>name可以提供多个中间用空格分隔 |
-| ------ | --------------------------------------------------------- |
+| ------ | ---- |
 | 默认值 | server_name  "";                                          |
 | 位置   | server                                                    |
 
-关于server_name的配置方式有三种，分别是：
+关于**server_name**的配置方式有三种，分别是：
 
-```
+```conf
 精确匹配
 通配符匹配
 正则表达式匹配
 ```
 
-配置方式一：精确匹配
+**配置方式一**：精确匹配
 
 如：
 
-```
+```conf
 server {
 	listen 80;
-	server_name www.itcast.cn www.itheima.cn;
+	server_name www.onenewcode.cn;
 	...
 }
 ```
 
 补充小知识点:
 
-```
+```conf
 hosts是一个没有扩展名的系统文件，可以用记事本等工具打开，其作用就是将一些常用的网址域名与其对应的IP地址建立一个关联“数据库”，当用户在浏览器中输入一个需要登录的网址时，系统会首先自动从hosts文件中寻找对应的IP地址，一旦找到，系统会立即打开对应网页，如果没有找到，则系统会再将网址提交DNS域名解析服务器进行IP地址的解析。
 ```
 因为域名是要收取一定的费用，所以我们可以使用修改hosts文件来制作一些虚拟域名来使用。需要修改 `/etc/hosts`文件来添加
 
-```
+```conf
 vim /etc/hosts
-127.0.0.1 www.itcast.cn
-127.0.0.1 www.itheima.cn
+127.0.0.1 www.onenewcode.cn
 ```
 
-配置方式二:使用通配符配置
+**配置方式二**:使用通配符配置
 
 server_name中支持通配符"*",但需要注意的是通配符不能出现在域名的中间，只能出现在首段或尾段，如：
 
-```
+```conf
 server {
 	listen 80;
-	server_name  *.itcast.cn	www.itheima.*;
-	# www.itcast.cn abc.itcast.cn www.itheima.cn www.itheima.com
+	server_name  *.onenewcode.cn;
+	# www.onenewcode.cn abc.onenewcode.cn
 	...
 }
 ```
 
-配置三:使用正则表达式配置
+**配置三:**使用正则表达式配置
 
-```
+```conf
 server{
         listen 80;
         server_name ~^www\.(\w+)\.com$;
         default_type text/plain;
         return 200 $1  $2 ..;
 }
-注意 ~后面不能加空格，括号可以取值
 ```
-##### 匹配执行顺序
+#### 匹配执行顺序
 
-```
+```conf
 No1:准确匹配server_name
 
 No2:通配符在开始时匹配server_name成功
@@ -680,9 +664,9 @@ No4:正则表达式匹配server_name成功
 No5:被默认的default_server处理，如果没有指定默认找第一个server
 ```
 
-#### location指令
+### location指令
 
-```
+```conf
 server{
 	listen 80;
 	server_name localhost;
@@ -699,17 +683,16 @@ server{
 location:用来设置请求的URI
 
 | 语法   | location [  =  \|   ~  \|  ~*   \|   ^~   \|@ ] uri{...} |
-| ------ | -------------------------------------------------------- |
-| 默认值 | —                                                        |
-| 位置   | server,location                                          |
+| ------ | -------- |
+| 默认值 | —       |
+| 位置   | server,location   |
 
 uri变量是待匹配的请求字符串，可以不包含正则表达式，也可以包含正则表达式，那么nginx服务器在搜索匹配location的时候，是先使用不包含正则表达式进行匹配，找到一个匹配度最高的一个，然后在通过包含正则表达式的进行匹配，如果能匹配到直接访问，匹配不到，就使用刚才匹配度最高的那个location来处理请求。
 
-属性介绍:
-
+**属性介绍**:
 不带符号，要求必须以指定模式开始
 
-```
+```conf
 server {
 	listen 80;
 	server_name 127.0.0.1;
@@ -727,7 +710,7 @@ http://192.168.200.133/abcdef
 
 = :  用于不包含正则表达式的uri前，必须与指定的模式精确匹配
 
-```
+```conf
 server {
 	listen 80;
 	server_name 127.0.0.1;
@@ -749,7 +732,7 @@ http://192.168.200.133/abcdef
 
 换句话说，如果uri包含了正则表达式，需要用上述两个符合来标识
 
-```
+```conf
 server {
 	listen 80;
 	server_name 127.0.0.1;
@@ -770,7 +753,7 @@ server {
 
 ^~: 用于不包含正则表达式的uri前，功能和不加符号的一致，唯一不同的是，如果模式匹配，那么就停止搜索其他模式了。
 
-```
+```conf
 server {
 	listen 80;
 	server_name 127.0.0.1;
@@ -781,9 +764,9 @@ server {
 }
 ```
 
-#### 设置请求资源的目录root / alias
+### 设置请求资源的目录root / alias
 
-root：设置请求的根目录
+**root**：设置请求的根目录
 
 | 语法   | root path;             |
 | ------ | ---------------------- |
@@ -792,7 +775,7 @@ root：设置请求的根目录
 
 path为Nginx服务器接收到请求以后查找资源的根目录路径。
 
-alias：用来更改location的URI
+**alias**：用来更改location的URI
 
 | 语法   | alias path; |
 | ------ | ----------- |
@@ -807,7 +790,7 @@ path为修改后的根路径。
 
 （1）在`/usr/local/nginx/html`目录下创建一个 images目录,并在目录下放入一张图片`mv.png`图片
 
-```
+```conf
 location /images {
 	root /usr/local/nginx/html;
 }
@@ -815,13 +798,13 @@ location /images {
 
 访问图片的路径为:
 
-```
+```conf
 http://192.168.200.133/images/mv.png
 ```
 
 （2）如果把root改为alias
 
-```
+```conf
 location /images {
 	alias /usr/local/nginx/html;
 }
@@ -829,7 +812,7 @@ location /images {
 
 再次访问上述地址，页面会出现404的错误，查看错误日志会发现是因为地址不对，所以验证了：
 
-```
+```conf
 root的处理结果是: root路径+location路径
 /usr/local/nginx/html/images/mv.png
 alias的处理结果是:使用alias路径替换location路径
@@ -838,7 +821,7 @@ alias的处理结果是:使用alias路径替换location路径
 
 需要在alias后面路径改为
 
-```
+```conf
 location /images {
 	alias /usr/local/nginx/html/images;
 }
@@ -848,7 +831,7 @@ location /images {
 
 将上述配置修改为
 
-```
+```conf
 location /images/ {
 	alias /usr/local/nginx/html/images;
 }
@@ -858,16 +841,16 @@ location /images/ {
 
 小结：
 
-```
+```conf
 root的处理结果是: root路径+location路径
 alias的处理结果是:使用alias路径替换location路径
 alias是一个目录别名的定义，root则是最上层目录的含义。
 如果location路径是以/结尾,则alias也必须是以/结尾，root没有要求
 ```
 
-#### index指令
+### index指令
 
-index:设置网站的默认首页
+**index**:设置网站的默认首页
 
 | 语法   | index file ...;        |
 | ------ | ---------------------- |
@@ -878,7 +861,7 @@ index后面可以跟多个设置，如果访问的时候没有指定具体访问
 
 举例说明：
 
-```
+```conf
 location / {
 	root /usr/local/nginx/html;
 	index index.html index.htm;
@@ -886,9 +869,9 @@ location / {
 访问该location的时候，可以通过 http://ip:port/，地址后面如果不添加任何内容，则默认依次访问index.html和index.htm，找到第一个来进行返回
 ```
 
-#### error_page指令
+### error_page指令
 
-error_page:设置网站的错误页面
+**error_page**:设置网站的错误页面
 
 | 语法   | error_page code ... [=[response]] uri; |
 | ------ | -------------------------------------- |
@@ -901,7 +884,7 @@ error_page:设置网站的错误页面
 
 （1）可以指定具体跳转的地址
 
-```
+```conf
 server {
 	error_page 404 http://www.itcast.cn;
 }
@@ -909,7 +892,7 @@ server {
 
 （2）可以指定重定向地址
 
-```
+```conf
 server{
 	error_page 404 /50x.html;
 	error_page 500 502 503 504 /50x.html;
@@ -921,7 +904,7 @@ server{
 
 （3）使用location的@符合完成错误信息展示
 
-```
+```conf
 server{
 	error_page 404 @jump_to_error;
 	location @jump_to_error {
@@ -933,7 +916,7 @@ server{
 
 可选项`=[response]`的作用是用来将相应代码更改为另外一个
 
-```
+```conf
 server{
 	error_page 404 =200 /50x.html;
 	location =/50x.html{
@@ -943,11 +926,11 @@ server{
 这样的话，当返回404找不到对应的资源的时候，在浏览器上可以看到，最终返回的状态码是200，这块需要注意下，编写error_page后面的内容，404后面需要加空格，200前面不能加空格
 ```
 
-### 静态资源优化配置语法
+## 静态资源优化配置语法
 
 Nginx对静态资源如何进行优化配置。这里从三个属性配置进行优化：
 
-```
+```conf
 sendfile on;
 tcp_nopush on;
 tcp_nodeplay on;
@@ -962,7 +945,7 @@ tcp_nodeplay on;
 
 请求静态资源的过程：客户端通过网络接口向服务端发送请求，操作系统将这些客户端的请求传递给服务器端应用程序，服务器端应用程序会处理这些请求，请求处理完成以后，操作系统还需要将处理得到的结果通过网络适配器传递回去。
 
-```
+```conf
 server {
 	listen 80;
 	server_name localhost；
@@ -1000,21 +983,21 @@ http://192.168.200.133/welcome.html
 ![1587832596733](img/1587832596733.png)
 
 经过刚才的分析，"tcp_nopush"和”tcp_nodelay“看起来是"互斥的"，那么为什么要将这两个值都打开，这个大家需要知道的是在linux2.5.9以后的版本中两者是可以兼容的，三个指令都开启的好处是，sendfile可以开启高效的文件传输模式，tcp_nopush开启可以确保在发送到客户端之前数据包已经充分“填满”， 这大大减少了网络开销，并加快了文件发送的速度。 然后，当它到达最后一个可能因为没有“填满”而暂停的数据包时，Nginx会忽略tcp_nopush参数， 然后，tcp_nodelay强制套接字发送数据。由此可知，TCP_NOPUSH可以与TCP_NODELAY一起设置，它比单独配置TCP_NODELAY具有更强的性能。所以我们可以使用如下配置来优化Nginx静态资源的处理
-```
+```conf
 sendfile on;
 tcp_nopush on;
 tcp_nodelay on;
 ```
-### Nginx静态资源压缩实战 
+## Nginx静态资源压缩实战 
 
 在Nginx的配置文件中可以通过配置gzip来对静态资源进行压缩，相关的指令可以配置在http块、server块和location块中，Nginx可以通过
 
-```
+```conf
 ngx_http_gzip_module模块
 ngx_http_gzip_static_module模块
 ngx_http_gunzip_module模块
 ```
-#### Gzip模块配置指令
+### Gzip模块配置指令
 
 接下来所学习的指令都来自ngx_http_gzip_module模块，该模块会在nginx安装的时候内置到nginx的安装环境中，也就是说我们可以直接使用这些指令。
 
@@ -1025,7 +1008,7 @@ ngx_http_gunzip_module模块
 | 默认值 | gzip off;                  |
 | 位置   | http、server、location...  |
 
-```
+```conf
 http{
    gzip on;
 }
@@ -1040,7 +1023,7 @@ http{
 
 所选择的值可以从mime.types文件中进行查找，也可以使用"*"代表所有。
 
-```
+```conf
 http{
 	gzip_types application/javascript;
 }
@@ -1053,7 +1036,7 @@ http{
 | 默认值 | gzip_comp_level 1;     |
 | 位置   | http、server、location |
 
-```
+```conf
 http{
 	gzip_comp_level 6;
 }
@@ -1116,7 +1099,7 @@ no_etag - 启用压缩 ,如果header头中不包含 "ETag" 头信息
 auth - 启用压缩 , 如果header头中包含 "Authorization" 头信息
 any - 无条件启用压缩
 
-#### Gzip压缩功能的实例配置
+### Gzip压缩功能的实例配置
 
 ```
 gzip on;  			  #开启gzip功能
@@ -1129,13 +1112,13 @@ gzip_vary  on;		  #往头信息中添加压缩标识
 gzip_disable "MSIE [1-6]\."; #对IE6以下的版本都不进行压缩
 gzip_proxied  off； #nginx作为反向代理压缩服务端返回数据的条件
 ```
-#### Gzip和sendfile共存问题
+### Gzip和sendfile共存问题
 
 前面在讲解sendfile的时候，提到过，开启sendfile以后，在读取磁盘上的静态资源文件的时候，可以减少拷贝的次数，可以不经过用户进程将静态文件通过网络设备发送出去，但是Gzip要想对资源压缩，是需要经过用户进程进行操作的。所以如何解决两个设置的共存问题。
 
 可以使用ngx_http_gzip_static_module模块的gzip_static指令来解决。
 
-##### gzip_static指令
+#### gzip_static指令
 
 gzip_static: 检查与访问资源同名的.gz文件时，response中以gzip相关的header返回.gz文件的内容。
 
@@ -1146,7 +1129,7 @@ gzip_static: 检查与访问资源同名的.gz文件时，response中以gzip相�
 
 添加上述命令后，会报一个错误，`unknown directive "gzip_static"`主要的原因是Nginx默认是没有添加ngx_http_gzip_static_module模块。如何来添加?
 
-##### 添加模块到Nginx的实现步骤
+#### 添加模块到Nginx的实现步骤
 
 (1)查询当前Nginx的配置参数
 
@@ -1197,14 +1180,14 @@ mv objs/nginx /usr/local/nginx/sbin
 make upgrade
 ```
 
-### 静态资源的缓存处理
+## 静态资源的缓存处理
 
-#### 什么是web缓存
+### 什么是web缓存
 
 ```
 Web缓存是指一个Web资源（如html页面，图片，js，数据等）存在于Web服务器和客户端（浏览器）之间的副本。缓存会根据进来的请求保存输出内容的副本；当下一个请求来到的时候，如果是相同的URL，缓存会根据缓存机制决定是直接使用副本响应访问请求，还是向源服务器再次发送请求。比较常见的就是浏览器会缓存访问过网站的网页，当再次访问这个URL地址的时候，如果网页没有更新，就不会再次下载网页，而是直接使用本地缓存的网页。只有当网站明确标识资源已经更新，浏览器才会再次下载网页
 ```
-#### web缓存的种类
+### web缓存的种类
 
 ```
 客户端缓存
@@ -1212,7 +1195,7 @@ Web缓存是指一个Web资源（如html页面，图片，js，数据等）存�
 服务端缓存
 	Nginx / Redis / Memcached等
 ```
-#### 为什么要用浏览器缓存
+### 为什么要用浏览器缓存
 
 ```
 成本最低的一种缓存实现
@@ -1221,7 +1204,7 @@ Web缓存是指一个Web资源（如html页面，图片，js，数据等）存�
 减少网络延迟，加快页面打开速度
 ```
 
-#### 浏览器缓存的执行流程
+### 浏览器缓存的执行流程
 
 HTTP协议中和页面缓存相关的字段，我们先来认识下：
 
@@ -1232,7 +1215,7 @@ HTTP协议中和页面缓存相关的字段，我们先来认识下：
 | Last-Modified | 请求资源最后修改时间                        |
 | ETag          | 请求变量的实体标签的当前值，比如文件的MD5值 |
 
-#### 
+### 
 
 ![](img/1581762832290.png)
 
@@ -1256,8 +1239,8 @@ HTTP协议中和页面缓存相关的字段，我们先来认识下：
 
 （10）如果判断是发生了变化，重新从服务端获取数据，并根据缓存协商(服务端所设置的是否需要进行缓存数据的设置)来进行数据缓存。
 
-#### 浏览器缓存相关指令
-##### expires指令
+### 浏览器缓存相关指令
+#### expires指令
 
 expires:该指令用来控制页面缓存的作用。可以通过该指令控制HTTP应答中的“Expires"和”Cache-Control"
 
@@ -1274,7 +1257,7 @@ max:指定Expires的值为'31 December2037 23:59:59GMT' (2037-12-31 23:59:59) �
 
 off:默认不缓存。
 
-##### add_header指令
+#### add_header指令
 
 add_header指令是用来添加指定的响应头和响应值。
 
@@ -1313,7 +1296,7 @@ Cache-control: s-maxage=<seconds>
 
 max-age=[秒]：
 
-### Nginx的跨域问题解决
+## Nginx的跨域问题解决
 
 这块内容，我们主要从以下方面进行解决：
 
@@ -1323,7 +1306,7 @@ max-age=[秒]：
 具体的解决方案是什么?
 ```
 
-#### 同源策略
+### 同源策略
 
 浏览器的同源策略：是一种约定，是浏览器最核心也是最基本的安全功能，如果浏览器少了同源策略，则浏览器的正常功能可能都会受到影响。
 
@@ -1355,7 +1338,7 @@ http://www.nginx.org/user/1
 满足
 ```
 
-#### 跨域问题
+### 跨域问题
 
 简单描述下:
 
@@ -1363,7 +1346,7 @@ http://www.nginx.org/user/1
 有两台服务器分别为A,B,如果从服务器A的页面发送异步请求到服务器B获取数据，如果服务器A和服务器B不满足同源策略，则就会出现跨域问题。
 ```
 
-#### 解决方案
+### 解决方案
 
 使用add_header指令，该指令可以用来添加一些头信息
 
@@ -1389,12 +1372,12 @@ location /getUser{
 }
 ```
 
-### 静态资源防盗链
+## 静态资源防盗链
 
-#### 什么是资源盗链
+### 什么是资源盗链
 
 资源盗链指的是此内容不在自己服务器上，而是通过技术手段，绕过别人的限制将别人的内容放到自己页面上最终展示给用户。以此来盗取大网站的空间和流量。简而言之就是用别人的东西成就自己的网站。
-#### Nginx防盗链的实现原理：
+### Nginx防盗链的实现原理：
 
 了解防盗链的原理之前，我们得先学习一个HTTP的头信息Referer,当浏览器向web服务器发送请求的时候，一般都会带上Referer,来告诉浏览器该网页是从哪个页面链接过来的。
 
@@ -1433,7 +1416,7 @@ location ~*\.(png|jpg|gif){
 
 }
 ```
-#### 针对目录进行防盗链
+### 针对目录进行防盗链
 
 配置如下：
 
@@ -1451,13 +1434,13 @@ location /images {
 
 此处我们需要用到Nginx的第三方模块`ngx_http_accesskey_module`，第三方模块如何实现盗链，如果在Nginx中使用第三方模块的功能，这些我们在后面的Nginx的模块篇再进行详细的讲解。
 
-### Rewrite功能配置
+## Rewrite功能配置
 
 Rewrite是Nginx服务器提供的一个重要基本功能，是Web服务器产品中几乎必备的功能。主要的作用是用来实现URL的重写。
 
 注意:Nginx服务器的Rewrite功能的实现依赖于PCRE的支持，因此在编译安装Nginx服务器之前，需要安装PCRE库。Nginx使用的是ngx_http_rewrite_module模块来解析和处理Rewrite功能的相关配置。
 
-#### "地址重写"与"地址转发"
+### "地址重写"与"地址转发"
 
 重写和转发的区别:
 
@@ -1469,9 +1452,9 @@ Rewrite是Nginx服务器提供的一个重要基本功能，是Web服务器产�
 地址转发速度快于地址重写
 ```
 
-#### Rewrite规则
+### Rewrite规则
 
-#### set指令
+### set指令
 
 该指令用来设置一个新的变量。
 
@@ -1484,7 +1467,7 @@ variable:变量的名称，该变量名称要用"$"作为变量的第一个字�
 
 value:变量的值，可以是字符串、其他变量或者变量的组合等。
 
-#### Rewrite常用全局变量
+### Rewrite常用全局变量
 
 | 变量               | 说明                                                         |
 | ------------------ | ------------------------------------------------------------ |
@@ -1512,7 +1495,7 @@ value:变量的值，可以是字符串、其他变量或者变量的组合等�
 
 
 
-#### if指令
+### if指令
 
 该指令用来支持条件判断，并根据条件判断结果选择不同的Nginx配置。
 
@@ -1592,7 +1575,7 @@ if (!-f $request_filename){
 
    当使用"!-x",如果请求文件不可执行，返回true,否则返回false
 
-#### break指令
+### break指令
 
 该指令用于中断当前相同作用域中的其他Nginx配置。与该指令处于同一作用域的Nginx配置中，位于它前面的指令配置生效，位于后面的指令配置无效。
 
@@ -1613,7 +1596,7 @@ location /{
 }
 ```
 
-#### return指令
+### return指令
 
 该指令用于完成对请求的处理，直接向客户端返回响应状态代码。在return后的所有Nginx配置都是无效的。
 
@@ -1628,7 +1611,7 @@ text:为返回给客户端的响应体内容，支持变量的使用
 
 URL:为返回给客户端的URL地址
 
-#### rewrite指令
+### rewrite指令
 
 该指令通过正则表达式的使用来改变URI。可以同时存在一个或者多个指令，按照顺序依次对URL进行匹配和处理。
 
@@ -1655,7 +1638,7 @@ flag:用来设置rewrite对URI的处理行为，可选值有如下：
 - redirect
 - permanent
 
-#### rewrite_log指令
+### rewrite_log指令
 
 该指令配置是否开启URL重写日志的输出功能。
 
@@ -1666,9 +1649,9 @@ flag:用来设置rewrite对URI的处理行为，可选值有如下：
 
 开启后，URL重写的相关日志将以notice级别输出到error_log指令配置的日志文件汇总。
 
-### Rewrite的案例
+## Rewrite的案例
 
-#### 域名跳转
+### 域名跳转
 
 》问题分析
 
@@ -1735,7 +1718,7 @@ server{
 }
 ```
 
-#### 域名镜像
+### 域名镜像
 
 上述案例中，将www.360buy.com 和 www.jingdong.com都能跳转到www.jd.com，那么www.jd.com我们就可以把它起名叫主域名，其他两个就是我们所说的镜像域名，当然如果我们不想把整个网站做镜像，只想为其中某一个子目录下的资源做镜像，我们可以在location块中配置rewrite功能，比如:
 
@@ -1752,7 +1735,7 @@ server {
 }
 ```
 
-#### 独立域名
+### 独立域名
 
 一个完整的项目包含多个模块，比如购物网站有商品商品搜索模块、商品详情模块已经购物车模块等，那么我们如何为每一个模块设置独立的域名。
 
@@ -1782,7 +1765,7 @@ server{
 }
 ```
 
-#### 目录自动添加"/"
+### 目录自动添加"/"
 
 问题描述
 
@@ -1843,7 +1826,7 @@ server {
 }
 ```
 
-#### 合并目录
+### 合并目录
 
 搜索引擎优化(SEO)是一种利用搜索引擎的搜索规则来提供目的网站的有关搜索引擎内排名的方式。我们在创建自己的站点时，可以通过很多中方式来有效的提供搜索引擎优化的程度。其中有一项就包含URL的目录层级一般不要超过三层，否则的话不利于搜索引擎的搜索也给客户端的输入带来了负担，但是将所有的文件放在一个目录下又会导致文件资源管理混乱并且访问文件的速度也会随着文件增多而慢下来，这两个问题是相互矛盾的，那么使用rewrite如何解决上述问题?
 
@@ -1875,7 +1858,7 @@ server {
 
 这样的花，客户端只需要输入http://www.web.name/server-11-22-33-44-20.html就可以访问到20.html页面了。这里也充分利用了rewrite指令支持正则表达式的特性。
 
-#### 防盗链
+### 防盗链
 
 防盗链之前我们已经介绍过了相关的知识，在rewrite中的防盗链和之前将的原理其实都是一样的，只不过通过rewrite可以将防盗链的功能进行完善下，当出现防盗链的情况，我们可以使用rewrite将请求转发到自定义的一张图片和页面，给用户比较好的提示信息。下面我们就通过根据文件类型实现防盗链的一个配置实例:
 
@@ -1908,9 +1891,9 @@ server{
 }
 ```
 
-## Nginx反向代理
+# Nginx反向代理
 
-### Nginx反向代理概述
+## Nginx反向代理概述
 
 关于正向代理和反向代理，我们在前面的章节已经通过一张图给大家详细的介绍过了，简而言之就是正向代理代理的对象是客户端，反向代理代理的是服务端，这是两者之间最大的区别。
 
@@ -1971,7 +1954,7 @@ server {
 
 但是Nginx正向代理，在实际的应用中不是特别多，所以我们简单了解下，接下来我们继续学习Nginx的反向代理，这是Nginx比较重要的一个功能。
 
-### Nginx反向代理的配置语法
+## Nginx反向代理的配置语法
 
 Nginx反向代理模块的指令是由`ngx_http_proxy_module`模块进行解析，该模块在安装Nginx的时候已经自己加装到Nginx中了，接下来我们把反向代理中的常用指令一一介绍下：
 
@@ -1981,7 +1964,7 @@ proxy_set_header
 proxy_redirect
 ```
 
-#### proxy_pass
+### proxy_pass
 
 该指令用来设置被代理服务器地址，可以是主机名称、IP地址加端口号形式。
 
@@ -2019,7 +2002,7 @@ server{
 第二个proxy_pass就变成了http://localhost/index.html效果就不一样了。
 ```
 
-#### proxy_set_header
+### proxy_set_header
 
 该指令可以更改Nginx服务器接收到的客户端请求的请求头信息，然后将新的请求头发送给代理的服务器
 
@@ -2054,7 +2037,7 @@ server {
     }
 
 ```
-#### proxy_redirect
+### proxy_redirect
 
 该指令是用来重置头信息中的"Location"和"Refresh"的值。
 
@@ -2114,7 +2097,7 @@ proxy_redirect off;
 关闭proxy_redirect的功能
 ```
 
-### Nginx反向代理实战
+## Nginx反向代理实战
 
 服务器1,2,3存在两种情况
 
@@ -2169,7 +2152,7 @@ server {
 
 2. 如果服务器1、服务器2和服务器3的内容是一样的，该如何处理?
 
-### Nginx的安全控制
+## Nginx的安全控制
 
 关于web服务器的安全是比较大的一个话题，里面所涉及的内容很多，Nginx反向代理是如何来提升web服务器的安全呢？
 
@@ -2183,7 +2166,7 @@ server {
 
 ![1589908851340](img/1589908851340.png)
 
-#### 如何使用SSL对流量进行加密
+### 如何使用SSL对流量进行加密
 
 翻译成大家能熟悉的说法就是将我们常用的http请求转变成https请求，那么这两个之间的区别简单的来说两个都是HTTP协议，只不过https是身披SSL外壳的http.
 
@@ -2205,7 +2188,7 @@ Nginx要想使用SSL，需要满足一个条件即需要添加一个模块`--wit
 
 
 
-##### nginx添加SSL的支持
+#### nginx添加SSL的支持
 
 （1）完成 `--with-http_ssl_module`模块的增量添加
 
@@ -2218,7 +2201,7 @@ Nginx要想使用SSL，需要满足一个条件即需要添加一个模块`--wit
 》在源码目录下执行  make upgrade进行升级，这个可以实现不停机添加新模块的功能
 ```
 
-##### Nginx的SSL相关指令
+#### Nginx的SSL相关指令
 
 因为刚才我们介绍过该模块的指令都是通过ngx_http_ssl_module模块来解析的。
 
@@ -2287,7 +2270,7 @@ shared:所有工作进程之间共享缓存，缓存的相关信息用name和siz
 | 默认值 | ssl_perfer_server_ciphers off;     |
 | 位置   | http、server                       |
 
-##### 生成证书
+#### 生成证书
 
 方式一：使用阿里云/腾讯云等第三方服务进行购买。
 
@@ -2311,7 +2294,7 @@ openssl rsa -in server.key.org -out server.key
 openssl x509 -req -days 365 -in server.csr -signkey server.key -out server.crt
 ```
 
-##### 开启SSL实例
+#### 开启SSL实例
 
 ```
 server {
@@ -2336,7 +2319,7 @@ server {
 
 （4）验证
 
-### 反向代理系统调优
+## 反向代理系统调优
 
 反向代理值Buffer和Cache
 
