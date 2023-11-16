@@ -48,7 +48,7 @@ docker run -d \
     --network es-net \
     -p 9200:9200 \
     -p 9300:9300 \
-elasticsearch:7.12.1
+elasticsearch::8.11.1
 ```
 
 命令解释：

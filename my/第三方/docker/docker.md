@@ -228,80 +228,63 @@ docker run --name redis \
 
 ## elasticsearch
 
-
+###  docker-compose安装
 ```yml
-version: '3.1'
+version: '3'
 services:
   elasticsearch:
-    image: elasticsearch:8.8.1
+    image: elasticsearch:8.11.0
     container_name: elasticsearch
-    privileged: true
+    restart: always
+#     privileged: true
     environment:
-      - "cluster.name=elasticsearch" #设置集群名称为elasticsearch
-      - "discovery.type=single-node" #以单一节点模式启动
-      - "ES_JAVA_OPTS=-Xms512m -Xmx1g" #设置使用jvm内存大小
-      - bootstrap.memory_lock=true
-    volumes:
-      - ./elasticsearch/plugins:/usr/local/dockercompose/elasticsearch/plugins #插件文件挂载
-      - ./elasticsearch/data:/usr/local/dockercompose/elasticsearch/data:rw #数据文件挂载
-      - ./elasticsearch/logs:/usr/local/dockercompose/elasticsearch/logs:rw
-      - ./elasticsearch/config:/usr/local/dockercompose/elasticsearch/config:rw
+      - discovery.type=single-node #以单一节点模式启动
+      - "ES_JAVA_OPTS=-Xms512m -Xmx512m" #设置使用jvm内存大小
+#       # - network.host=0.0.0.0
+#       # - http.host=0.0.0.0
+#       # - http.cors.allow-origin="*"
+#       # - node.name=elasticsearch
+#       # - cluster.name=elasticsearch
+      # - bootstrap.memory_lock=true
+      - xpack.security.enabled=false
+#       # - xpack.security.http.ssl.enabled=false
+#       # - xpack.security.transport.ssl.enabled=false
+#     #   # - "ELASTIC_PASSWORD=123456"    #密码
+#     volumes:
+#     # 加上会启动报错
+#       # - ./es/config/elasticsearch.yml:/usr/share/elasticsearch/config/elasticsearch.yml 
+#       - ./es/data:/usr/share/elasticsearch/data
+#       - ./es/plugins:/usr/share/elasticsearch/plugins 
+#       - ./es/logs:/user/share/elasticsearch/logs
     ports:
       - 9200:9200
       - 9300:9300
+    networks:
+      - elasticsearch  
   kibana:
-    image: kibana:8.8.1
+    image: kibana:8.11.0
     container_name: kibana
+    restart: always
     depends_on:
       - elasticsearch #kibana在elasticsearch启动之后再启动
     environment:
-      # ELASTICSEARCH_HOSTS: http://elasticsearch:9200 #设置访问elasticsearch的地址
-      I18N_LOCALE: zh-CN
+#       - "elasticsearch.hosts=http:// elasticsearch:9200" #设置访问elasticsearch的地址
+#       # - "ELASTICSEARCH_USERNAME=elastic"    
+#       # - "ELASTICSEARCH_PASSWORD=123456"    #elastic密码
+      - "I18N_LOCALE=zh-CN"                 #中文
     ports:
       - 5601:5601
+    networks:
+        - elasticsearch  
+networks:
+    elasticsearch:
+        external: true
+
 ```      
+此时，在浏览器输入地址访问：http://192.168.150.101:5601，即可看到结果
+
+docker 
 ```s
-vim /etc/security/limits.conf
- 
-* soft nofile 65536
-* hard nofile 65536
- 
-#修改追加内容 
- 
-vim /etc/sysctl.conf
-vm.max_map_count=662144
- 
-立即生效
-sysctl -p
- 
-# 重启服务器
-reboot
-
-docker pull elasticsearch:8.6.1
-
-
-mkdir -p  /mount/docker/elasticsearch/data/ 
-mkdir -p  /mount/docker/elasticsearch/config/
-mkdir -p /mount/docker/elasticsearch/plugins/
-
-# 配置文件为yml类型，需要注意http.host:后面有一个空格
-vim /mount/docker/elasticsearch/config/elasticsearch.yml
- 
-cluster.name: "docker-cluster"
-network.host: 0.0.0.0
-# 允许远程访问
-http.host: 0.0.0.0 
-http.cors.enabled: true
-http.cors.allow-origin: "*"
-http.cors.allow-headers: Authorization
-#是否开启ssl加密访问
-#curl 127.0.0.1:9200返回empty。。。。时使用
-xpack.security.enabled: false
-
-
-#赋予文件权限
-chmod -R 777 /mount/docker/elasticsearch/
-
 docker run -p 9200:9200 -p 9300:9300 --name elasticsearch \
 -e  "discovery.type=single-node" \
 -e ES_JAVA_OPTS="-Xms512m -Xmx1g" \

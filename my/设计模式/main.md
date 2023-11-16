@@ -2680,6 +2680,410 @@ fn main() {
     red_rectangle.draw();
 }
 ```
+## 外观模式
+外观模式（Facade Pattern）隐藏系统的复杂性，并向客户端提供了一个客户端可以访问系统的接口。它向现有的系统添加一个接口，来隐藏系统的复杂性。
+**举个例子** ：就像电脑的usb接口，自己内部实现了复杂的usb协议，自己却只提供了接口，让我们能够即插即用向我们屏蔽了，底层协议的细节。
+### 介绍
+**意图**：为子系统中的一组接口提供一个一致的界面，外观模式定义了一个高层接口，这个接口使得这一子系统更加容易使用。
+
+**主要解决**：降低访问复杂系统的内部子系统时的复杂度，简化客户端之间的接口。
+
+
+**应用实例**： 
+去医院看病，可能要去挂号、门诊、划价、取药，让患者或患者家属觉得很复杂，如果有提供接待人员，只让接待人员来处理，就很方便。
+
+**优点**： 1、减少系统相互依赖。 2、提高灵活性。 3、提高了安全性。
+
+**缺点**：不符合开闭原则，如果要改东西很麻烦，继承重写都不合适。
+
+
+### 实现
+我们将创建一个 Shape 接口和实现了 Shape 接口的实体类。下一步是定义一个外观类 ShapeMaker。 我们采用把所有的实现类封装在shapemaker，由shapemaker提供统一的接口，使我们能够方便调用。
+
+ShapeMaker 类使用实体类来代表用户对这些类的调用。FacadePatternDemo 类使用 ShapeMaker 类来显示结果。
+
+外观模式的 UML 图
+![Alt text](image-22.png)
+### java
+**步骤 1**
+创建一个接口。
+Shape.java
+```java
+public interface Shape {
+   void draw();
+}
+```
+
+**步骤 2**
+创建实现接口的实体类。
+
+Rectangle.java
+```java
+public class Rectangle implements Shape {
+ 
+   @Override
+   public void draw() {
+      System.out.println("Rectangle::draw()");
+   }
+}
+```
+
+Square.java
+```java
+public class Square implements Shape {
+ 
+   @Override
+   public void draw() {
+      System.out.println("Square::draw()");
+   }
+}
+```
+
+Circle.java
+```java
+public class Circle implements Shape {
+ 
+   @Override
+   public void draw() {
+      System.out.println("Circle::draw()");
+   }
+}
+```
+
+**步骤 3**
+创建一个外观类,这个外观类中，封装装了上述实现类的方法，这样我们就可以通过外观类中提供的方法，间接调用底层继承shape抽象类的实体类实现的方法。
+
+ShapeMaker.java
+```java
+public class ShapeMaker {
+   private Shape circle;
+   private Shape rectangle;
+   private Shape square;
+ 
+   public ShapeMaker() {
+      circle = new Circle();
+      rectangle = new Rectangle();
+      square = new Square();
+   }
+ 
+   public void drawCircle(){
+      circle.draw();
+   }
+   public void drawRectangle(){
+      rectangle.draw();
+   }
+   public void drawSquare(){
+      square.draw();
+   }
+}
+```
+
+**步骤 4**
+使用该外观类画出各种类型的形状,由下面的代码我们可以看到，我们可以调用shapemaker的方法间接调用底层实现类的方法。
+```java
+FacadePatternDemo.java
+public class FacadePatternDemo {
+   public static void main(String[] args) {
+      ShapeMaker shapeMaker = new ShapeMaker();
+ 
+      shapeMaker.drawCircle();
+      shapeMaker.drawRectangle();
+      shapeMaker.drawSquare();      
+   }
+}
+```
+
+**步骤 5**
+执行程序，输出结果：
+```shell
+Circle::draw()
+Rectangle::draw()
+Square::draw()
+```
+### rust
+rsut实现的大致思路和java相同，就不再赘述过程。
+```rs
+// 创建形状接口
+trait Shape {
+    fn draw(&self);
+}
+struct  Rectangle {}
+struct Circle{}
+struct Square{}
+impl Shape for Rectangle {
+    fn draw(&self) {
+        println!("Shape: Rectangle");
+    }
+}
+impl Shape for Circle {
+    fn draw(&self) {
+        println!("Shape: Circle");
+    }
+}
+impl Shape for Square {
+    fn draw(&self) {
+        println!("Shape: Square");
+    }
+}
+// 创建外观
+struct ShapeMaker{
+    rectangle:Rectangle,
+    circle:Circle,
+    square:Square
+}
+impl ShapeMaker {
+    fn draw_rectangle(&self) {
+        self.rectangle.draw();
+    }
+    fn draw_circle(&self) {
+        self.circle.draw();
+    }
+    fn draw_square(&self) {
+        self.square.draw();
+    }
+}
+fn main() {
+    //创建接口实体
+    let shape_maker=ShapeMaker{rectangle:Rectangle {  },circle:Circle {  },square:Square {  }};
+    // 体现接口抽象实现的各种方法
+    shape_maker.draw_circle();
+    shape_maker.draw_rectangle();
+    shape_maker.draw_square();
+}
+```
+## 享元模式
+享元模式（Flyweight Pattern）主要用于减少创建对象的数量，以减少内存占用和提高性能。这种类型的设计模式属于结构型模式，它提供了减少对象数量从而改善应用所需的对象结构的方式，可使我们能够重复利用对象，使我们减少重复创建和销毁对象造成的开销，从而提升程序的运行效率。
+
+
+享元模式尝试重用现有的同类对象，如果未找到匹配的对象，则创建新对象。我们将通过创建 5 个对象来画出 20 个分布于不同位置的圆来演示这种模式。由于只有 5 种可用的颜色，所以 color 属性被用来检查现有的 Circle 对象。
+
+### 介绍
+- **意图**：运用共享技术有效地支持大量细粒度的对象。
+
+- **主要解决**：在有大量对象时，有可能会造成内存溢出，我们把其中共同的部分抽象出来，如果有相同的业务请求，直接返回在内存中已有的对象，避免重新创建。
+
+- **何时使用**： 
+1. 系统中有大量重可复利用的对象。 
+2. 这些对象消耗大量内。 
+3. 对象的创建和销毁较为浪费系统资源。
+3. 这些对象的状态大部分可以外部化。
+4. 这些对象可以按照内蕴状态分为很多组，当把外蕴对象从对象中剔除出来时，每一组对象都可以用一个对象来代替。
+5. 系统不依赖于这些对象身份，这些对象是不可分辨的。
+
+- **应用实例**： 1、JAVA 中的 String，如果有则返回，如果没有则创建一个字符串保存在字符串缓存池里面。 2、数据库的连接池。
+
+- **优点**：大大减少对象的创建，降低系统的内存，使效率提高。
+- **缺点**：提高了系统的复杂度，需要分离出外部状态和内部状态，而且外部状态具有固有化的性质，不应该随着内部状态的变化而变化，否则会造成系统的混乱。
+
+
+
+### 实现
+我们将创建一个 Shape 接口和实现了 Shape 接口的实体类 Circle。下一步是定义工厂类 ShapeFactory。
+
+ShapeFactory 有一个 Circle 的 HashMap，其中键名为 Circle 对象的颜色。无论何时接收到请求，都会创建一个特定颜色的圆。ShapeFactory 检查它的 HashMap 中的 circle 对象，如果找到 Circle 对象，则返回该对象，否则将创建一个存储在 hashmap 中以备后续使用的新对象，并把该对象返回到客户端。
+
+FlyWeightPatternDemo 类使用 ShapeFactory 来获取 Shape 对象。它将向 ShapeFactory 传递信息（red / green / blue/ black / white），以便获取它所需对象的颜色。
+
+享元模式的 UML 图
+![Alt text](image-23.png)
+
+### java
+**步骤 1**
+创建一个接口。
+
+Shape.java
+```java
+public interface Shape {
+   void draw();
+}
+```
+
+**步骤 2**
+创建实现接口的实体类。
+
+Circle.java
+```java
+public class Circle implements Shape {
+   private String color;
+   private int x;
+   private int y;
+   private int radius;
+ 
+   public Circle(String color){
+      this.color = color;     
+   }
+ 
+   public void setX(int x) {
+      this.x = x;
+   }
+ 
+   public void setY(int y) {
+      this.y = y;
+   }
+ 
+   public void setRadius(int radius) {
+      this.radius = radius;
+   }
+ 
+   @Override
+   public void draw() {
+      System.out.println("Circle: Draw() [Color : " + color 
+         +", x : " + x +", y :" + y +", radius :" + radius);
+   }
+}
+```
+
+**步骤 3**
+创建一个工厂，生成基于给定信息的实体类的对象，我梦采用hashmap结构存储我们的数据。
+
+ShapeFactory.java
+```java
+import java.util.HashMap;
+ 
+public class ShapeFactory {
+   private static final HashMap<String, Shape> circleMap = new HashMap<>();
+ 
+   public static Shape getCircle(String color) {
+      Circle circle = (Circle)circleMap.get(color);
+ 
+      if(circle == null) {
+         circle = new Circle(color);
+         circleMap.put(color, circle);
+         System.out.println("Creating circle of color : " + color);
+      }
+      return circle;
+   }
+}
+```
+
+**步骤 4**
+使用该工厂，通过传递颜色信息来获取实体类的对象，并且我们是通过颜色判断，是否是需要同一个对象。
+
+FlyweightPatternDemo.java
+```java
+public class FlyweightPatternDemo {
+   private static final String colors[] = 
+      { "Red", "Green", "Blue", "White", "Black" };
+   public static void main(String[] args) {
+ 
+      for(int i=0; i < 20; ++i) {
+         Circle circle = 
+            (Circle)ShapeFactory.getCircle(getRandomColor());
+         circle.setX(getRandomX());
+         circle.setY(getRandomY());
+         circle.setRadius(100);
+         circle.draw();
+      }
+   }
+   private static String getRandomColor() {
+      return colors[(int)(Math.random()*colors.length)];
+   }
+   private static int getRandomX() {
+      return (int)(Math.random()*100 );
+   }
+   private static int getRandomY() {
+      return (int)(Math.random()*100);
+   }
+}
+```
+
+**步骤 5**
+执行程序，输出结果：
+```shell
+Creating circle of color : Black
+Circle: Draw() [Color : Black, x : 36, y :71, radius :100
+Creating circle of color : Green
+Circle: Draw() [Color : Green, x : 27, y :27, radius :100
+Creating circle of color : White
+Circle: Draw() [Color : White, x : 64, y :10, radius :100
+Creating circle of color : Red
+Circle: Draw() [Color : Red, x : 15, y :44, radius :100
+Circle: Draw() [Color : Green, x : 19, y :10, radius :100
+Circle: Draw() [Color : Green, x : 94, y :32, radius :100
+Circle: Draw() [Color : White, x : 69, y :98, radius :100
+Creating circle of color : Blue
+```
+### rust
+rust和java的实现相似，就不再赘述过程，不过需要**注意**的是，在rust中官方没有提供rand包我们需要引入第三方包，所以我们需要在Cargo.toml文件引入以下依赖
+```toml
+[dependencies]
+rand = "0.8.5"
+```
+#### 实现代码
+```rs
+use std::{collections::HashMap};
+use rand::{Rng};
+// 创建形状接口
+trait Shape {
+    fn draw(&self);
+}
+struct Circle{
+    color:String,
+    x:i32,
+    y:i32,
+    radius:i32,
+}
+impl Shape for Circle {
+    fn draw(&self) {
+        println!("Circle: Draw() [Color: {},x: {},y: {},radius: {}]",self.color,self.x,self.y,self.radius);
+    }
+}
+impl Circle {
+    fn new(color:String)->Circle {
+        Circle{
+            color:color,
+            x:0,
+            y:0,
+            radius:0
+        }
+    }
+}
+// 设置形状工场，进行管理
+struct ShapeFactory{
+    circle_map:HashMap<String,Circle>
+} 
+impl ShapeFactory {
+    fn get_circle(&mut self,color:&str)->&mut Circle{
+
+        match self.circle_map.get(color) {
+            None=>{
+                self.circle_map.insert(color.to_owned(),Circle::new(color.to_owned()));  
+                println!("Creating circle of color : {}" ,color);
+            }
+            Some(_)=>{
+                println!("已有触发享元")
+            }
+        };
+        self.circle_map.get_mut(color).unwrap()
+    }
+}
+fn get_rand_color()->& 'static str {
+    COLORS[rand::thread_rng().gen_range(0..COLORS.len())]
+}
+fn get_randx()->i32 {
+    rand::thread_rng().gen_range(0..100)
+}
+fn get_randy()->i32 {
+    rand::thread_rng().gen_range(0..100)
+}
+const  COLORS: [&str; 5]=["Red", "Green", "Blue", "White", "Black" ];
+
+fn main() {
+  
+    let  mut shape_factory=ShapeFactory{circle_map:HashMap::new()};
+    for _x in 1..=5 {
+        let  color=shape_factory.get_circle(get_rand_color());
+        color.x=get_randx();
+        color.y=get_randy();
+        color.radius=100;
+        color.draw();
+    }
+    // println!("{}",get_rand_color());
+        
+    
+
+}
+```
 # 模板方法
 **模板方法**定义一个操作中的算法的骨架，而将这一些步骤延迟到子类中。模板方式使得子类可以不改变一个算法的结构可重新定义该算法的某些特定步骤。
 # 迪米特法则

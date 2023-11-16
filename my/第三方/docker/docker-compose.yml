@@ -1,49 +1,49 @@
 version: '3'
 services:
   elasticsearch:
-    image: elasticsearch:8.6.1
+    image: elasticsearch:8.11.0
     container_name: elasticsearch
     restart: always
 #     privileged: true
     environment:
       - discovery.type=single-node #以单一节点模式启动
-      - "ES_JAVA_OPTS=-Xms512m -Xmx512m" #设置使用jvm内存大小
-#       # - network.host=0.0.0.0
-#       # - http.host=0.0.0.0
-#       # - http.cors.allow-origin="*"
-#       # - node.name=elasticsearch
-#       # - cluster.name=elasticsearch
-      # - bootstrap.memory_lock=true
-      - xpack.security.enabled=false
-#       # - xpack.security.http.ssl.enabled=false
-#       # - xpack.security.transport.ssl.enabled=false
-#     #   # - "ELASTIC_PASSWORD=123456"    #密码
-#     volumes:
-#     # 加上会启动报错
-#       # - ./es/config/elasticsearch.yml:/usr/share/elasticsearch/config/elasticsearch.yml 
-#       - ./es/data:/usr/share/elasticsearch/data
-#       - ./es/plugins:/usr/share/elasticsearch/plugins 
-#       - ./es/logs:/user/share/elasticsearch/logs
+      - ES_JAVA_OPTS=-Xms512m -Xmx512m #设置使用jvm内存大小
+      - cluster.name=elasticsearch #设置集群名称为elasticsearch
+      - node.name=elastic01 #设置节点名称为elasticsearch
+      - network.host=0.0.0.0 # 网络访问限制，设置所有都可以访问
+      - http.host=0.0.0.0
+      - http.cors.allow-origin="*" # 表示支持所有域名
+      - bootstrap.memory_lock=true # 内存交换的选项，官网建议为true
+      - xpack.security.enabled=false # 修改安全配置 关闭 证书校验
+      - xpack.security.http.ssl.enabled=false
+      - xpack.security.transport.ssl.enabled=false
+      - ELASTIC_PASSWORD=123456   #密码
+      
+    # volumes:
+      # - ./es/config/elasticsearch.ymldocker:/usr/share/elasticsearch/config/elasticsearch.yml 
+      # - ./es/data:/usr/share/elasticsearch/data
+      - ./es/plugins:/usr/share/elasticsearch/plugins 
+      # - ./es/logs:/user/share/elasticsearch/logs
     ports:
       - 9200:9200
       - 9300:9300
     networks:
       - elasticsearch  
-  kibana:
-    image: kibana:8.6.1
-    container_name: kibana
-    restart: always
-    depends_on:
-      - elasticsearch #kibana在elasticsearch启动之后再启动
-    environment:
+#   kibana:
+#     image: kibana:8.11.0
+#     container_name: kibana
+#     restart: always
+#     depends_on:
+#       - elasticsearch #kibana在elasticsearch启动之后再启动
+#     environment:
 #       - "elasticsearch.hosts=http:// elasticsearch:9200" #设置访问elasticsearch的地址
-#       # - "ELASTICSEARCH_USERNAME=elastic"    
-#       # - "ELASTICSEARCH_PASSWORD=123456"    #elastic密码
-      - "I18N_LOCALE=zh-CN"                 #中文
-    ports:
-      - 5601:5601
-    networks:
-        - elasticsearch  
+# #       # - "ELASTICSEARCH_USERNAME=elastic"    
+# #       # - "ELASTICSEARCH_PASSWORD=123456"    #elastic密码
+#       - "I18N_LOCALE=zh-CN"                 #中文
+#     ports:
+#       - 5601:5601
+#     networks:
+#         - elasticsearch  
 networks:
     elasticsearch:
-        external: true
+        driver: bridge
