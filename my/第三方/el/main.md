@@ -619,19 +619,19 @@ mapping是对索引库中文档的约束，常见的mapping属性包括：
 - analyzer：使用哪种分词器
 - properties：该字段的子字段
 
-
+**格式**:
 ```json
 {
-    "age": 21,
-    "weight": 52.1,
-    "isMarried": false,
-    "info": "程序员Java讲师",
-    "email": "zy@qq.cn",
-    "score": [99.1, 99.5, 98.9],
-    "name": {
-        "firstName": "云",
-        "lastName": "赵"
-    }
+    "age": 21,
+    "weight": 52.1,
+    "isMarried": false,
+    "info": "程序员Java讲师",
+    "email": "zy@qq.cn",
+    "score": [99.1, 99.5, 98.9],
+    "name": {
+        "firstName": "云",
+        "lastName": "赵"
+    }
 }
 ```
 
@@ -658,31 +658,31 @@ mapping是对索引库中文档的约束，常见的mapping属性包括：
 - 请求路径：/索引库名，可以自定义
 - 请求参数：mapping映射
 
-格式：
+**格式**：
 
 ```json
-PUT /索引库名称
+PUT /索引库名称
 {
-  "mappings": {
-    "properties": {
-      "字段名":{
-        "type": "text",
-        "analyzer": "ik_smart"
-      },
-      "字段名2":{
-        "type": "keyword",
-        "index": "false"
-      },
-      "字段名3":{
-        "properties": {
-          "子字段": {
-            "type": "keyword"
-          }
-        }
-      },
+  "mappings": {
+    "properties": {
+      "字段名":{
+        "type": "text",
+        "analyzer": "ik_smart"
+      },
+      "字段名2":{
+        "type": "keyword",
+        "index": "false"
+      },
+      "字段名3":{
+        "properties": {
+          "子字段": {
+            "type": "keyword"
+          }
+        }
+      }
       // ...略
-    }
-  }
+    }
+  }
 }
 ```
 
@@ -691,31 +691,31 @@ PUT /索引库名称
 #### 示例：
 
 ```sh
-PUT /onenewcode
+PUT /onenewcode
 {
-  "mappings": {
-    "properties": {
-      "info":{
-        "type": "text",
-        "analyzer": "ik_smart"
-      },
-      "email":{
-        "type": "keyword",
-        "index": "falsae"
-      },
-      "name":{
-        "properties": {
-          "firstName": {
-            "type": "keyword"
-          }
-        }
-      },
+  "mappings":{
+    "properties":{
+      "info":{
+        "type":"text",
+        "analyzer":"ik_smart"
+      },
+      "email":{
+        "type":"keyword",
+        "index":false
+      },
+      "name":{
+        "properties":{
+          "firstName":{
+            "type":"keyword"
+          }
+        }
+      }
       // ... 略
-    }
-  }
+    }
+  }
 }
 ```
-
+![Alt text](image-16.png)
 ### 查询索引库
 
 **基本语法**：
@@ -731,7 +731,7 @@ PUT /onenewcode
 ```
 GET /索引库名
 ```
-
+![Alt text](image-17.png)
 
 
 **示例**：
@@ -750,23 +750,15 @@ GET /索引库名
 **语法说明**：
 
 ```json
-PUT /索引库名/_mapping
+PUT /索引库名/_mapping
 {
-  "properties": {
-    "新字段名":{
-      "type": "integer"
-    }
-  }
+  "properties": {
+    "新字段名":{
+      "type": "integer"
+    }
+  }
 }
 ```
-
-
-
-**示例**：
-
-![Alt text](image-15.png)
-
-
 
 
 
@@ -785,13 +777,7 @@ PUT /索引库名/_mapping
 ```
 DELETE /索引库名
 ```
-
-在kibana中测试：
-
-![Alt text](image-16.png)
-
-
-
+![Alt text](image-15.png)
 # 文档操作
 
 ## 新增文档
@@ -799,14 +785,14 @@ DELETE /索引库名
 **语法：**
 
 ```json
-POST /索引库名/_doc/文档id
+POST /索引库名/_doc/文档id
 {
-    "字段1": "值1",
-    "字段2": "值2",
-    "字段3": {
-        "子属性1": "值3",
-        "子属性2": "值4"
-    },
+    "字段1": "值1",
+    "字段2": "值2",
+    "字段3": {
+        "子属性1": "值3",
+        "子属性2": "值4"
+    },
     // ...
 }
 ```
@@ -814,20 +800,20 @@ POST /索引库名/_doc/文档id
 **示例：**
 
 ```json
-POST /onenewcode/_doc/1
+POST /onenewcode/_doc/1
 {
-    "info": "程序员Java讲师",
-    "email": "zy@qq.cn",
-    "name": {
-        "firstName": "云",
-        "lastName": "赵"
-    }
+    "info": "程序员Java讲师",
+    "email": "zy@qq.cn",
+    "name": {
+        "firstName": "云",
+        "lastName": "赵"
+    }
 }
 ```
 
 **响应：**
 
-![image-20210720212933362](assets/image-20210720212933362.png)
+![Alt text](image-18.png)
 
 
 
@@ -849,11 +835,11 @@ GET /onenewcode/_doc/1
 
 **查看结果：**
 
-![image-20210720213345003](assets/image-20210720213345003.png)
+![Alt text](image-19.png)
 
 
 
-## 3.3.删除文档
+## 删除文档
 
 删除使用DELETE请求，同样，需要根据id进行删除：
 
@@ -872,11 +858,11 @@ DELETE /onenewcode/_doc/1
 
 **结果：**
 
-![image-20210720213634918](assets/image-20210720213634918.png)
+![Alt text](image-20.png)
 
 
 
-## 3.4.修改文档
+## 修改文档
 
 修改有两种方式：
 
@@ -885,7 +871,7 @@ DELETE /onenewcode/_doc/1
 
 
 
-### 3.4.1.全量修改
+### 全量修改
 
 全量修改是覆盖原来的文档，其本质是：
 
@@ -899,10 +885,10 @@ DELETE /onenewcode/_doc/1
 **语法：**
 
 ```json
-PUT /{索引库名}/_doc/文档id
+PUT /{索引库名}/_doc/文档id
 {
-    "字段1": "值1",
-    "字段2": "值2",
+    "字段1": "值1",
+    "字段2": "值2",
     // ... 略
 }
 
@@ -913,30 +899,30 @@ PUT /{索引库名}/_doc/文档id
 **示例：**
 
 ```json
-PUT /onenewcode/_doc/1
+PUT /onenewcode/_doc/1
 {
-    "info": "程序员高级Java讲师",
-    "email": "zy@qq.cn",
-    "name": {
-        "firstName": "云",
-        "lastName": "赵"
-    }
+    "info": "程序员高级Java讲师",
+    "email": "zy@qq.cn",
+    "name": {
+        "firstName": "云",
+        "lastName": "赵"
+    }
 }
 ```
 
 
 
-### 3.4.2.增量修改
+### 增量修改
 
 增量修改是只修改指定id匹配的文档中的部分字段。
 
 **语法：**
 
 ```json
-POST /{索引库名}/_update/文档id
+POST /{索引库名}/_update/文档id
 {
-    "doc": {
-         "字段名": "新的值",
+    "doc": {
+         "字段名": "新的值",
     }
 }
 ```
@@ -946,86 +932,62 @@ POST /{索引库名}/_update/文档id
 **示例：**
 
 ```json
-POST /onenewcode/_update/1
+POST /onenewcode/_update/1
 {
-  "doc": {
-    "email": "ZhaoYun@qq.cn"
-  }
+  "doc": {
+    "email": "ZhaoYun@qq.cn"
+  }
 }
 ```
 
 
 
-## 3.5.总结
-
-文档操作有哪些？
-
-- 创建文档：POST /{索引库名}/_doc/文档id   { json文档 }
-- 查询文档：GET /{索引库名}/_doc/文档id
-- 删除文档：DELETE /{索引库名}/_doc/文档id
-- 修改文档：
-  - 全量修改：PUT /{索引库名}/_doc/文档id { json文档 }
-  - 增量修改：POST /{索引库名}/_update/文档id { "doc": {字段}}
-
-
-
-# 4.RestAPI
+# RestAPI
 
 ES官方提供了各种不同语言的客户端，用来操作ES。这些客户端的本质就是组装DSL语句，通过http请求发送给ES。官方文档地址：https://www.elastic.co/guide/en/elasticsearch/client/index.html
 
-其中的Java Rest Client又包括两种：
+之前官方提供了Java Rest Client又包括两种：
 
 - Java Low Level Rest Client
 - Java High Level Rest Client
 
-![image-20210720214555863](assets/image-20210720214555863.png)
+但是在最新版中官方已经推出新版的客户端：
+Elasticsearch Java API Client 
+接下来本文的所有教程也是基于此库
 
-我们学习的是Java HighLevel Rest Client客户端API
+## Demo工程
+
+### 导入数据
+
+数据库数据：
 
 
-## 4.0.导入Demo工程
-
-### 4.0.1.导入数据
-
-首先导入课前资料提供的数据库数据：
-
-![image-20210720220400297](assets/image-20210720220400297.png) 
 
 数据结构如下：
 
 ```sql
-CREATE TABLE `tb_hotel` (
-  `id` bigint(20) NOT NULL COMMENT '酒店id',
-  `name` varchar(255) NOT NULL COMMENT '酒店名称；例：7天酒店',
-  `address` varchar(255) NOT NULL COMMENT '酒店地址；例：航头路',
-  `price` int(10) NOT NULL COMMENT '酒店价格；例：329',
-  `score` int(2) NOT NULL COMMENT '酒店评分；例：45，就是4.5分',
-  `brand` varchar(32) NOT NULL COMMENT '酒店品牌；例：如家',
-  `city` varchar(32) NOT NULL COMMENT '所在城市；例：上海',
-  `star_name` varchar(16) DEFAULT NULL COMMENT '酒店星级，从低到高分别是：1星到5星，1钻到5钻',
-  `business` varchar(255) DEFAULT NULL COMMENT '商圈；例：虹桥',
-  `latitude` varchar(32) NOT NULL COMMENT '纬度；例：31.2497',
-  `longitude` varchar(32) NOT NULL COMMENT '经度；例：120.3925',
-  `pic` varchar(255) DEFAULT NULL COMMENT '酒店图片；例:/img/1.jpg',
-  PRIMARY KEY (`id`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+CREATE TABLE `tb_hotel` (
+  `id` bigint(20) NOT NULL COMMENT '酒店id',
+  `name` varchar(255) NOT NULL COMMENT '酒店名称；例：7天酒店',
+  `address` varchar(255) NOT NULL COMMENT '酒店地址；例：航头路',
+  `price` int(10) NOT NULL COMMENT '酒店价格；例：329',
+  `score` int(2) NOT NULL COMMENT '酒店评分；例：45，就是4.5分',
+  `brand` varchar(32) NOT NULL COMMENT '酒店品牌；例：如家',
+  `city` varchar(32) NOT NULL COMMENT '所在城市；例：上海',
+  `star_name` varchar(16) DEFAULT NULL COMMENT '酒店星级，从低到高分别是：1星到5星，1钻到5钻',
+  `business` varchar(255) DEFAULT NULL COMMENT '商圈；例：虹桥',
+  `latitude` varchar(32) NOT NULL COMMENT '纬度；例：31.2497',
+  `longitude` varchar(32) NOT NULL COMMENT '经度；例：120.3925',
+  `pic` varchar(255) DEFAULT NULL COMMENT '酒店图片；例:/img/1.jpg',
+  PRIMARY KEY (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 ```
 
-### 4.0.2.导入项目
-
-然后导入课前资料提供的项目:
-
-![image-20210720220503411](assets/image-20210720220503411.png) 
+### 导入项目
 
 
 
-项目结构如图：
-
-![image-20210720220647541](assets/image-20210720220647541.png)
-
-
-
-### 4.0.3.mapping映射分析
+### mapping映射分析
 
 创建索引库，最关键的是mapping映射，而mapping映射要考虑的信息包括：
 
@@ -1110,110 +1072,162 @@ PUT /hotel
 
 地理坐标说明：
 
-![image-20210720222110126](assets/image-20210720222110126.png)
+![Alt text](image-21.png)
 
 copy_to说明：
 
-![image-20210720222221516](assets/image-20210720222221516.png)
+![Alt text](image-22.png)
 
 
 
-### 4.0.4.初始化RestClient
+### 初始化RestClient
 
-在elasticsearch提供的API中，与elasticsearch一切交互都封装在一个名为RestHighLevelClient的类中，必须先完成这个对象的初始化，建立与elasticsearch的连接。
+在elasticsearch提供的API中，与elasticsearch一切交互都封装在一个名为ElasticsearchClient的类中，必须先完成这个对象的初始化，建立与elasticsearch的连接。
 
-分为三步：
+
 
 1）引入es的RestHighLevelClient依赖：
 
-```xml
-<dependency>
-    <groupId>org.elasticsearch.client</groupId>
-    <artifactId>elasticsearch-rest-high-level-client</artifactId>
-</dependency>
+```groovy
+plugins {
+    id 'org.springframework.boot' version '3.0.2'
+    id 'io.spring.dependency-management' version '1.1.0'
+    id 'java'
+}
+
+group = 'com.example'
+version = '0.0.1-SNAPSHOT'
+sourceCompatibility = '17'
+
+repositories {
+    mavenCentral()
+}
+// 强制实行是统一格式编码
+tasks.withType(JavaCompile) {
+    options.encoding = "utf-8"
+}
+tasks.withType(Javadoc) {
+    options.encoding = "utf-8"
+}
+
+dependencies {
+    implementation 'org.springframework.boot:spring-boot-starter'
+//    implementation 'org.springframework.boot:spring-boot-starter-data-elasticsearch'
+    implementation('co.elastic.clients:elasticsearch-java:8.5.3')
+//    implementation 'com.fasterxml.jackson.core:jackson-databind:2.12.3'
+    implementation  'com.baomidou:mybatis-plus-boot-starter:3.5.3.2'
+    compileOnly 'org.projectlombok:lombok:1.18.30'
+    annotationProcessor 'org.projectlombok:lombok:1.18.30'
+    implementation('mysql:mysql-connector-java:8.0.33')
+    implementation('com.alibaba:fastjson:2.0.32')
+    implementation('org.apache.commons:commons-lang3')
+    implementation 'org.springframework.boot:spring-boot-starter-web'
+    testImplementation 'org.springframework.boot:spring-boot-starter-test'
+}
+
+tasks.named('test') {
+    useJUnitPlatform()
+}
+
+
 ```
 
 
 
-2）因为SpringBoot默认的ES版本是7.6.2，所以我们需要覆盖默认的ES版本：
 
-```xml
-<properties>
-    <java.version>1.8</java.version>
-    <elasticsearch.version>7.12.1</elasticsearch.version>
-</properties>
-```
-
-
-
-3）初始化RestHighLevelClient：
+2）初始化es客户端：
 
 初始化的代码如下：
 
 ```java
-RestHighLevelClient client = new RestHighLevelClient(RestClient.builder(
-        HttpHost.create("http://192.168.150.101:9200")
-));
+@Configuration
+public class ESConfig {
+    @Value("${spring.elasticsearch.uris}")
+    private String urls;
+
+    @Bean
+    public ElasticsearchClient ESConfigClient(){
+        System.out.println(urls);
+         // Create the low-level client 创建低级客户端
+         RestClient restClient = RestClient
+                 .builder(HttpHost.create(urls)).build();
+         // 创建json映射器
+        ElasticsearchTransport transport=new RestClientTransport(restClient,new JacksonJsonpMapper());
+        // 创建api客户端
+        return new ElasticsearchClient(transport);
+     }
+}
+
+
 ```
 
 
 
-这里为了单元测试方便，我们创建一个测试类HotelIndexTest，然后将初始化的代码编写在@BeforeEach方法中：
+这里为了单元测试方便，我们创建一个测试类HotelIndexTest，然后将初始化的类注入测试类中：
 
 ```java
-package cn.qq.hotel;
+package com.onenewcode.esdemo;
 
-import org.apache.http.HttpHost;
-import org.elasticsearch.client.RestHighLevelClient;
-import org.junit.jupiter.api.AfterEach;
-import org.junit.jupiter.api.BeforeEach;
+import co.elastic.clients.elasticsearch.ElasticsearchClient;
+import co.elastic.clients.elasticsearch.core.GetResponse;
+import co.elastic.clients.elasticsearch.core.IndexResponse;
+import com.alibaba.fastjson.JSON;
+import com.onenewcode.esdemo.pojo.Hotel;
+import com.onenewcode.esdemo.pojo.HotelDoc;
+import com.onenewcode.esdemo.service.impl.HotelService;
+import org.elasticsearch.client.RequestOptions;
 import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.context.SpringBootTest;
 
 import java.io.IOException;
+import java.util.List;
 
-public class HotelIndexTest {
-    private RestHighLevelClient client;
+/**
+ * @author 29071
+ * @version 1.0
+ * @data 2023/11/20 8:57
+ */
+@SpringBootTest
+ class HotelDocumentTest {
+    @Autowired
+    private ElasticsearchClient esClient;
+    @Autowired
+    HotelService hotelService;
 
-    @BeforeEach
-    void setUp() {
-        this.client = new RestHighLevelClient(RestClient.builder(
-                HttpHost.create("http://192.168.150.101:9200")
-        ));
-    }
-
-    @AfterEach
-    void tearDown() throws IOException {
-        this.client.close();
-    }
 }
+
 ```
 
 
 
 
 
-## 4.1.创建索引库
+## 创建索引库
 
-### 4.1.1.代码解读
+### 代码解读
 
-创建索引库的API如下：
-
-![image-20210720223049408](assets/image-20210720223049408.png)
 
 代码分为三步：
 
-- 1）创建Request对象。因为是创建索引库的操作，因此Request是CreateIndexRequest。
+- 1）创建CreateIndexRequest 对象。因为是创建索引库的操作.
 - 2）添加请求参数，其实就是DSL的JSON参数部分。因为json字符串很长，这里是定义了静态字符串常量MAPPING_TEMPLATE，让代码看起来更加优雅。
-- 3）发送请求，client.indices()方法的返回值是IndicesClient类型，封装了所有与索引库操作有关的方法。
+```java
+CreateIndexRequest  request = CreateIndexRequest.of(i -> i
+                .index("hotel")
+                .withJson(new StringReader(MAPPING_TEMPLATE))
+        );
+        //构建是否存在的请求
+boolean response =esClient.indices().create(request).acknowledged();
+```
 
 
 
-### 4.1.2.完整示例
-
-在hotel-demo的cn.qq.hotel.constants包下，创建一个类，定义mapping映射的JSON字符串常量：
+### 完整示例
+在项目的constants包下，创建一个类，定义mapping映射的JSON字符串常量：
 
 ```java
-package cn.qq.hotel.constants;
+
 
 public class HotelConstants {
     public static final String MAPPING_TEMPLATE = "{\n" +
@@ -1270,23 +1284,31 @@ public class HotelConstants {
 
 
 
-在hotel-demo中的HotelIndexTest测试类中，编写单元测试，实现创建索引：
+的HotelIndexTest测试类中，编写单元测试，实现创建索引：
 
 ```java
-@Test
-void createHotelIndex() throws IOException {
-    // 1.创建Request对象
-    CreateIndexRequest request = new CreateIndexRequest("hotel");
-    // 2.准备请求的参数：DSL语句
-    request.source(MAPPING_TEMPLATE, XContentType.JSON);
-    // 3.发送请求
-    client.indices().create(request, RequestOptions.DEFAULT);
-}
+   @Test
+    void testCreateIndex() throws IOException {
+//     设置索引库名称，并读取json设置映射关系
+        CreateIndexRequest  request = CreateIndexRequest.of(i -> i
+                .index("hotel")
+                .withJson(new StringReader(MAPPING_TEMPLATE))
+        );
+        //构建是否存在的请求
+        ExistsRequest existsRequest = ExistsRequest.of(i->i.index("hotel"));
+
+        if (esClient.indices().exists(existsRequest).value()){
+            System.out.println("该索引已经存在");
+        }else {
+//            创建新索引
+            boolean response =esClient.indices().create(request).acknowledged();
+        }
+    }
 ```
 
 
 
-## 4.2.删除索引库
+## 删除索引库
 
 删除索引库的DSL语句非常简单：
 
@@ -1302,108 +1324,42 @@ DELETE /hotel
 
 所以代码的差异，注意体现在Request对象上。依然是三步走：
 
-- 1）创建Request对象。这次是DeleteIndexRequest对象
-- 2）准备参数。这里是无参
-- 3）发送请求。改用delete方法
 
 在hotel-demo中的HotelIndexTest测试类中，编写单元测试，实现删除索引：
 
 ```java
 @Test
-void testDeleteHotelIndex() throws IOException {
-    // 1.创建Request对象
-    DeleteIndexRequest request = new DeleteIndexRequest("hotel");
-    // 2.发送请求
-    client.indices().delete(request, RequestOptions.DEFAULT);
-}
+    void testDeleteIndex() throws IOException {
+        esClient.indices().delete(c -> c
+                .index("hotel")
+        );
+    }
 ```
 
 
 
-## 4.3.判断索引库是否存在
-
-判断索引库是否存在，本质就是查询，对应的DSL是：
-
-```json
-GET /hotel
-```
-
-
-
-因此与删除的Java代码流程是类似的。依然是三步走：
-
-- 1）创建Request对象。这次是GetIndexRequest对象
-- 2）准备参数。这里是无参
-- 3）发送请求。改用exists方法
-
-```java
-@Test
-void testExistsHotelIndex() throws IOException {
-    // 1.创建Request对象
-    GetIndexRequest request = new GetIndexRequest("hotel");
-    // 2.发送请求
-    boolean exists = client.indices().exists(request, RequestOptions.DEFAULT);
-    // 3.输出
-    System.err.println(exists ? "索引库已经存在！" : "索引库不存在！");
-}
-```
-
-
-
-## 4.4.总结
-
-JavaRestClient操作elasticsearch的流程基本类似。核心是client.indices()方法来获取索引库的操作对象。
-
-索引库操作的基本步骤：
-
-- 初始化RestHighLevelClient
-- 创建XxxIndexRequest。XXX是Create、Get、Delete
-- 准备DSL（ Create时需要，其它是无参）
-- 发送请求。调用RestHighLevelClient#indices().xxx()方法，xxx是create、exists、delete
 
 
 
 
-
-# 5.RestClient操作文档
+# RestClient操作文档
 
 为了与索引库操作分离，我们再次参加一个测试类，做两件事情：
 
-- 初始化RestHighLevelClient
+- 初始化ElasticsearchClient
 - 我们的酒店数据在数据库，需要利用IHotelService去查询，所以注入这个接口
 
 ```java
-package cn.qq.hotel;
 
-import cn.qq.hotel.pojo.Hotel;
-import cn.qq.hotel.service.IHotelService;
-import org.junit.jupiter.api.AfterEach;
-import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Test;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.context.SpringBootTest;
-
-import java.io.IOException;
-import java.util.List;
 
 @SpringBootTest
 public class HotelDocumentTest {
     @Autowired
-    private IHotelService hotelService;
+    private ElasticsearchClient esClient;
+    @Autowired
+    HotelService hotelService;
 
-    private RestHighLevelClient client;
 
-    @BeforeEach
-    void setUp() {
-        this.client = new RestHighLevelClient(RestClient.builder(
-                HttpHost.create("http://192.168.150.101:9200")
-        ));
-    }
-
-    @AfterEach
-    void tearDown() throws IOException {
-        this.client.close();
-    }
 }
 
 ```
@@ -1412,11 +1368,11 @@ public class HotelDocumentTest {
 
 
 
-## 5.1.新增文档
+## 新增文档
 
 我们要将数据库的酒店数据查询出来，写入elasticsearch中。
 
-### 5.1.1.索引库实体类
+### 索引库实体类
 
 数据库查询后的结果是一个Hotel类型的对象。结构如下：
 
@@ -1447,10 +1403,7 @@ public class Hotel {
 因此，我们需要定义一个新的类型，与索引库结构吻合：
 
 ```java
-package cn.qq.hotel.pojo;
 
-import lombok.Data;
-import lombok.NoArgsConstructor;
 
 @Data
 @NoArgsConstructor
@@ -1486,7 +1439,7 @@ public class HotelDoc {
 
 
 
-### 5.1.2.语法说明
+### 语法说明
 
 新增文档的DSL语句如下：
 
@@ -1498,23 +1451,8 @@ POST /{索引库名}/_doc/1
 }
 ```
 
-对应的java代码如图：
 
-![image-20210720230027240](assets/image-20210720230027240.png)
-
-
-
-可以看到与创建索引库类似，同样是三步走：
-
-- 1）创建Request对象
-- 2）准备请求参数，也就是DSL中的JSON文档
-- 3）发送请求
-
-变化的地方在于，这里直接使用client.xxx()的API，不再需要client.indices()了。
-
-
-
-### 5.1.3.完整代码
+### 完整代码
 
 我们导入酒店数据，基本流程一致，但是需要考虑几点变化：
 
@@ -1522,43 +1460,31 @@ POST /{索引库名}/_doc/1
 - hotel对象需要转为HotelDoc对象
 - HotelDoc需要序列化为json格式
 
-因此，代码整体步骤如下：
 
-- 1）根据id查询酒店数据Hotel
-- 2）将Hotel封装为HotelDoc
-- 3）将HotelDoc序列化为JSON
-- 4）创建IndexRequest，指定索引库名和id
-- 5）准备请求参数，也就是JSON文档
-- 6）发送请求
-
-在hotel-demo的HotelDocumentTest测试类中，编写单元测试：
+在HotelDocumentTest测试类中，编写单元测试：
 
 ```java
-@Test
-void testAddDocument() throws IOException {
-    // 1.根据id查询酒店数据
-    Hotel hotel = hotelService.getById(61083L);
-    // 2.转换为文档类型
-    HotelDoc hotelDoc = new HotelDoc(hotel);
-    // 3.将HotelDoc转json
-    String json = JSON.toJSONString(hotelDoc);
-
-    // 1.准备Request对象
-    IndexRequest request = new IndexRequest("hotel").id(hotelDoc.getId().toString());
-    // 2.准备Json文档
-    request.source(json, XContentType.JSON);//fastjson有api
-    // 3.发送请求
-    client.index(request, RequestOptions.DEFAULT);
-}
+   @Test
+    void testAddDocument() throws IOException {
+        // 1.查询数据库hotel数据
+        Hotel hotel = hotelService.getById(61083L);
+        // 2.转换为HotelDoc
+        HotelDoc hotelDoc = new HotelDoc(hotel);
+        IndexResponse response = esClient.index(i -> i
+                .index("hotel")
+                .id(hotelDoc.getId().toString())
+                .document(hotelDoc)
+        );
+    }
 ```
 
 
 
 
 
-## 5.2.查询文档
+## 查询文档
 
-### 5.2.1.语法说明
+### 语法说明
 
 查询的DSL语句如下：
 
@@ -1573,44 +1499,36 @@ GET /hotel/_doc/{id}
 
 不过查询的目的是得到结果，解析为HotelDoc，因此难点是结果的解析。完整代码如下：
 
-![image-20210720230811674](assets/image-20210720230811674.png)
-
-可以看到，结果是一个JSON，其中文档放在一个`_source`属性中，因此解析就是拿到`_source`，反序列化为Java对象即可。
-
-与之前类似，也是三步走：
-
-- 1）准备Request对象。这次是查询，所以是GetRequest
-- 2）发送请求，得到结果。因为是查询，这里调用client.get()方法
-- 3）解析结果，就是对JSON做反序列化
 
 
+### 完整代码
 
-
-
-### 5.2.2.完整代码
-
-在hotel-demo的HotelDocumentTest测试类中，编写单元测试：
+在HotelDocumentTest测试类中，编写单元测试：
 
 ```java
-@Test
-void testGetDocumentById() throws IOException {
-    // 1.准备Request
-    GetRequest request = new GetRequest("hotel", "61082");
-    // 2.发送请求，得到响应
-    GetResponse response = client.get(request, RequestOptions.DEFAULT);
-    // 3.解析响应结果
-    String json = response.getSourceAsString();
+    @Test
+    void testGetDocumentById() throws IOException {
+        GetResponse<HotelDoc> response = esClient.get(g -> g
+                        .index("hotel") //选择索引库
+                        .id("61083"),
+                HotelDoc.class //选择查询对象的映射
+        );
 
-    HotelDoc hotelDoc = JSON.parseObject(json, HotelDoc.class);
-    System.out.println(hotelDoc);
-}
+        if (response.found()) {
+            //获取结果
+            HotelDoc hotelDoc = response.source();
+            System.out.println("查询结果"+hotelDoc);
+        } else {
+            System.out.println("未查询到数据");
+        }
+    }
 ```
 
 
 
 
 
-## 5.3.删除文档
+## 删除文档
 
 删除的DSL为是这样的：
 
@@ -1618,24 +1536,15 @@ void testGetDocumentById() throws IOException {
 DELETE /hotel/_doc/{id}
 ```
 
-与查询相比，仅仅是请求方式从DELETE变成GET，可以想象Java代码应该依然是三步走：
-
-- 1）准备Request对象，因为是删除，这次是DeleteRequest对象。要指定索引库名和id
-- 2）准备参数，无参
-- 3）发送请求。因为是删除，所以是client.delete()方法
-
-
+与查询相比，仅仅是请求方式从DELETE变成GET.
 
 在hotel-demo的HotelDocumentTest测试类中，编写单元测试：
-
 ```java
 @Test
-void testDeleteDocument() throws IOException {
-    // 1.准备Request
-    DeleteRequest request = new DeleteRequest("hotel", "61083");
-    // 2.发送请求
-    client.delete(request, RequestOptions.DEFAULT);
-}
+    void testDeleteDocumentById() throws IOException {
+        esClient.delete(d -> d.index("hotel").id("61083"));
+    }
+
 ```
 
 
@@ -1644,62 +1553,7 @@ void testDeleteDocument() throws IOException {
 
 
 
-## 5.4.修改文档
-
-### 5.4.1.语法说明
-
-修改我们讲过两种方式：
-
-- 全量修改：本质是先根据id删除，再新增
-- 增量修改：修改文档中的指定字段值
-
-
-
-在RestClient的API中，全量修改与新增的API完全一致，判断依据是ID：
-
-- 如果新增时，ID已经存在，则修改
-- 如果新增时，ID不存在，则新增
-
-这里不再赘述，我们主要关注增量修改。
-
-代码示例如图：
-
-![image-20210720231040875](assets/image-20210720231040875.png)
-
-与之前类似，也是三步走：
-
-- 1）准备Request对象。这次是修改，所以是UpdateRequest
-- 2）准备参数。也就是JSON文档，里面包含要修改的字段
-- 3）更新文档。这里调用client.update()方法
-
-
-
-
-
-### 5.4.2.完整代码
-
-在hotel-demo的HotelDocumentTest测试类中，编写单元测试：
-
-```java
-@Test
-void testUpdateDocument() throws IOException {
-    // 1.准备Request
-    UpdateRequest request = new UpdateRequest("hotel", "61083");
-    // 2.准备请求参数
-    request.doc(
-        "price", "952",
-        "starName", "四钻"
-    );
-    // 3.发送请求
-    client.update(request, RequestOptions.DEFAULT);
-}
-```
-
-
-
-
-
-## 5.5.批量导入文档
+## 批量导入文档
 
 案例需求：利用BulkRequest批量将数据库数据导入到索引库中。
 
@@ -1713,73 +1567,30 @@ void testUpdateDocument() throws IOException {
 
 
 
-### 5.5.1.语法说明
+### 完整代码
 
-批量处理BulkRequest，其本质就是将多个普通的CRUD请求组合在一起发送。
-
-其中提供了一个add方法，用来添加其他请求：
-
-![image-20210720232105943](assets/image-20210720232105943.png)
-
-可以看到，能添加的请求包括：
-
-- IndexRequest，也就是新增
-- UpdateRequest，也就是修改
-- DeleteRequest，也就是删除
-
-因此Bulk中添加了多个IndexRequest，就是批量新增功能了。示例：
-
-![image-20210720232431383](assets/image-20210720232431383.png)
-
-
-
-其实还是三步走：
-
-- 1）创建Request对象。这里是BulkRequest
-- 2）准备参数。批处理的参数，就是其它Request对象，这里就是多个IndexRequest
-- 3）发起请求。这里是批处理，调用的方法为client.bulk()方法
-
-
-
-我们在导入酒店数据时，将上述代码改造成for循环处理即可。
-
-### 5.5.2.完整代码
-
-在hotel-demo的HotelDocumentTest测试类中，编写单元测试：
+在HotelDocumentTest测试类中，编写单元测试：
 
 ```java
-@Test
-void testBulkRequest() throws IOException {
-    // 批量查询酒店数据
-    List<Hotel> hotels = hotelService.list();
-
-    // 1.创建Request
-    BulkRequest request = new BulkRequest();
-    // 2.准备参数，添加多个新增的Request
-    for (Hotel hotel : hotels) {
-        // 2.1.转换为文档类型HotelDoc
-        HotelDoc hotelDoc = new HotelDoc(hotel);
-        // 2.2.创建新增文档的Request对象
-        request.add(new IndexRequest("hotel")
-                    .id(hotelDoc.getId().toString())
-                    .source(JSON.toJSONString(hotelDoc), XContentType.JSON));
+    @Test
+    void testBulkRequest() throws IOException {
+        // 查询所有的酒店数据
+        List<Hotel> list = hotelService.list();
+        // 循环遍历
+        list.forEach(i->//循环闭包
+        {
+            try {//捕捉异常
+                esClient.index(
+                        x-> x.index("hotel").id(i.getId().toString())
+                                .document(new HotelDoc(i)));
+            } catch (IOException e) {
+                throw new RuntimeException(e);
+            }
+        });
     }
-    // 3.发送请求
-    client.bulk(request, RequestOptions.DEFAULT);
-}
 ```
 
 
 
 
-
-## 5.6.小结
-
-文档操作的基本步骤：
-
-- 初始化RestHighLevelClient
-- 创建XxxRequest。XXX是Index、Get、Update、Delete、Bulk
-- 准备参数（Index、Update、Bulk时需要）
-- 发送请求。调用RestHighLevelClient#.xxx()方法，xxx是index、get、update、delete、bulk
-- 解析结果（Get时需要）
 
