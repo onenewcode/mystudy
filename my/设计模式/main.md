@@ -1247,12 +1247,12 @@ fn main() {
 ```
 
 
-# 原型模式
+## 原型模式
 原型模式（Prototype Pattern）是用于创建重复的对象，同时又能保证性能。
 
 这种模式是实现了一个原型接口，该接口用于创建当前对象的克隆。当直接创建对象的代价比较大时或者相同的对象需要被重复创建时，则采用这种模式。例如，一个对象需要在一个高代价的数据库操作之后被创建。我们可以缓存该对象，在下一个请求时返回它的克隆，在需要的时候更新数据库，以此来减少数据库调用。另一个例子，在考试中，每个人做的试卷是相同的，但是试卷却又成千上万份，我们不可能每次都手打一份试卷，因此第一份编排好的试卷就是原型，其他的都是她的复制。
 
-## 介绍
+### 介绍
 - **意图**：用原型实例指定创建对象的种类，并且通过拷贝这些原型创建新的对象。
 - **主要解决**：创建相同却又互相独立的对象，就像试卷每个人的试卷相同，但是每个人的答案却又不同。
 - **何时使用**： 1、当一个系统应该独立于它的产品创建，构成和表示时。 2、当要实例化的类是在运行时刻指定时，例如，通过动态装载。 3、为了避免创建一个与产品类层次平行的工厂类层次时。 4、当一个类的实例只能有几个不同状态组合中的一种时。建立相应数目的原型并克隆它们可能比每次用合适的状态手工实例化该类更方便一些。
@@ -1262,10 +1262,10 @@ fn main() {
 ####  优点
 1、性能提高。 
 2、逃避构造函数的约束。
-#### 缺点
+##### 缺点
 1、配备克隆方法需要对类的功能进行通盘考虑，这对于全新的类不是很难，但对于已有的类不一定很容易，特别当一个类引用不支持串行化的间接对象，或者引用含有循环结构的时候。 
 
-####  使用场景
+#####  使用场景
 1、资源优化场景。
 2、类初始化需要消化非常多的资源，这个资源包括数据、硬件资源等。 3、性能和安全要求的场景。 
 4、通过 new 产生一个对象需要非常繁琐的数据准备或访问权限，则可以使用原型模式。 5、一个对象多个修改者的场景。 
@@ -3085,6 +3085,303 @@ fn main() {
 
 }
 ```
+## 代理模式
+在代理模式（Proxy Pattern）中，一个类代表另一个类的功能。在代理模式中，我们创建具有现有对象的对象，以便向外界提供功能接口。
+
+### 介绍
+- **意图**：为其他对象提供一种代理以控制对这个对象的访问。
+
+- 代理模式的主要**优点**有：
+   - 代理模式在客户端与目标对象之间起到一个中介作用和保护目标对象的作用；
+   - 代理对象可以扩展目标对象的功能；
+   - 代理模式能将客户端与目标对象分离，在一定程度上降低了系统的耦合度；
+- 其主要**缺点**是：
+   - 在客户端和目标对象之间增加一个代理对象，会造成请求处理速度变慢；
+   - 增加了系统的复杂度；
+
+- **应用实例**：  1、买火车票不一定在火车站买，也可以去代售点。 2、一张支票或银行存单是账户中资金的代理。支票在市场交易中用来代替现金，并提供对签发人账号上资金的控制。 3、spring aop。
+
+
+- **使用场景**：按职责来划分，通常有以下使用场景： 1、远程代理。 2、虚拟代理。 3、Copy-on-Write 代理。 4、保护（Protect or Access）代理。 5、Cache代理。 6、防火墙（Firewall）代理。 7、同步化（Synchronization）代理。 8、智能引用（Smart Reference）代理。
+
+
+
+### 实现
+我们将创建一个 Image 接口和实现了 Image 接口的实体类。ProxyImage 是一个代理类，减少 RealImage 对象加载的内存占用。
+
+ProxyPatternDemo 类使用 ProxyImage 来获取要加载的 Image 对象，并按照需求进行显示。
+
+代理模式的 UML 图
+![Alt text](image-24.png)
+### java
+**步骤 1**
+创建一个接口。
+
+Image.java
+```java
+public interface Image {
+   void display();
+}
+```
+
+**步骤 2**
+创建实现接口的实体类。
+
+RealImage.java
+```java
+public class RealImage implements Image {
+ 
+   private String fileName;
+ 
+   public RealImage(String fileName){
+      this.fileName = fileName;
+      loadFromDisk(fileName);
+   }
+ 
+   @Override
+   public void display() {
+      System.out.println("Displaying " + fileName);
+   }
+ 
+   private void loadFromDisk(String fileName){
+      System.out.println("Loading " + fileName);
+   }
+}
+```
+
+ProxyImage.java
+```java
+public class ProxyImage implements Image{
+ 
+   private RealImage realImage;
+   private String fileName;
+ 
+   public ProxyImage(String fileName){
+      this.fileName = fileName;
+   }
+ 
+   @Override
+   public void display() {
+      if(realImage == null){
+         realImage = new RealImage(fileName);
+      }
+      realImage.display();
+   }
+}
+```
+
+**步骤 3**
+当被请求时，使用 ProxyImage 来获取 RealImage 类的对象。
+
+ProxyPatternDemo.java
+```java
+public class ProxyPatternDemo {
+   
+   public static void main(String[] args) {
+      Image image = new ProxyImage("test_10mb.jpg");
+ 
+      // 图像将从磁盘加载
+      image.display(); 
+      System.out.println("");
+      // 图像不需要从磁盘加载
+      image.display();  
+   }
+}
+```
+
+**步骤 4**
+执行程序，输出结果：
+```shell
+Loading test_10mb.jpg
+Displaying test_10mb.jpg
+
+Displaying test_10mb.jpg
+```
+### rust
+rust和java的搭建过程类似，如就不再赘述rust搭建过程。
+```rs
+trait Image {
+    fn dispaly(&self);
+}
+struct RealImage{
+    file_name:String,
+}
+impl RealImage {
+    fn load_from_disk(&self) {
+        println!("Loading {}",self.file_name)
+    }
+    fn new(file_name:String)->RealImage {
+        
+        let i=RealImage { file_name:file_name.clone() };
+        i.load_from_disk();
+        i
+
+    }
+}
+
+impl Image for RealImage {
+    fn dispaly(&self) {
+        println!("Displaying  {}",self.file_name.as_str())
+    }
+}
+struct  ProxyImage{
+    real_image: RealImage,
+    file_name:String
+    
+}
+impl ProxyImage {
+    fn new(file_name:String)->ProxyImage {
+        ProxyImage{
+            real_image:RealImage::new(file_name.clone()),
+            file_name:file_name
+        }
+            
+    }
+}
+impl Image for ProxyImage {
+    fn dispaly(&self) {
+        self.real_image.dispaly();
+    }
+}
+fn main() {
+    let pi=ProxyImage::new("test_10mb.jpg".to_string());
+    pi.dispaly();
+    pi.dispaly();
+}
+```
+# 行为模式
+
+## 责任链模式
+责任链模式（Chain of Responsibility Pattern）为请求创建了一个接收者对象的链。这种模式给予请求的类型，对请求的发送者和接收者进行解耦。
+
+在这种模式中，通常每个接收者都包含对另一个接收者的引用。如果一个对象不能处理该请求，那么它会把相同的请求传给下一个接收者，依此类推。
+
+### 介绍
+- **意图**：避免请求发送者与接收者耦合在一起，让多个对象都有可能接收请求，将这些对象连接成一条链，并且沿着这条链传递请求，直到有对象处理它为止。
+
+- **主要解决**：职责链上的处理者负责处理请求，客户只需要将请求发送到职责链上即可，无须关心请求的处理细节和请求的传递，所以职责链将请求的发送者和请求的处理者解耦了。
+- **应用实例**： 1、JS 中的事件冒泡。 2、rust中的错误传播符号?。
+
+- **优点**： 1、降低耦合度。它将请求的发送者和接收者解耦。 2、简化了对象。使得对象不需要知道链的结构。 3、增强给对象指派职责的灵活性。通过改变链内的成员或者调动它们的次序，允许动态地新增或者删除责任。 4、增加新的请求处理类很方便。
+
+- **缺点**： 1、不能保证请求一定被接收。 2、系统性能将受到一定影响，而且在进行代码调试时不太方便，可能会造成循环调用
+
+
+
+### 实现
+我们创建抽象类 AbstractLogger，带有详细的日志记录级别。然后我们创建三种类型的记录器，都扩展了 AbstractLogger。每个记录器消息的级别是否属于自己的级别，如果是则相应地打印出来，否则将不打印并把消息传给下一个记录器。
+
+责任链模式的 UML 图
+![Alt text](image-25.png)
+步骤 1
+创建抽象的记录器类。
+
+AbstractLogger.java
+public abstract class AbstractLogger {
+   public static int INFO = 1;
+   public static int DEBUG = 2;
+   public static int ERROR = 3;
+ 
+   protected int level;
+ 
+   //责任链中的下一个元素
+   protected AbstractLogger nextLogger;
+ 
+   public void setNextLogger(AbstractLogger nextLogger){
+      this.nextLogger = nextLogger;
+   }
+ 
+   public void logMessage(int level, String message){
+      if(this.level <= level){
+         write(message);
+      }
+      if(nextLogger !=null){
+         nextLogger.logMessage(level, message);
+      }
+   }
+ 
+   abstract protected void write(String message);
+   
+}
+步骤 2
+创建扩展了该记录器类的实体类。
+
+ConsoleLogger.java
+public class ConsoleLogger extends AbstractLogger {
+ 
+   public ConsoleLogger(int level){
+      this.level = level;
+   }
+ 
+   @Override
+   protected void write(String message) {    
+      System.out.println("Standard Console::Logger: " + message);
+   }
+}
+ErrorLogger.java
+public class ErrorLogger extends AbstractLogger {
+ 
+   public ErrorLogger(int level){
+      this.level = level;
+   }
+ 
+   @Override
+   protected void write(String message) {    
+      System.out.println("Error Console::Logger: " + message);
+   }
+}
+FileLogger.java
+public class FileLogger extends AbstractLogger {
+ 
+   public FileLogger(int level){
+      this.level = level;
+   }
+ 
+   @Override
+   protected void write(String message) {    
+      System.out.println("File::Logger: " + message);
+   }
+}
+步骤 3
+创建不同类型的记录器。赋予它们不同的错误级别，并在每个记录器中设置下一个记录器。每个记录器中的下一个记录器代表的是链的一部分。
+
+ChainPatternDemo.java
+public class ChainPatternDemo {
+   
+   private static AbstractLogger getChainOfLoggers(){
+ 
+      AbstractLogger errorLogger = new ErrorLogger(AbstractLogger.ERROR);
+      AbstractLogger fileLogger = new FileLogger(AbstractLogger.DEBUG);
+      AbstractLogger consoleLogger = new ConsoleLogger(AbstractLogger.INFO);
+ 
+      errorLogger.setNextLogger(fileLogger);
+      fileLogger.setNextLogger(consoleLogger);
+ 
+      return errorLogger;  
+   }
+ 
+   public static void main(String[] args) {
+      AbstractLogger loggerChain = getChainOfLoggers();
+ 
+      loggerChain.logMessage(AbstractLogger.INFO, "This is an information.");
+ 
+      loggerChain.logMessage(AbstractLogger.DEBUG, 
+         "This is a debug level information.");
+ 
+      loggerChain.logMessage(AbstractLogger.ERROR, 
+         "This is an error information.");
+   }
+}
+步骤 4
+执行程序，输出结果：
+
+Standard Console::Logger: This is an information.
+File::Logger: This is a debug level information.
+Standard Console::Logger: This is a debug level information.
+Error Console::Logger: This is an error information.
+File::Logger: This is an error information.
+Standard Console::Logger: This is an error information.
+
 # 模板方法
 **模板方法**定义一个操作中的算法的骨架，而将这一些步骤延迟到子类中。模板方式使得子类可以不改变一个算法的结构可重新定义该算法的某些特定步骤。
 # 迪米特法则
