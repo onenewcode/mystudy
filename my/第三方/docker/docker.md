@@ -516,6 +516,12 @@ docker run -itd -p 3306:3306 \
 -e MYSQL_ROOT_PASSWORD=root \
 -d mysql:latest
 ## nacos
+```shell
+docker run -itd --name nacos -e MODE=standalone -p 8848:8848 -p 9848:9848 nacos/nacos-server
+```
+
+### 自定义数据库
+默认情况下，Nacos 使用内置的 Derby 数据库进行数据存储。虽然 Derby 是一个轻量级的数据库，但当数据量较大时，它可能会导致性能瓶颈和数据丢失的问题。因此，建议将 Nacos 数据库存储改为 MySQL 或 PostgreSQL 等外部数据库。
 ```sql
 /******************************************/
 /*   数据库全名 = nacos_config   */
@@ -721,7 +727,7 @@ INSERT INTO users (username, password, enabled) VALUES ('nacos', '$2a$10$EuWPZHz
 INSERT INTO roles (username, role) VALUES ('nacos', 'ROLE_ADMIN');
 ```
 docker pull nacos/nacos-server
-```
+```shell
 docker run -d \
 -e MODE=standalone \
 -e PREFER_HOST_MODE=hostname \
@@ -738,10 +744,11 @@ nacos/nacos-server
 ```
 接着挂载目录：
 
-mkdir -p /mount/docker/nacos/{logs,init.d,data}    
+`mkdir -p /mount/docker/nacos/{logs,init.d,data}    `
 
         
-vim /mount/docker/nacos/init.d/custom.properties        #修改配置文件
+`vim /mount/docker/nacos/init.d/custom.properties      #修改配置文件`
+
 
 ```cnf
 server.contextPath=/nacos
@@ -771,7 +778,10 @@ nacos.naming.distro.initDataRatio=0.9
 nacos.naming.distro.syncRetryDelay=5000
 nacos.naming.data.warmup=true
 nacos.naming.expireInstance=true
+
 ```
+
+```shell
 docker  run \
 --name nacos -itd \
 -p 8848:8848 \
@@ -785,6 +795,7 @@ docker  run \
 -v /mount/docker/nacos/logs:/home/nacos/logs \
 -v /mount/docker/nacos/data:/home/nacos/data \
 nacos/nacos-server
+```
 
 
 ## minio/minio

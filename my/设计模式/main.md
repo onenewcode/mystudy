@@ -3381,7 +3381,440 @@ Standard Console::Logger: This is a debug level information.
 Error Console::Logger: This is an error information.
 File::Logger: This is an error information.
 Standard Console::Logger: This is an error information.
+## 命令模式
+命令模式（Command Pattern）是一种数据驱动的设计模式。请求以命令的形式包裹在对象中，并传给调用对象。调用对象寻找可以处理该命令的合适的对象，并把该命令传给相应的对象，该对象执行命令。
 
+### 介绍
+- **意图**：将一个请求封装成一个对象，从而使您可以用不同的请求对客户进行参数化。
+
+- **主要解决**：在软件系统中，行为请求者与行为实现者通常是一种紧耦合的关系，但某些场合，比如需要对行为进行记录、撤销或重做、事务等处理时，这种无法抵御变化的紧耦合的设计就不太合适。
+
+- **何时使用**：当需要先将一个函数登记上，然后再以后调用此函数时，就需要使用命令模式，其实这就是回调函数。
+
+- **优点**：1.类间解耦：调用者角色与接收者角色之间没有任何依赖关系，调用者实现功能时只需调用Command 抽象类的execute方法就可以，不需要了解到底是哪个接收者执行。2.可扩展性：Command的子类可以非常容易地扩展，而调用者Invoker和高层次的模块Client不产生严 重的代码耦合。3.命令模式结合其他模式会更优秀：命令模式可以结合责任链模式，实现命令族解析任务；结合模板方法模式，则可以减少 Command子类的膨胀问题。
+- **缺点**：命令模式也是有缺点的，请看Command的子类：如果有N个命令，问题就出来 了，Command的子类就可不是几个，而是N个，这个类膨胀得非常大，这个就需要读者在项 目中慎重考虑使用。
+
+
+
+
+命令模式结构示意图:
+![Alt text](image-26.png)
+
+
+### java
+我们首先创建作为命令的接口 Order，然后创建作为请求的 Stock 类。实体命令类 BuyStock 和 SellStock，实现了 Order 接口，将执行实际的命令处理。创建作为调用对象的类 Broker，它接受订单并能下订单。
+
+Broker 对象使用命令模式，基于命令的类型确定哪个对象执行哪个命令。CommandPatternDemo 类使用 Broker 类来演示命令模式。
+
+
+
+**步骤 1**
+创建一个命令接口。
+
+Order.java
+```java
+public interface Order {
+   void execute();
+}
+```
+
+**步骤 2**
+创建一个请求类。
+Stock.java
+```java
+public class Stock {
+   
+   private String name = "ABC";
+   private int quantity = 10;
+ 
+   public void buy(){
+      System.out.println("Stock [ Name: "+name+", 
+         Quantity: " + quantity +" ] bought");
+   }
+   public void sell(){
+      System.out.println("Stock [ Name: "+name+", 
+         Quantity: " + quantity +" ] sold");
+   }
+}
+```
+
+**步骤 3**
+创建实现了 Order 接口的实体类。
+
+BuyStock.java
+```java
+public class BuyStock implements Order {
+   private Stock abcStock;
+ 
+   public BuyStock(Stock abcStock){
+      this.abcStock = abcStock;
+   }
+ 
+   public void execute() {
+      abcStock.buy();
+   }
+}
+
+```
+
+SellStock.java
+```java
+public class SellStock implements Order {
+   private Stock abcStock;
+ 
+   public SellStock(Stock abcStock){
+      this.abcStock = abcStock;
+   }
+ 
+   public void execute() {
+      abcStock.sell();
+   }
+}
+```
+
+**步骤 4**
+创建命令调用类。
+
+Broker.java
+import java.util.ArrayList;
+import java.util.List;
+```java
+ public class Broker {
+   private List<Order> orderList = new ArrayList<Order>(); 
+ 
+   public void takeOrder(Order order){
+      orderList.add(order);      
+   }
+ 
+   public void placeOrders(){
+      for (Order order : orderList) {
+         order.execute();
+      }
+      orderList.clear();
+   }
+}
+```
+
+**步骤 5**
+使用 Broker 类来接受并执行命令。
+
+CommandPatternDemo.java
+```java
+public class CommandPatternDemo {
+   public static void main(String[] args) {
+      Stock abcStock = new Stock();
+ 
+      BuyStock buyStockOrder = new BuyStock(abcStock);
+      SellStock sellStockOrder = new SellStock(abcStock);
+ 
+      Broker broker = new Broker();
+      broker.takeOrder(buyStockOrder);
+      broker.takeOrder(sellStockOrder);
+ 
+      broker.placeOrders();
+   }
+}
+```
+
+**步骤 6**
+执行程序，输出结果：
+```shell
+Stock [ Name: ABC, Quantity: 10 ] bought
+Stock [ Name: ABC, Quantity: 10 ] sold
+```
+
+### rust
+```rs
+trait Order {
+    fn execute(&self);
+}
+#[derive(Clone)]
+struct Stock{
+    name:String,
+    quantity:i32,
+}
+impl Stock {
+    fn buy(&self) {
+        println!("Stock [ Name : {}  Quantity: {}] bought",self.name,self.quantity);
+    }
+    fn sell(&self) {
+        println!("Stock [ Name : {}  Quantity: {}] sold",self.name,self.quantity);
+    }
+    fn new()->Stock{
+        Stock{
+            name:"ABC".to_owned(),
+            quantity:10
+        }
+    }
+}
+// 创建命令实体
+struct  BuyStock {
+    abc_stock:Stock
+}
+impl Order for BuyStock {
+    fn execute(&self) {
+        self.abc_stock.buy();
+    }
+}
+struct  SellStock {
+    abc_stock:Stock
+}
+impl Order for SellStock {
+    fn execute(&self) {
+        self.abc_stock.sell();
+    }
+}
+// 创建命令调用类。
+struct Broker{
+    order_list:Vec<Box<dyn Order>>
+}
+impl Broker {
+    fn take_order(&mut self,order:impl Order+ 'static){
+        
+        self.order_list.push(Box::new(order));
+    }
+    fn place_orders(&self){
+        self.order_list.iter().for_each(|f|f.execute());
+    }
+    fn  new()->Broker {
+        Broker{
+            order_list:vec![]
+        }
+    }
+}
+fn main(){
+    let stock=Stock::new();
+   
+    let buy=BuyStock{abc_stock:stock.clone()};
+    let sell=SellStock{abc_stock:stock.clone()};
+    let mut broker=Broker::new();
+    broker.take_order(buy);
+    broker.take_order(sell);
+    broker.place_orders();
+
+}
+```
+
+## 解释器模式
+解释器模式（Interpreter Pattern）提供了评估语言的语法或表达式的方式，它属于行为型模式。这种模式实现了一个表达式接口，该接口解释一个特定的上下文。这种模式被用在 SQL 解析、符号处理引擎等。
+
+### 介绍
+- **意图**：给定一个语言，定义它的文法表示，并定义一个解释器，这个解释器使用该标识来解释语言中的句子。
+
+- **主要解决**：对于一些固定文法构建一个解释句子的解释器。
+
+- **何时使用**：如果一种特定类型的问题发生的频率足够高，那么可能就值得将该问题的各个实例表述为一个简单语言中的句子。这样就可以构建一个解释器，该解释器通过解释这些句子来解决该问题。
+
+- **应用实例**：编译器、运算表达式计算。
+
+- **优点**： 1、可扩展性比较好，灵活。 2、增加了新的解释表达式的方式。 3、易于实现简单文法。
+
+- **缺点**： 1、可利用场景比较少。 2、对于复杂的文法比较难维护。 3、解释器模式会引起类膨胀。 4、解释器模式采用递归调用方法。
+
+
+### 实现
+我们将创建一个接口 Expression 和实现了 Expression 接口的实体类。定义作为上下文中主要解释器的 TerminalExpression 类。其他的类 OrExpression、AndExpression 用于创建组合式表达式。
+
+InterpreterPatternDemo，我们的演示类使用 Expression 类创建规则和演示表达式的解析。
+
+解释器模式的 UML 图
+![Alt text](image-27.png)
+### java
+**步骤 1**
+创建一个表达式接口。
+
+Expression.java
+```java
+public interface Expression {
+   public boolean interpret(String context);
+}
+
+```
+
+步骤 2
+创建实现了上述接口的实体类。
+
+TerminalExpression.java
+```java
+public class TerminalExpression implements Expression {
+   
+   private String data;
+ 
+   public TerminalExpression(String data){
+      this.data = data; 
+   }
+ 
+   @Override
+   public boolean interpret(String context) {
+      if(context.contains(data)){
+         return true;
+      }
+      return false;
+   }
+}
+```
+
+OrExpression.java
+```java
+public class OrExpression implements Expression {
+    
+   private Expression expr1 = null;
+   private Expression expr2 = null;
+ 
+   public OrExpression(Expression expr1, Expression expr2) { 
+      this.expr1 = expr1;
+      this.expr2 = expr2;
+   }
+ 
+   @Override
+   public boolean interpret(String context) {      
+      return expr1.interpret(context) || expr2.interpret(context);
+   }
+}
+```
+
+AndExpression.java
+```java
+public class AndExpression implements Expression {
+    
+   private Expression expr1 = null;
+   private Expression expr2 = null;
+ 
+   public AndExpression(Expression expr1, Expression expr2) { 
+      this.expr1 = expr1;
+      this.expr2 = expr2;
+   }
+ 
+   @Override
+   public boolean interpret(String context) {      
+      return expr1.interpret(context) && expr2.interpret(context);
+   }
+}
+```
+
+步骤 3
+InterpreterPatternDemo 使用 Expression 类来创建规则，并解析它们。
+
+InterpreterPatternDemo.java
+```java
+public class InterpreterPatternDemo {
+ 
+   //规则：Robert 和 John 是男性
+   public static Expression getMaleExpression(){
+      Expression robert = new TerminalExpression("Robert");
+      Expression john = new TerminalExpression("John");
+      return new OrExpression(robert, john);    
+   }
+ 
+   //规则：Julie 是一个已婚的女性
+   public static Expression getMarriedWomanExpression(){
+      Expression julie = new TerminalExpression("Julie");
+      Expression married = new TerminalExpression("Married");
+      return new AndExpression(julie, married);    
+   }
+ 
+   public static void main(String[] args) {
+      Expression isMale = getMaleExpression();
+      Expression isMarriedWoman = getMarriedWomanExpression();
+ 
+      System.out.println("John is male? " + isMale.interpret("John"));
+      System.out.println("Julie is a married women? " 
+      + isMarriedWoman.interpret("Married Julie"));
+   }
+}
+```
+
+**步骤 4**
+执行程序，输出结果：
+```shell
+John is male? true
+Julie is a married women? true
+```
+### rust
+```rs
+// 声明表达式特征
+trait  Expression{
+    fn interpret(&self,context:&str)->bool ;
+}
+struct TerminalExpression{
+    data:String,
+}
+impl Expression for TerminalExpression {
+    fn interpret(&self,context:&str)->bool  {
+        if context==self.data {
+           return true; 
+        }
+        false
+    }
+}
+// 创建或规则
+struct OrExpression{
+    expr1:Box<dyn Expression>,
+    expr2:Box<dyn Expression>,
+}
+impl Expression for OrExpression {
+    fn interpret(&self,context:&str)->bool  {
+        self.expr1.interpret(context)||self.expr2.interpret(context)
+    }
+}
+// 创建和规则
+struct AndExpression{
+    expr1:Box<dyn Expression>,
+    expr2:Box<dyn Expression>,
+}
+impl Expression for AndExpression {
+    fn interpret(&self,context:&str)->bool  {
+        self.expr1.interpret(context)&&self.expr2.interpret(context)
+    }
+}
+//规则：Robert 和 John 是男性
+fn get_male_expression()->OrExpression{
+    OrExpression { 
+    expr1: Box::new(TerminalExpression{
+        data:"Robert".to_owned()
+    }), 
+    expr2: Box::new(TerminalExpression{
+        data:"John".to_owned()
+    }),
+ }
+}
+  //规则：Julie 是一个已婚的女性
+fn get_married_woman_expression()->AndExpression{
+    AndExpression { 
+    expr1: Box::new(TerminalExpression{
+        data:"Julie".to_owned()
+    }), 
+    expr2: Box::new(TerminalExpression{
+        data:"Married".to_owned()
+    }),
+ }
+}
+fn main() {
+    let is_male=get_male_expression();
+    let is_married_woman=get_married_woman_expression();
+    println!("John is male? {}",is_male.interpret("John"));
+    println!("Julie is a married women? {}",is_married_woman.interpret("Married Julie"))
+}
+```
+## 迭代器模式
+迭代器模式（Iterator Pattern）这种模式用于顺序访问集合对象的元素，不需要知道集合对象的底层表示。
+
+### 介绍
+- **意图**：提供一种方法顺序访问一个聚合对象中各个元素, 而又无须暴露该对象的内部表示。
+
+- **主要解决**：不同的方式来遍历整个整合对象。
+- **优点**： 1、它支持以不同的方式遍历一个聚合对象。 2、迭代器简化了聚合类。 3、在同一个聚合上可以有多个遍历。 4、在迭代器模式中，增加新的聚合类和迭代器类都很方便，无须修改原有代码。
+
+- **缺点**：由于迭代器模式将存储数据和遍历数据的职责分离，增加新的聚合类需要对应增加新的迭代器类，类的个数成对增加，这在一定程度上增加了系统的复杂性。
+
+
+
+### 实现
+我们将创建一个叙述导航方法的 Iterator 接口和一个返回迭代器的 Container 接口。实现了 Container 接口的实体类将负责实现 Iterator 接口。
+
+IteratorPatternDemo，我们的演示类使用实体类 NamesRepository 来打印 NamesRepository 中存储为集合的 Names。
+
+迭代器模式的 UML 图
 # 模板方法
 **模板方法**定义一个操作中的算法的骨架，而将这一些步骤延迟到子类中。模板方式使得子类可以不改变一个算法的结构可重新定义该算法的某些特定步骤。
 # 迪米特法则
