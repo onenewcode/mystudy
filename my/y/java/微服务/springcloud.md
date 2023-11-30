@@ -1521,8 +1521,7 @@ Nacos一方面可以将配置集中管理，另一方可以在配置变更时，
 ### 在nacos中添加配置文件
 
 如何在nacos中管理配置呢？
-
-![image-20210714164742924](assets/image-20210714164742924.png)
+![xdcfvxd](assets/20231129191239.png)
 
 然后在弹出的表单中，填写配置信息：
 
@@ -2082,7 +2081,7 @@ Debug方式启动order-service服务，可以看到这里的client，底层就�
 
 
 
-## 2.4.最佳实践
+## 最佳实践
 
 所谓最近实践，就是使用过程中总结的经验，最好的一种使用方式。
 
@@ -2104,7 +2103,7 @@ UserController：
 
 
 
-### 2.4.1.继承方式
+## 继承方式
 
 一样的代码可以通过继承来共享：
 
@@ -2133,7 +2132,7 @@ UserController：
 
 
 
-### 2.4.2.抽取方式
+### 抽取方式
 
 将Feign的Client抽取为独立模块，并且把接口有关的POJO、默认的Feign配置都放到这个模块中，提供给所有消费者使用。
 
@@ -2145,7 +2144,7 @@ UserController：
 
 
 
-### 2.4.3.实现基于抽取的最佳实践
+### 实现基于抽取的最佳实践
 
 #### 1）抽取
 
@@ -2238,13 +2237,13 @@ UserController：
 
 
 
-# 3.Gateway服务网关
+# Gateway服务网关
 
 Spring Cloud Gateway 是 Spring Cloud 的一个全新项目，该项目是基于 Spring 5.0，Spring Boot 2.0 和 Project Reactor 等响应式编程和事件流技术开发的网关，它旨在为微服务架构提供一种简单有效的统一的 API 路由管理方式。
 
 
 
-## 3.1.为什么需要网关
+## 为什么需要网关
 
 Gateway网关是我们服务的守门神，所有微服务的统一入口。
 
@@ -2279,7 +2278,7 @@ Zuul是基于Servlet的实现，属于阻塞式编程。而SpringCloudGateway则
 
 
 
-## 3.2.gateway快速入门
+## gateway快速入门
 
 下面，我们就演示下网关的基本路由功能。基本步骤如下：
 
@@ -2410,7 +2409,7 @@ spring:
 
 
 
-## 3.3.断言工厂
+## 断言工厂
 
 我们在配置文件中写的断言规则只是字符串，这些字符串会被Predicate Factory读取并处理，转变为路由判断的条件
 
@@ -2440,7 +2439,7 @@ spring:
 
 
 
-## 3.4.过滤器工厂
+## 过滤器工厂
 
 GatewayFilter是网关中提供的一种过滤器，可以对进入网关的请求和微服务返回的响应做处理：
 
@@ -2491,7 +2490,7 @@ spring:
 
 
 
-### 3.4.3.默认过滤器
+### 默认过滤器
 
 如果要对所有的路由都生效，则可以将过滤器工厂写到default下。格式如下：
 
@@ -2510,7 +2509,7 @@ spring:
 
 
 
-### 3.4.4.总结
+### 总结
 
 过滤器的作用是什么？
 
@@ -2524,11 +2523,11 @@ defaultFilters的作用是什么？
 
 
 
-## 3.5.全局过滤器
+## 全局过滤器
 
 上一节学习的过滤器，网关提供了31种，但每一种过滤器的作用都是固定的。如果我们希望拦截请求，做自己的业务逻辑则没办法实现。
 
-### 3.5.1.全局过滤器作用
+### 全局过滤器作用
 
 全局过滤器的作用也是处理一切进入网关的请求和微服务响应，与GatewayFilter的作用一样。区别在于GatewayFilter通过配置定义，处理逻辑是固定的；而GlobalFilter的逻辑需要自己写代码实现。
 
@@ -2559,7 +2558,7 @@ public interface GlobalFilter {
 
 
 
-### 3.5.2.自定义全局过滤器
+### 自定义全局过滤器
 
 需求：定义全局过滤器，拦截请求，判断请求的参数是否满足下面条件：
 
@@ -2613,7 +2612,7 @@ public class AuthorizeFilter implements GlobalFilter {
 
 
 
-### 3.5.3.过滤器执行顺序
+### 过滤器执行顺序
 
 请求进入网关会碰到三类过滤器：当前路由的过滤器、DefaultFilter、GlobalFilter
 
@@ -2642,11 +2641,11 @@ public class AuthorizeFilter implements GlobalFilter {
 
 
 
-## 3.6.跨域问题
+## 跨域问题
 
 
 
-### 3.6.1.什么是跨域问题
+### 什么是跨域问题
 
 跨域：域名不一致就是跨域，主要包括：
 
@@ -2662,7 +2661,7 @@ public class AuthorizeFilter implements GlobalFilter {
 
 
 
-### 3.6.2.模拟跨域问题
+### 模拟跨域问题
 
 找到课前资料的页面文件：
 
@@ -2680,7 +2679,7 @@ public class AuthorizeFilter implements GlobalFilter {
 
 
 
-### 3.6.3.解决跨域问题
+### 解决跨域问题
 
 在gateway服务的application.yml文件中，添加下面的配置：
 

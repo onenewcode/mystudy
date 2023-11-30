@@ -2240,5 +2240,149 @@ func subjectFromSession(ctx context.Context, c *app.RequestContext) string {
     }
 }
 ```
+## Swagger
+### 安装
+go get 安装可执行文件需要配合 GOPATH 模式工作。
+`go get github.com/swaggo/swag/cmd/swag`
+因为从 Go 1.17 开始，在 go mod 模式下通过 go get 下载对应库文件将无法自动编译并安装到 $GOPATH/bin 的路径， 所以不再推荐用 go get 来安装可执行文件的方式。可以使用 go install来代替。
 
-74
+`go install github.com/swaggo/swag/cmd/swag@latest`
+### 使用用法
+
+1. 在你的 API 源代码中添加注释。
+2. 在你的 Go 项目的根目录下运行 Swag (例如 ~/root/go-project-name)，Swag 会解析注释并在 ~/root/go-project-name/docs 目录下生成必要的文件 (docs 文件夹和 docs/doc.go)。
+`swag init`
+3. 通过运行以下命令在工程中下载 hertz-swagger :
+```go
+go get github.com/hertz-contrib/swagger
+go get github.com/swaggo/files
+```
+并在你的代码中引用如下代码:
+```go
+import "github.com/hertz-contrib/swagger" // hertz-swagger middleware
+import "github.com/swaggo/files" // swagger embed files
+```
+效果
+![Alt text](image-1.png)
+
+### 项目demo
+**使用过程**
+使用 hertz-swagger 规则为 api 和主函数添加注释，如下所示：
+使用 swag init 命令来生成文档，生成的文档将被存储在docs/目录下。
+编译运行你的应用程序，之后在 http://localhost:8888/swagger/index.html，可以看到 Swagger UI 界面。
+
+
+**完整代码**
+```go
+package main
+
+import (
+   "context"
+
+   "github.com/cloudwego/hertz/pkg/app"
+   "github.com/cloudwego/hertz/pkg/app/server"
+   "github.com/hertz-contrib/swagger"
+   _ "mystudy/docs" //该项一定要配置，否则会出现访问404
+   swaggerFiles "github.com/swaggo/files"
+)
+
+// PingHandler 测试 handler
+// @Summary 测试 Summary
+// @Description 测试 Description
+// @Accept application/json
+// @Produce application/json
+// @Router /ping [get]
+func PingHandler(c context.Context, ctx *app.RequestContext) {
+	ctx.JSON(200, map[string]string{
+		"ping": "pong",
+	})
+}
+
+// @title HertzTest
+// @version 1.0
+// @description This is a demo using Hertz.
+
+// @contact.name hertz-contrib
+// @contact.url https://github.com/onewcode
+
+// @license.name Apache 2.0
+// @license.url http://www.apache.org/licenses/LICENSE-2.0.html
+
+// @host localhost:8888
+// @BasePath /
+// @schemes http
+func main() {
+	h := server.Default()
+
+	h.GET("/ping", PingHandler)
+
+	url := swagger.URL("http://localhost:8888/swagger/doc.json") // The url pointing to API definition
+	h.GET("/swagger/*any", swagger.WrapHandler(swaggerFiles.Handler, url))
+
+	h.Spin()
+}
+```
+访问http://localhost:8888/swagger/index.html
+
+效果
+![Alt text](image-2.png)
+
+### Swagger注释用法
+#### 通用API信息
+示例 celler/main.go
+
+|注释|	说明|	示例|
+|----------|-------------|------------------|
+|title	|必填 应用程序的名称。|	// @title Swagger Example API|
+|version	|必填 提供应用程序API的版本。	|// @version 1.0|
+|description|	应用程序的简短描述。|	// @description This is a sample server celler server.|
+|tag.name|	标签的名称。|	// @tag.name This is the name of the tag|
+|tag.description|	标签的描述。|	// @tag.description Cool Description|
+|tag.docs.url|	标签的外部文档的URL。|	// @tag.docs.url https://example.com|
+|tag.docs.description	|标签的外部文档说明。	|// @tag.docs.description Best example documentation|
+termsOfService|	API的服务条款。|	// @termsOfService http://swagger.io/terms/|
+|contact.name|	公开的API的联系信息。|	// @contact.name API Support|
+|contact.url|	联系信息的URL。 必须采用网址格式。|	// @contact.url http://www.swagger.io/support|
+|contact.email|	联系人/组织的电子邮件地址。 必须采用电子邮件地址的格式。|	// @contact.email support@swagger.io|
+|license.name|	必填 用于API的许可证名称。	|// @license.name Apache 2.0|
+|license.url|	用于API的许可证的URL。 必须采用网址格式。|	// @license.url http://www.apache.org/licenses/LICENSE-2.0.html|
+|host|	运行API的主机（主机名或IP地址）。|	// @host localhost:8080|
+|BasePath|	运行API的基本路径。	|// @BasePath /api/v1|
+
+更多请参考 `https://github.com/swaggo/swag/blob/master/README_zh-CN.md`     
+
+### swag命令行参数
+用参数运行 Swag (全部参数可以通过运行 swag init -h 查看)。
+```shell
+swag init --parseDependency --parseInternal --parseDepth 5 --instanceName "swagger"
+```
+|选项|	默认值|	描述|
+|----------|----------------|-------------|
+|parseInternal|	false|	解析内部依赖包。|
+|parseDependency|	false|	解析外部依赖包。|
+|parseDepth|	100|	解析依赖包深度，如果你知道解析结构的深度，推荐使用这个参数，swag 命令的执行时间会显著减少。|
+|instanceName|	“swagger”|	swagger 文档的实例名称。如果要在一个 Hertz 路由上部署多个不同的 swagger 实例，请确保每个实例有一个唯一的名字。|
+
+### swagger路由配置
+你可以使用不同的配置选项来配置 Swagger。
+```go
+func main() {
+	h := server.Default()
+
+	h.GET("/ping", PingHandler)
+
+	url := swagger.URL("http://localhost:8888/swagger/doc.json") // The url pointing to API definition
+	h.GET("/swagger/*any", swagger.WrapHandler(swaggerFiles.Handler, url, swagger.DefaultModelsExpandDepth(-1)))
+	h.Spin()
+}
+```
+
+
+|选项|	类型	|默认值|	描述|
+|-----------|--------------|-----------------|---------------|
+|URL	|string	|“doc.json”	|指向 API 定义的 URL|
+|DocExpansion|	string	|“list”	|控制操作和标签的默认扩展设置。它可以是 list（只展开标签）、full（展开标签和操作）或 none（不展开）。|
+|DeepLinking|	bool|	true|	如果设置为 true，可以启用标签和操作的深度链接。更多信息请参见深度链接文档。|
+DefaultModelsExpandDepth|	int|	1|	模型的默认扩展深度（设置为 -1 完全隐藏模型）。|
+|PersistAuthorization|	bool|	false|	如果设置为 true，则会持久化保存授权数据，在浏览器关闭/刷新时不会丢失。|
+|Oauth2DefaultClientID|	string|	""|	如果设置了这个字段，它将用于预填 OAuth2 授权对话框的 client_id 字段。|
