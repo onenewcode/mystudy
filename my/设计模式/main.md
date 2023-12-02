@@ -3883,7 +3883,132 @@ Name : Robert
 Name : John
 Name : Julie
 Name : Lora
+##  中介者模式
+中介者模式（Mediator Pattern）是用来降低多个对象和类之间的通信复杂性。这种模式提供了一个中介类，该类通常处理不同类之间的通信，并支持松耦合，使代码易于维护。
+### 介绍
+- **意图**：用一个中介对象来封装一系列的对象交互，中介者使各对象不需要显式地相互引用，从而使其耦合松散，而且可以独立地改变它们之间的交互。
+- **作用**：1.通过中介者提供的中转作用，各个同事对象就不再需要显式引用其他同事，当需要和其他同事进行通信时，通过中介者即可。该中转作用属于中介者在结构上的支持。2.中介者可以更进一步的对同事之间的关系进行封装，同事可以一致地和中介者进行交互，而不需要指明中介者需要具体怎么做，中介者根据封装在自身内部的协调逻辑，对同事的请求进行进一步处理，将同事成员之间的关系行为进行分离和封装。该协调作用属于中介者在行为上的支持。
+- **应用实例**： 1、中国加入 WTO 之前是各个国家相互贸易，结构复杂，现在是各个国家通过 WTO 来互相贸易。 2、机场调度系统。 3、MVC 框架，其中C（控制器）就是 M（模型）和 V（视图）的中介者。
 
+
+
+## 实现
+我们通过聊天室实例来演示中介者模式。实例中，多个用户可以向聊天室发送消息，聊天室向所有的用户显示消息。我们将创建两个类 ChatRoom 和 User。User 对象使用 ChatRoom 方法来分享他们的消息。
+
+MediatorPatternDemo，我们的演示类使用 User 对象来显示他们之间的通信。
+
+中介者模式的 UML 图
+![Alt text](image-29.png)
+### java
+**步骤 1**
+创建中介类。
+
+ChatRoom.java
+```java
+import java.util.Date;
+ 
+public class ChatRoom {
+   public static void showMessage(User user, String message){
+      System.out.println(new Date().toString()
+         + " [" + user.getName() +"] : " + message);
+   }
+}
+```
+
+**步骤 2**
+创建 user 类。
+
+User.java
+```java
+public class User {
+   private String name;
+ 
+   public String getName() {
+      return name;
+   }
+ 
+   public void setName(String name) {
+      this.name = name;
+   }
+ 
+   public User(String name){
+      this.name  = name;
+   }
+ 
+   public void sendMessage(String message){
+      ChatRoom.showMessage(this,message);
+   }
+}
+```
+
+**步骤 3**
+使用 User 对象来显示他们之间的通信。
+```java
+MediatorPatternDemo.java
+public class MediatorPatternDemo {
+   public static void main(String[] args) {
+      User robert = new User("Robert");
+      User john = new User("John");
+ 
+      robert.sendMessage("Hi! John!");
+      john.sendMessage("Hello! Robert!");
+   }
+}
+```
+
+### rust
+在rust中，使用日期库需要引入第三方库，所以需要我们在Cargo.toml引入`chrono = "0.4.31"`
+```rs
+
+trait Image {
+    fn dispaly(&self);
+}
+struct RealImage{
+    file_name:String,
+}
+impl RealImage {
+    fn load_from_disk(&self) {
+        println!("Loading {}",self.file_name)
+    }
+    fn new(file_name:String)->RealImage {
+        
+        let i=RealImage { file_name:file_name.clone() };
+        i.load_from_disk();
+        i
+
+    }
+}
+
+impl Image for RealImage {
+    fn dispaly(&self) {
+        println!("Displaying  {}",self.file_name.as_str())
+    }
+}
+struct  ProxyImage{
+    real_image: RealImage,
+    file_name:String
+    
+}
+impl ProxyImage {
+    fn new(file_name:String)->ProxyImage {
+        ProxyImage{
+            real_image:RealImage::new(file_name.clone()),
+            file_name:file_name
+        }
+            
+    }
+}
+impl Image for ProxyImage {
+    fn dispaly(&self) {
+        self.real_image.dispaly();
+    }
+}
+fn main() {
+    let pi=ProxyImage::new("test_10mb.jpg".to_string());
+    pi.dispaly();
+    pi.dispaly();
+}
+```
 # 模板方法
 **模板方法**定义一个操作中的算法的骨架，而将这一些步骤延迟到子类中。模板方式使得子类可以不改变一个算法的结构可重新定义该算法的某些特定步骤。
 # 迪米特法则
