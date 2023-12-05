@@ -4117,11 +4117,11 @@ macro_rules! vec {
 
 ## 异步编程
 ### Async 编程简介
-- OS 线程, 它最简单，也无需改变任何编程模型(业务/代码逻辑)，因此非常适合作为语言的原生并发模型，我们在多线程章节也提到过，Rust 就选择了原生支持线程级的并发编程。但是，这种模型也有缺点，例如线程间的同步将变得更加困难，线程间的上下文切换损耗较大。使用线程池在一定程度上可以提升性能，但是对于 IO 密集的场景来说，线程池还是不够。
-- 事件驱动(Event driven), 这个名词你可能比较陌生，如果说事件驱动常常跟回调( Callback )一起使用，相信大家就恍然大悟了。这种模型性能相当的好，但最大的问题就是存在回调地狱的风险：非线性的控制流和结果处理导致了数据流向和错误传播变得难以掌控，还会导致代码可维护性和可读性的大幅降低，大名鼎鼎的 JavaScript 曾经就存在回调地狱。
-- 协程(Coroutines) 可能是目前最火的并发模型，Go 语言的协程设计就非常优秀，这也是 Go 语言能够迅速火遍全球的杀手锏之一。协程跟线程类似，无需改变编程模型，同时，它也跟 async 类似，可以支持大量的任务并发运行。但协程抽象层次过高，导致用户无法接触到底层的细节，这对于系统编程语言和自定义异步运行时是难以接受的
-- actor 模型是 erlang 的杀手锏之一，它将所有并发计算分割成一个一个单元，这些单元被称为 actor , 单元之间通过消息传递的方式进行通信和数据传递，跟分布式系统的设计理念非常相像。由于 actor 模型跟现实很贴近，因此它相对来说更容易实现，但是一旦遇到流控制、失败重试等场景时，就会变得不太好用
-- async/await， 该模型性能高，还能支持底层编程，同时又像线程和协程那样无需过多的改变编程模型，但有得必有失，async 模型的问题就是内部实现机制过于复杂，对于用户来说，理解和使用起来也没有线程和协程简单，好在前者的复杂性开发者们已经帮我们封装好，而理解和使用起来不够简单，正是本章试图解决的问题。
+- OS **线程**, 它最简单，也无需改变任何编程模型(业务/代码逻辑)，因此非常适合作为语言的原生并发模型，我们在多线程章节也提到过，Rust 就选择了原生支持线程级的并发编程。但是，这种模型也有缺点，例如线程间的同步将变得更加困难，线程间的上下文切换损耗较大。使用线程池在一定程度上可以提升性能，但是对于 IO 密集的场景来说，线程池还是不够。
+- **事件驱动(Event driven)**,如果说事件驱动常常跟回调( Callback )一起使用，相信大家就恍然大悟了。这种模型性能相当的好，但最大的问题就是存在回调地狱的风险：非线性的控制流和结果处理导致了数据流向和错误传播变得难以掌控，还会导致代码可维护性和可读性的大幅降低。
+- **协程(Coroutines)** Go 语言的协程设计就非常优秀，这也是 Go 语言能够迅速火遍全球的杀手锏之一。协程跟线程类似，无需改变编程模型，同时，它也跟 async 类似，可以支持大量的任务并发运行。但协程抽象层次过高，导致用户无法接触到底层的细节，这对于系统编程语言和自定义异步运行时是难以接受的
+- **actor** 模型是 erlang 的杀手锏之一，它将所有并发计算分割成一个一个单元，这些单元被称为 actor , 单元之间通过消息传递的方式进行通信和数据传递，跟分布式系统的设计理念非常相像。由于 actor 模型跟现实很贴近，因此它相对来说更容易实现，但是一旦遇到流控制、失败重试等场景时，就会变得不太好用
+- **async/await**， 该模型性能高，还能支持底层编程，同时又像线程和协程那样无需过多的改变编程模型，但有得必有失，async 模型的问题就是内部实现机制过于复杂，对于用户来说，理解和使用起来也没有线程和协程简单，好在前者的复杂性开发者们已经帮我们封装好，而理解和使用起来不够简单。
 
 对于长时间运行的 CPU 密集型任务，例如并行计算，使用线程将更有优势。 这种密集任务往往会让所在的线程持续运行，任何不必要的线程切换都会带来性能损耗，因此高并发反而在此时成为了一种多余。同时你所创建的线程数应该等于 CPU 核心数，充分利用 CPU 的并行能力，甚至还可以将线程绑定到 CPU 核心上，进一步减少线程上下文切换。
 
@@ -4140,7 +4140,7 @@ futures = "0.3"
 use futures::executor::block_on;
 
 async fn hello_world() {
-    hello_cat().await;
+    hello_cat().await;//等待异步方法完成
     println!("hello, world!");
 }
 
@@ -4153,11 +4153,13 @@ fn main() {
 }
 ```
 总之，在async fn函数中使用.await可以等待另一个异步调用的完成。但是与block_on不同，.await并不会阻塞当前的线程，而是异步的等待Future A的完成，在等待的过程中，该线程还可以继续执行其它的Future B，最终实现了并发处理的效果。
+
 ###  Future 执行器与任务调度
 #### Future 特征
 首先，来给出 Future 的定义：它是一个能产出值的异步计算(虽然该值可能为空，例如 () )。光看这个定义，一个简化版的 Future 特征:
 ```rs
 trait SimpleFuture {
+    // 设置关联类型
     type Output;
     // 输出计算完成的结果或者输出Pending表示本次不能够完成计算
     fn poll(&mut self, wake: fn()) -> Poll<Self::Output>;
@@ -4186,7 +4188,6 @@ impl SimpleFuture for SocketRead<'_> {
             Poll::Ready(self.socket.read_buf())
         } else {
             // socket中还没数据
-            //
             // 注册一个`wake`函数，当数据可用时，该函数会被调用，
             // 然后当前Future的执行器会再次调用`poll`方法，此时就可以读取到数据
             self.socket.set_readable_callback(wake);
@@ -4194,10 +4195,9 @@ impl SimpleFuture for SocketRead<'_> {
         }
     }
 }
-
 ```
 
-这种 Future 模型允许将**多个异步**操作组合在一起，同时还无需任何内存分配。不仅仅如此，如果你需要同时运行多个 Future或链式调用多个 Future ，也可以通过无内存分配的状态机实现，例如：
+Future 模型允许将**多个异步**操作组合在一起，同时还无需任何内存分配。不仅仅如此，如果你需要同时运行多个 Future或链式调用多个 Future ，也可以通过无内存分配的状态机实现，例如：
 ```rs
 
 trait SimpleFuture {
@@ -4258,7 +4258,6 @@ where
 ```rs
 /// 一个SimpleFuture, 它使用顺序的方式，一个接一个地运行两个Future
 //
-// 注意: 由于本例子用于演示，因此功能简单，`AndThenFut` 会假设两个 Future 在创建时就可用了.
 // 而真实的`Andthen`允许根据第一个`Future`的输出来创建第二个`Future`，因此复杂的多。
 pub struct AndThenFut<FutureA, FutureB> {
     first: Option<FutureA>,
@@ -4329,6 +4328,8 @@ use std::{
 继续来实现 Future 定时器，之前提到: 新建线程在睡眠结束后会需要将状态同步给定时器 Future ，由于是多线程环境，我们需要使用 Arc/<Mutex/><T/>/> 来作为一个共享状态，用于在新线程和 Future 定时器间共享。
 ```rs
 pub struct TimerFuture {
+    // Arc是一种能够使得数据在线程间安全共享的智能指针.它的工作方式从本质上来讲，是对将要共享的数据进行包装，并表现为此数据的一个指针。
+    // Arc会追踪这个指针的所有拷贝，当最后一份拷贝离开作用域时，它就会安全释放内存。
     shared_state: Arc<Mutex<SharedState>>,
 }
 
@@ -4346,18 +4347,21 @@ struct SharedState {
 ```rs
 impl Future for TimerFuture {
     type Output = ();
+    // 函数没有返回值，那么返回一个 ()
+   // 通过 ; 结尾的表达式返回一个 ()
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         // 通过检查共享状态，来确定定时器是否已经完成
         let mut shared_state = self.shared_state.lock().unwrap();
         if shared_state.completed {
+            // 计算完成，弹出计算数据
             Poll::Ready(())
         } else {
             // 设置`waker`，这样新线程在睡眠(计时)结束后可以唤醒当前的任务，接着再次对`Future`进行`poll`操作,
-            //
             // 下面的`clone`每次被`poll`时都会发生一次，实际上，应该是只`clone`一次更加合理。
             // 选择每次都`clone`的原因是： `TimerFuture`可以在执行器的不同任务间移动，如果只克隆一次，
             // 那么获取到的`waker`可能已经被篡改并指向了其它任务，最终导致执行器运行了错误的任务
             shared_state.waker = Some(cx.waker().clone());
+            // 设置pending状态
             Poll::Pending
         }
     }
@@ -4518,7 +4522,7 @@ impl Executor {
 }
 ```
 
-恭喜！我们终于拥有了自己的执行器，下面再来写一段代码使用该执行器去运行之前的定时器 Future ：
+下面再来写一段代码使用该执行器去运行之前的定时器 Future ：
 ```rs
 fn main() {
     let (executor, spawner) = new_executor_and_spawner();
@@ -4589,7 +4593,6 @@ impl SimpleFuture for SocketRead<'_> {
             Poll::Ready(self.socket.read_buf())
         } else {
             // socket中还没数据
-            //
             // 注册一个`wake`函数，当数据可用时，该函数会被调用，
             // 然后当前Future的执行器会再次调用`poll`方法，此时就可以读取到数据
             self.socket.set_readable_callback(wake);
@@ -4777,10 +4780,6 @@ pub struct Pin<P> {
 
 例如 Pin<&mut u8> ，显然 u8 实现了 Unpin 特征，它可以在内存中被移动，因此 Pin<&mut u8> 跟 &mut u8 实际上并无区别，一样可以被移动。
 
-
-
-
-
 - 都是标记特征( marker trait )，该特征未定义任何行为，非常适用于标记
 - 都可以通过!语法去除实现
 - 绝大多数情况都是自动实现, 无需我们的操心
@@ -4807,11 +4806,11 @@ impl Test {
         // 进行自引用
         self.b = self_ref;
     }
-
+    // 获取a字段的引用值
     fn a(&self) -> &str {
         &self.a
     }
-
+    // 获取b字段的引用值
     fn b(&self) -> &String {
         assert!(!self.b.is_null(), "Test::b called without Test::init being called first");
         unsafe { &*(self.b) }
@@ -4840,8 +4839,7 @@ fn main() {
 a: test1, b: test1
 a: test2, b: test2
 ```
-
-明知山有虎，偏向虎山行，这才是我辈年轻人的风华。既然移动数据会导致指针不合法，那我们就移动下数据试试，将 test1 和 test2 进行下交换：
+既然移动数据会导致指针不合法，那我们就移动下数据试试，将 test1 和 test2 进行下交换：
 ```rs
 fn main() {
     let mut test1 = Test::new("test1");
@@ -4880,7 +4878,7 @@ fn main() {
     test2.init();
 
     println!("a: {}, b: {}", test1.a(), test1.b());
-    std::mem::swap(&mut test1, &mut test2);
+    std::mem::swap(&mut test1, &mut test2);// 在两个可变位置交换值
     test1.a = "I've totally changed now!".to_string();
     println!("a: {}, b: {}", test2.a(), test2.b());
 
@@ -4889,11 +4887,9 @@ fn main() {
 
 下面的图片也可以帮助更好的理解这个过程：
 
-
+![Alt text](image.png)
 #### Pin 在实践中的运用
-在理解了 Pin 的作用后，我们再来看看它怎么帮我们解决问题。
-
-将值固定到栈上
+**将值固定到栈上**
 回到之前的例子，我们可以用 Pin 来解决指针指向的数据被移动的问题:
 ```rs
 use std::pin::Pin;
@@ -5057,7 +5053,17 @@ let fut = async { /* ... */ };
 pin_mut!(fut);
 execute_unpin_future(fut); // OK
 ```
-
+#### 总结
+脑袋里已经快被 Pin 、 Unpin 、 !Unpin 整爆炸了，没事，我们再来火上浇油下:
+- 若 T: Unpin ( Rust 类型的默认实现)，那么 Pin<'a, T> 跟 &'a mut T 完全相同，也就是 Pin 将没有任何效果, 该移动还是照常移动
+- 绝大多数标准库类型都实现了 Unpin ，事实上，对于 Rust 中你能遇到的绝大多数类型，该结论依然成立 ，其中一个例外就是：async/await 生成的 Future 没有实现 Unpin
+- 你可以通过以下方法为自己的类型添加 !Unpin 约束：
+    - 使用文中提到的 std::marker::PhantomPinned
+    - 使用nightly 版本下的 feature flag
+- 可以将值固定到栈上，也可以固定到堆上
+    - 将 !Unpin 值固定到栈上需要使用 unsafe
+    - 将 !Unpin 值固定到堆上无需 unsafe ，可以通过 Box::pin 来简单的实现
+- 当固定类型 T: !Unpin 时，你需要保证数据从被固定到被 drop 这段时期内，其内存不会变得非法或者被重用
 ### async/await 和 Stream 流处理
 #### async/await 和 Stream 流处理
 async 允许我们使用 move 关键字来将环境中变量的所有权转移到语句块内，就像闭包那样，好处是你不再发愁该如何解决借用生命周期的问题，坏处就是无法跟其它代码实现对变量的共享.

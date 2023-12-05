@@ -3796,7 +3796,7 @@ fn main() {
     println!("Julie is a married women? {}",is_married_woman.interpret("Married Julie"))
 }
 ```
-## 迭代器模式
+## 迭代器模式（未）
 迭代器模式（Iterator Pattern）这种模式用于顺序访问集合对象的元素，不需要知道集合对象的底层表示。
 
 ### 介绍
@@ -3892,7 +3892,7 @@ Name : Lora
 
 
 
-## 实现
+### 实现
 我们通过聊天室实例来演示中介者模式。实例中，多个用户可以向聊天室发送消息，聊天室向所有的用户显示消息。我们将创建两个类 ChatRoom 和 User。User 对象使用 ChatRoom 方法来分享他们的消息。
 
 MediatorPatternDemo，我们的演示类使用 User 对象来显示他们之间的通信。
@@ -4009,11 +4009,444 @@ fn main() {
     pi.dispaly();
 }
 ```
-# 模板方法
+## 备忘录模式
+备忘录模式（Memento Pattern）保存一个对象的某个状态，以便在适当的时候恢复对象.
+
+### 介绍
+- **意图**：在不破坏封装性的前提下，捕获一个对象的内部状态，并在该对象之外保存这个状态。
+
+- **主要解决**：所谓备忘录模式就是在不破坏封装的前提下，捕获一个对象的内部状态，并在该对象之外保存这个状态，这样可以在以后将对象恢复到原先保存的状态。
+
+- **何时使用**：很多时候我们总是需要记录一个对象的内部状态，这样做的目的就是为了允许用户取消不确定或者错误的操作，能够恢复到他原先的状态。
+
+- **应用实例**：  1、打游戏时的存档。 2、Windows 里的 ctrl + z。 3、浏览器中的后退。 4、数据库的事务管理。
+
+
+### 实现
+备忘录模式使用三个类 Memento、Originator 和 CareTaker。Memento 包含了要被恢复的对象的状态。Originator 创建并在 Memento 对象中存储状态。Caretaker 对象负责从 Memento 中恢复对象的状态。
+
+MementoPatternDemo，我们的演示类使用 CareTaker 和 Originator 对象来显示对象的状态恢复。
+![Alt text](image-30.png)
+### java
+**步骤 1**
+创建 Memento 类。
+Memento.java
+```java
+public class Memento {
+   private String state;
+ 
+   public Memento(String state){
+      this.state = state;
+   }
+ 
+   public String getState(){
+      return state;
+   }  
+}
+```
+
+**步骤 2**
+创建 Originator 类。
+
+Originator.java
+```java
+public class Originator {
+   private String state;
+ 
+   public void setState(String state){
+      this.state = state;
+   }
+ 
+   public String getState(){
+      return state;
+   }
+ 
+   public Memento saveStateToMemento(){
+      return new Memento(state);
+   }
+ 
+   public void getStateFromMemento(Memento Memento){
+      state = Memento.getState();
+   }
+}
+```
+
+**步骤 3**
+创建 CareTaker 类。
+
+CareTaker.java
+```java
+import java.util.ArrayList;
+import java.util.List;
+ 
+public class CareTaker {
+   private List<Memento> mementoList = new ArrayList<Memento>();
+ 
+   public void add(Memento state){
+      mementoList.add(state);
+   }
+ 
+   public Memento get(int index){
+      return mementoList.get(index);
+   }
+}
+```
+
+**步骤 4**
+使用 CareTaker 和 Originator 对象。
+
+MementoPatternDemo.java
+```java
+public class MementoPatternDemo {
+   public static void main(String[] args) {
+      Originator originator = new Originator();
+      CareTaker careTaker = new CareTaker();
+      originator.setState("State #1");
+      originator.setState("State #2");
+      careTaker.add(originator.saveStateToMemento());
+      originator.setState("State #3");
+      careTaker.add(originator.saveStateToMemento());
+      originator.setState("State #4");
+ 
+      System.out.println("Current State: " + originator.getState());    
+      originator.getStateFromMemento(careTaker.get(0));
+      System.out.println("First saved State: " + originator.getState());
+      originator.getStateFromMemento(careTaker.get(1));
+      System.out.println("Second saved State: " + originator.getState());
+   }
+}
+```
+
+**步骤 5**
+验证输出。
+```shell
+Current State: State #4
+First saved State: State #2
+Second saved State: State #3
+```
+
+### rust
+rust的实现和java的实现大致一样，就不再赘述了
+```rs
+// 设置备忘录类
+#[derive(Clone)]
+struct Memento{
+        state:String
+}
+// 设置创始类
+struct Originator{
+    state:String,
+}
+impl Originator {
+    fn save_state_to_memento(&self)->Memento{
+        Memento { state: self.state.clone() }
+    }
+    fn get_state_from_memento(&mut self,memento:Memento){
+        self.state=memento.state.clone();
+    }
+}
+// 创建看护人类
+struct CareTaker{
+    memento_list:Vec<Memento>
+}
+impl CareTaker {
+    fn add(&mut self,memento:Memento){
+        self.memento_list.push(memento);
+    }
+    fn get(&self,index:usize)->Memento{
+        self.memento_list.get(index).unwrap().clone()
+    }
+}
+
+fn main() {
+    let mut originator=Originator{state:"State #1".to_owned()};
+    let mut careTaker =CareTaker{memento_list:vec![]}; 
+    originator.state=String::from("State #2");
+    careTaker.add(originator.save_state_to_memento());
+    originator.state=String::from("State #3");
+    careTaker.add(originator.save_state_to_memento());
+    originator.state=String::from("State #4");
+    println!("Current State: {}",originator.state);
+    originator.get_state_from_memento(careTaker.get(0));
+    println!("First saved State: {}",originator.state);
+    originator.get_state_from_memento(careTaker.get(1));
+    println!("Second saved State: {}",originator.state)
+}
+```
+## 观察者模式（未）
+观察者模式是一种行为型设计模式，它定义了一种一对多的依赖关系，当一个对象的状态发生改变时，其所有依赖者都会收到通知并自动更新。
+
+当对象间存在一对多关系时，则使用观察者模式（Observer Pattern）。比如，当一个对象被修改时，则会自动通知依赖它的对象。观察者模式属于行为型模式。
+
+介绍
+意图：定义对象间的一种一对多的依赖关系，当一个对象的状态发生改变时，所有依赖于它的对象都得到通知并被自动更新。
+
+主要解决：一个对象状态改变给其他对象通知的问题，而且要考虑到易用和低耦合，保证高度的协作。
+
+何时使用：一个对象（目标对象）的状态发生改变，所有的依赖对象（观察者对象）都将得到通知，进行广播通知。
+
+如何解决：使用面向对象技术，可以将这种依赖关系弱化。
+
+关键代码：在抽象类里有一个 ArrayList 存放观察者们。
+
+应用实例： 1、拍卖的时候，拍卖师观察最高标价，然后通知给其他竞价者竞价。 2、西游记里面悟空请求菩萨降服红孩儿，菩萨洒了一地水招来一个老乌龟，这个乌龟就是观察者，他观察菩萨洒水这个动作。
+
+优点： 1、观察者和被观察者是抽象耦合的。 2、建立一套触发机制。
+
+缺点： 1、如果一个被观察者对象有很多的直接和间接的观察者的话，将所有的观察者都通知到会花费很多时间。 2、如果在观察者和观察目标之间有循环依赖的话，观察目标会触发它们之间进行循环调用，可能导致系统崩溃。 3、观察者模式没有相应的机制让观察者知道所观察的目标对象是怎么发生变化的，而仅仅只是知道观察目标发生了变化。
+
+使用场景：
+
+一个抽象模型有两个方面，其中一个方面依赖于另一个方面。将这些方面封装在独立的对象中使它们可以各自独立地改变和复用。
+一个对象的改变将导致其他一个或多个对象也发生改变，而不知道具体有多少对象将发生改变，可以降低对象之间的耦合度。
+一个对象必须通知其他对象，而并不知道这些对象是谁。
+需要在系统中创建一个触发链，A对象的行为将影响B对象，B对象的行为将影响C对象……，可以使用观察者模式创建一种链式触发机制。
+注意事项： 1、JAVA 中已经有了对观察者模式的支持类。 2、避免循环引用。 3、如果顺序执行，某一观察者错误会导致系统卡壳，一般采用异步方式。
+
+观察者模式包含以下几个核心角色：
+
+主题（Subject）：也称为被观察者或可观察者，它是具有状态的对象，并维护着一个观察者列表。主题提供了添加、删除和通知观察者的方法。
+观察者（Observer）：观察者是接收主题通知的对象。观察者需要实现一个更新方法，当收到主题的通知时，调用该方法进行更新操作。
+具体主题（Concrete Subject）：具体主题是主题的具体实现类。它维护着观察者列表，并在状态发生改变时通知观察者。
+具体观察者（Concrete Observer）：具体观察者是观察者的具体实现类。它实现了更新方法，定义了在收到主题通知时需要执行的具体操作。
+观察者模式通过将主题和观察者解耦，实现了对象之间的松耦合。当主题的状态发生改变时，所有依赖于它的观察者都会收到通知并进行相应的更新。
+
+实现
+观察者模式使用三个类 Subject、Observer 和 Client。Subject 对象带有绑定观察者到 Client 对象和从 Client 对象解绑观察者的方法。我们创建 Subject 类、Observer 抽象类和扩展了抽象类 Observer 的实体类。
+
+ObserverPatternDemo，我们的演示类使用 Subject 和实体类对象来演示观察者模式。
+![Alt text](image-31.png)
+
+## 状态模式（未）
+在状态模式（State Pattern）中，类的行为是基于它的状态改变的。这种类型的设计模式属于行为型模式。
+
+在状态模式中，我们创建表示各种状态的对象和一个行为随着状态对象改变而改变的 context 对象。
+
+介绍
+意图：允许对象在内部状态发生改变时改变它的行为，对象看起来好像修改了它的类。
+
+主要解决：对象的行为依赖于它的状态（属性），并且可以根据它的状态改变而改变它的相关行为。
+
+何时使用：代码中包含大量与对象状态有关的条件语句。
+
+如何解决：将各种具体的状态类抽象出来。
+
+关键代码：通常命令模式的接口中只有一个方法。而状态模式的接口中有一个或者多个方法。而且，状态模式的实现类的方法，一般返回值，或者是改变实例变量的值。也就是说，状态模式一般和对象的状态有关。实现类的方法有不同的功能，覆盖接口中的方法。状态模式和命令模式一样，也可以用于消除 if...else 等条件选择语句。
+
+应用实例： 1、打篮球的时候运动员可以有正常状态、不正常状态和超常状态。 2、曾侯乙编钟中，'钟是抽象接口','钟A'等是具体状态，'曾侯乙编钟'是具体环境（Context）。
+
+优点： 1、封装了转换规则。 2、枚举可能的状态，在枚举状态之前需要确定状态种类。 3、将所有与某个状态有关的行为放到一个类中，并且可以方便地增加新的状态，只需要改变对象状态即可改变对象的行为。 4、允许状态转换逻辑与状态对象合成一体，而不是某一个巨大的条件语句块。 5、可以让多个环境对象共享一个状态对象，从而减少系统中对象的个数。
+
+缺点： 1、状态模式的使用必然会增加系统类和对象的个数。 2、状态模式的结构与实现都较为复杂，如果使用不当将导致程序结构和代码的混乱。 3、状态模式对"开闭原则"的支持并不太好，对于可以切换状态的状态模式，增加新的状态类需要修改那些负责状态转换的源代码，否则无法切换到新增状态，而且修改某个状态类的行为也需修改对应类的源代码。
+
+使用场景： 1、行为随状态改变而改变的场景。 2、条件、分支语句的代替者。
+
+注意事项：在行为受状态约束的时候使用状态模式，而且状态不超过 5 个。
+
+实现
+我们将创建一个 State 接口和实现了 State 接口的实体状态类。Context 是一个带有某个状态的类。
+
+StatePatternDemo，我们的演示类使用 Context 和状态对象来演示 Context 在状态改变时的行为变化。
+
+
+## 策略模式
+在策略模式（Strategy Pattern）中一个类的行为或其算法可以在运行时更改。
+
+在策略模式定义了一系列算法或策略，并将每个算法封装在独立的类中，使得它们可以互相替换。通过使用策略模式，可以在运行时根据需要选择不同的算法，而不需要修改客户端代码。
+
+在策略模式中，我们创建表示各种策略的对象和一个行为随着策略对象改变而改变的 context 对象。策略对象改变 context 对象的执行算法。
+
+### 介绍
+- **意图**：定义一系列的算法,把它们一个个封装起来, 并且使它们可相互替换。
+
+- **主要解决**：在有多种算法相似的情况下，使用 if...else 所带来的复杂和难以维护。
+
+- **应用实例**： 1、诸葛亮的锦囊妙计，每一个锦囊就是一个策略。 2、旅行的出游方式，选择骑自行车、坐汽车，每一种旅行方式都是一个策略。 
+
+- **使用场景**： 1、如果在一个系统里面有许多类，它们之间的区别仅在于它们的行为，那么使用策略模式可以动态地让一个对象在许多行为中选择一种行为。 2、一个系统需要动态地在几种算法中选择一种。 3、如果一个对象有很多的行为，如果不用恰当的模式，这些行为就只好使用多重的条件选择语句来实现。
+
+
+策略模式包含以下几个核心角色：
+- 环境（Context）：维护一个对策略对象的引用，负责将客户端请求委派给具体的策略对象执行。环境类可以通过依赖注入、简单工厂等方式来获取具体策略对象。
+- 抽象策略（Abstract Strategy）：定义了策略对象的公共接口或抽象类，规定了具体策略类必须实现的方法。
+- 具体策略（Concrete Strategy）：实现了抽象策略定义的接口或抽象类，包含了具体的算法实现。
+
+
+### 实现
+我们将创建一个定义活动的 Strategy 接口和实现了 Strategy 接口的实体策略类。Context 是一个使用了某种策略的类。
+
+StrategyPatternDemo，我们的演示类使用 Context 和策略对象来演示 Context 在它所配置或使用的策略改变时的行为变化。
+![Alt text](image-32.png)
+### java
+**步骤 1**
+创建一个接口。
+
+Strategy.java
+```java
+public interface Strategy {
+   public int doOperation(int num1, int num2);
+}
+```
+
+**步骤 2**
+创建实现接口的实体类。
+
+OperationAdd.java
+```java
+
+public class OperationAdd implements Strategy{
+   @Override
+   public int doOperation(int num1, int num2) {
+      return num1 + num2;
+   }
+}
+OperationSubtract.java
+public class OperationSubtract implements Strategy{
+   @Override
+   public int doOperation(int num1, int num2) {
+      return num1 - num2;
+   }
+}
+```
+
+OperationMultiply.java
+```java
+public class OperationMultiply implements Strategy{
+   @Override
+   public int doOperation(int num1, int num2) {
+      return num1 * num2;
+   }
+}
+```
+
+**步骤 3**
+创建 Context 类。
+
+Context.java
+```java
+public class Context {
+   private Strategy strategy;
+ 
+   public Context(Strategy strategy){
+      this.strategy = strategy;
+   }
+ 
+   public int executeStrategy(int num1, int num2){
+      return strategy.doOperation(num1, num2);
+   }
+}
+
+```
+
+**步骤 4**
+使用 Context 来查看当它改变策略 Strategy 时的行为变化。
+
+StrategyPatternDemo.java
+```java
+public class StrategyPatternDemo {
+   public static void main(String[] args) {
+      Context context = new Context(new OperationAdd());    
+      System.out.println("10 + 5 = " + context.executeStrategy(10, 5));
+ 
+      context = new Context(new OperationSubtract());      
+      System.out.println("10 - 5 = " + context.executeStrategy(10, 5));
+ 
+      context = new Context(new OperationMultiply());    
+      System.out.println("10 * 5 = " + context.executeStrategy(10, 5));
+   }
+}
+```
+
+步骤 5
+执行程序，输出结果：
+```java
+10 + 5 = 15
+10 - 5 = 5
+10 * 5 = 50
+```
+
+### rust
+```rs
+// 创建策略特征
+trait  Strategy{
+   fn  do_operation(&self,num1:i32,num2:i32)->i32;
+}
+
+struct OperationAdd{
+}
+// 创建加法策略
+impl Strategy for OperationAdd {
+    fn  do_operation(&self,num1:i32,num2:i32)->i32 {
+        num1+num2
+    }
+}
+// 创建减法测率
+struct OperationSubtract{}
+impl Strategy for OperationSubtract{
+    fn  do_operation(&self,num1:i32,num2:i32)->i32 {
+        num1-num2
+    }
+}
+// 创建乘法策略
+struct OperationMultiply{}
+impl Strategy for OperationMultiply {
+    fn  do_operation(&self,num1:i32,num2:i32)->i32 {
+        num1*num2
+    }
+}
+// 创建环境，管理策略方法
+struct Context{
+    strategy:Box<dyn Strategy>,
+}
+impl Context {
+    fn execute_strategy(&self,num1:i32,num2:i32)->i32 {
+        self.strategy.do_operation(num1, num2)
+    }
+}
+fn main() {
+    let mut context=Context{
+        strategy:Box::new(OperationAdd{}),
+    };
+    println!("10 + 5 =  {}",context.execute_strategy(10, 5));
+    context.strategy=Box::new(OperationSubtract{});
+    println!("10 - 5 =  {}",context.execute_strategy(10, 5));
+    context.strategy=Box::new(OperationMultiply{});
+    println!("10 * 5 =  {}",context.execute_strategy(10, 5));
+}
+```
+##  模板方法(未)
 **模板方法**定义一个操作中的算法的骨架，而将这一些步骤延迟到子类中。模板方式使得子类可以不改变一个算法的结构可重新定义该算法的某些特定步骤。
 # 迪米特法则
 **迪米特法则**如果两个类不必彼此直接通信，那么这两个类就不应当发生直接的相互作用。如果其中一个类需要调用另一个类的某一个方法的话，可以通过第三者转发这个调用。
 
+## 访问者模式
+在访问者模式（Visitor Pattern）中，我们使用了一个访问者类，它改变了元素类的执行算法。通过这种方式，元素的执行算法可以随着访问者改变而改变。这种类型的设计模式属于行为型模式。根据模式，元素对象已接受访问者对象，这样访问者对象就可以处理元素对象上的操作。
+
+介绍
+意图：主要将数据结构与数据操作分离。
+
+主要解决：稳定的数据结构和易变的操作耦合问题。
+
+何时使用：需要对一个对象结构中的对象进行很多不同的并且不相关的操作，而需要避免让这些操作"污染"这些对象的类，使用访问者模式将这些封装到类中。
+
+如何解决：在被访问的类里面加一个对外提供接待访问者的接口。
+
+关键代码：在数据基础类里面有一个方法接受访问者，将自身引用传入访问者。
+
+应用实例：您在朋友家做客，您是访问者，朋友接受您的访问，您通过朋友的描述，然后对朋友的描述做出一个判断，这就是访问者模式。
+
+优点： 1、符合单一职责原则。 2、优秀的扩展性。 3、灵活性。
+
+缺点： 1、具体元素对访问者公布细节，违反了迪米特原则。 2、具体元素变更比较困难。 3、违反了依赖倒置原则，依赖了具体类，没有依赖抽象。
+
+使用场景： 1、对象结构中对象对应的类很少改变，但经常需要在此对象结构上定义新的操作。 2、需要对一个对象结构中的对象进行很多不同的并且不相关的操作，而需要避免让这些操作"污染"这些对象的类，也不希望在增加新操作时修改这些类。
+
+注意事项：访问者可以对功能进行统一，可以做报表、UI、拦截器与过滤器。
+
+实现
+我们将创建一个定义接受操作的 ComputerPart 接口。Keyboard、Mouse、Monitor 和 Computer 是实现了 ComputerPart 接口的实体类。我们将定义另一个接口 ComputerPartVisitor，它定义了访问者类的操作。Computer 使用实体访问者来执行相应的动作。
+
+VisitorPatternDemo，我们的演示类使用 Computer、ComputerPartVisitor 类来演示访问者模式的用法。
 # 外观
 **外观模式**：为子系统中的一组接口提供一个一致的界面，此模式定义了一个高层接口，这个接口使得这一子系统更加容易使用。
 

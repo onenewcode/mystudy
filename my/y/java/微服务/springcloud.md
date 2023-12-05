@@ -1878,8 +1878,8 @@ Fegin的使用步骤如下：
 ### 2）添加注解
 
 在order-service的启动类添加注解开启Feign的功能：
-
-![image-20210714175102524](assets/image-20210714175102524.png)
+![Alt text](image.png)
+![image-20210714175102524](assets/image.png)
 
 
 
@@ -2291,16 +2291,21 @@ Zuul是基于Servlet的实现，属于阻塞式编程。而SpringCloudGateway则
 引入依赖：
 
 ```xml
-<!--网关-->
-<dependency>
-    <groupId>org.springframework.cloud</groupId>
-    <artifactId>spring-cloud-starter-gateway</artifactId>
-</dependency>
-<!--nacos服务发现依赖-->
-<dependency>
-    <groupId>com.alibaba.cloud</groupId>
-    <artifactId>spring-cloud-starter-alibaba-nacos-discovery</artifactId>
-</dependency>
+<!--    负载均衡-->
+    <dependency>
+        <groupId>org.springframework.cloud</groupId>
+        <artifactId>spring-cloud-starter-loadbalancer</artifactId>
+    </dependency>
+    <!--网关-->
+    <dependency>
+        <groupId>org.springframework.cloud</groupId>
+        <artifactId>spring-cloud-starter-gateway</artifactId>
+    </dependency>
+    <!--nacos服务发现依赖-->
+    <dependency>
+        <groupId>com.alibaba.cloud</groupId>
+        <artifactId>spring-cloud-starter-alibaba-nacos-discovery</artifactId>
+    </dependency>
 ```
 
 
@@ -2330,13 +2335,15 @@ public class GatewayApplication {
 
 ```yaml
 server:
-  port: 10010 # 网关端口
+  port: 10010
 spring:
   application:
-    name: gateway # 服务名称
+    name: gateway
   cloud:
     nacos:
-      server-addr: localhost:8848 # nacos地址
+      discovery:
+        cluster-name: HZ # 集群名称
+        server-addr: 192.168.218.134:8848
     gateway:
       routes: # 网关路由配置
         - id: user-service # 路由id，自定义，只要唯一即可
@@ -2396,12 +2403,6 @@ spring:
 
 
 
-接下来，就重点来学习路由断言和路由过滤器的详细知识
-
-
-
-
-
 ## 断言工厂
 
 我们在配置文件中写的断言规则只是字符串，这些字符串会被Predicate Factory读取并处理，转变为路由判断的条件
@@ -2440,7 +2441,7 @@ GatewayFilter是网关中提供的一种过滤器，可以对进入网关的请�
 
 
 
-### 3.4.1.路由过滤器的种类
+### 路由过滤器的种类
 
 Spring提供了31种不同的路由过滤器工厂。例如：
 
@@ -2518,7 +2519,7 @@ defaultFilters的作用是什么？
 
 ## 全局过滤器
 
-上一节学习的过滤器，网关提供了31种，但每一种过滤器的作用都是固定的。如果我们希望拦截请求，做自己的业务逻辑则没办法实现。
+网关提供了31种，但每一种过滤器的作用都是固定的。如果我们希望拦截请求，做自己的业务逻辑则没办法实现。
 
 ### 全局过滤器作用
 
