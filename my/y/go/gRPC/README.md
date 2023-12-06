@@ -1,75 +1,73 @@
-* [微服务入门](#微服务入门)
-* [gRPC是什么](#grpc是什么)
-      * [proto 服务定义](#proto-服务定义)
-      * [gRPC 优势](#grpc-优势)
-* [gRPC入门](#grpc入门)
-      * [简单使用](#简单使用)
-      * [一元RPC](#一元rpc)
-      * [服务流RPC](#服务流rpc)
-      * [客户流RPC](#客户流rpc)
-      * [双工流RPC](#双工流rpc)
-* [gRPC底层原理](#grpc底层原理)
-      * [RPC流](#rpc流)
-      * [长度前缀的消息分帧](#长度前缀的消息分帧)
-      * [请求消息](#请求消息)
-      * [响应信息](#响应信息)
-      * [通信模式下的消息流](#通信模式下的消息流)
-* [gRPC进阶](#grpc进阶)
-      * [服务端拦截器](#服务端拦截器)
-      * [客户端拦截器](#客户端拦截器)
-      * [截止时间、超时时间](#截止时间超时时间)
-      * [错误处理](#错误处理)
-      * [多路复用](#多路复用)
-      * [元数据](#元数据)
-      * [负载均衡](#负载均衡)
-      * [压缩数据](#压缩数据)
-* [gRPC安全连接](#grpc安全连接)
-      * [单向TLS安全连接](#单向tls安全连接)
-      * [basic 认证](#basic-认证)
-      * [OAuth 2.0认证](#oauth-20认证)
-      * [JWT认证](#jwt认证)
-* [gRPC测试](#grpc测试)
-      * [服务端测试](#服务端测试)
-      * [客户端测试](#客户端测试)
-* [gRPC部署](#grpc部署)
-      * [部署docker](#部署docker)
-      * [部署k8s](#部署k8s)
-      * [健康检查](#健康检查)
-      * [健康探针](#健康探针)
-      
+# Rpc基本概念
+ 　　RPC（Remote Procedure Call）远程过程调用，是一种通过网络从远程计算机程序上请求服务，而不需要了解底层网络技术的协议，简单的理解是一个节点请求另一个节点提供的服务。RPC只是一套协议，基于这套协议规范来实现的框架都可以称为 RPC 框架，比较典型的有 有阿里巴巴的 Dubbo、Google 的 gRPC、Facebook 的 Thrift 和 Twitter 的 Finagle 等。
 
-# 微服务入门
+## RPC 机制和实现过程
+　　　　RPC 是远程过程调用的方式之一，涉及调用方和被调用方两个进程的交互。因为 RPC 提供类似于本地方法调用的形式，所以对于调用方来说，调用 RPC 方法和调用本地方法并没有明显区别。
+## RPC的机制的诞生和基础概念
 
-> 现在的软件很少是一个孤立的单体应用运行的，相反更多是通过互联网连接在一起的，以相互传递消息的方式进行通信和协调，也就是分布式软件的集合。
->
-> 例如：一个商城系统由多个分布式的应用程序组成，像订单应用、商品应用、支付应用、数据库应用等等，这些程序可以分布在不同的网络位置中运行，通过不同的通信协议传递信息。
-> 传统的软件被拆分成细粒度、面向业务的实体，这就是微服务。
->
-> 最传统的方式就是构造成REST API 服务，也就是一组架构约束条件原则，把应用和服务定义为一组资源，但是这种方式的配置太麻烦，笨重低效。
->
-> 为了更好的扩展性、低耦合进程间通信，这也就是gRPC的优势
+　　1984 年，Birrell 和 Nelson 在 ACM Transactions on Computer Systems 期刊上发表了名为“Implementing remote procedure calls”的论文，该文对 RPC 的机制做了经典的诠释：
 
-# gRPC是什么
+　　RPC 远程过程调用是指计算机 A 上的进程，调用另外一台计算机 B 上的进程的方法。其中A 上面的调用进程被挂起，而 B 上面的被调用进程开始执行对应方法，并将结果返回给 A，计算机 A 接收到返回值后，调用进程继续执行。
 
-> 以往我们是通过简单的路由映射来允许客户端获取路由信息和交换路由信息。
->
-> 在gRPC中，我们可以一次性的在一个 proto文件中定义服务并使用任意的支持gRPC的语言去实现客户端和服务端，整个过程操作变得简单，就像调用本地函数一样。
+　　发起 RPC 的进程通过参数等方式将信息传送给被调用方，然后被调用方处理结束后，再通过返回值将信息传递给调用方。这一过程对于开发人员来说是透明的，开发人员一般也无须知道双方底层是如何进行消息通信和信息传递的，这样可以让业务开发人员更专注于业务开发，而非底层细节。
 
-> 通过 proto生成服务端代码，也就是服务端的骨架，提供低层通信抽象
->
-> 通过 proto生成客户端代码，也就是客户端的存根，隐藏了不同语言的差异，提供抽象的通信方式，就像调用本地函数一样。
->
-> ~~~go
-> go get google.golang.org/grpc
-> go get github.com/golang/protobuf/protoc-gen-go
-> ~~~
+　　RPC 让程序之间的远程过程调用具有与本地调用类似的形式。比如说某个程序需要读取某个文件的数据，开发人员会在代码中执行 read 系统调用来获取数据。
+
+　　　　当 read 实际是本地调用时，read 函数由链接器从依赖库中提取出来，接着链接器会将它链接到该程序中。虽然 read 中执行了特殊的系统调用，但它本身依然是通过将参数压入堆栈的常规方式调用的，调用方并不知道 read 函数的具体实现和行为。
+
+　　　　当 read 实际是一个远程过程时（比如调用远程文件服务器提供的方法），调用方程序中需要引入 read 的接口定义，称为客户端存根（client-stub）。远程过程 read 的客户端存根与本地方法的 read 函数类似，都执行了本地函数调用。不同的是它底层实现上不是进行操作系统调用读取本地文件来提供数据，而是将参数打包成网络消息，并将此网络消息发送到远程服务器，交由远程服务执行对应的方法，在发送完调用请求后，客户端存根随即阻塞，直到收到服务器发回的响应消息为止。
+
+
+下图展示了远程方法调用过程中的客户端和服务端各个阶段的操作。
+　　　　
+![Alt text](image.png)
+
+
+
+## 总结下RPC执行步骤：
+
+1. 调用客户端句柄，执行传递参数。
+2. 调用本地系统内核发送网络消息。
+3. 消息传递到远程主机，就是被调用的服务端。
+4. 服务端句柄得到消息并解析消息。
+5. 服务端执行被调用方法，并将执行完毕的结果返回给服务器句柄。
+6. 服务器句柄返回结果，并调用远程系统内核。
+7. 消息经过网络传递给客户端。
+8. 客户端接受数据。
+
+
+# 安装gRPC和Protobuf
+gRPC由google开发，是一款语言中立、平台中立、开源的远程过程调用系统
+gRPC客户端和服务端可以在多种环境中运行和交互，例如用java写一个服务端，可以用go语言写客户端调用
+在gRPC中，我们可以一次性的在一个 proto文件中定义服务并使用任意的支持gRPC的语言去实现客户端和服务端，整个过程操作变得简单，就像调用本地函数一样。
+
+通过 proto生成服务端代码，也就是服务端的骨架，提供低层通信抽象
+通过 proto生成客户端代码，也就是客户端的存根，隐藏了不同语言的差异，提供抽象的通信方式，就像调用本地函数一样。
+
+## 安装
+- go get github.com/golang/protobuf/proto
+- go get google.golang.org/grpc（无法使用，用如下命令代替）
+	- git clone https://github.com/grpc/grpc-go.git $GOPATH/src/google.golang.org/grpc
+	- git clone https://github.com/golang/net.git $GOPATH/src/golang.org/x/net
+	- git clone https://github.com/golang/text.git $GOPATH/src/golang.org/x/text
+	- go get -u github.com/golang/protobuf/{proto,protoc-gen-go}
+	- git clone https://github.com/google/go-genproto.git $GOPATH/src/google.golang.org/genproto
+	- cd $GOPATH/src/
+	- go install google.golang.org/grpc
+	- go get github.com/golang/protobuf/protoc-gen-go
+- 上面安装好后，会在GOPATH/bin下生成protoc-gen-go.exe
+- 但还需要一个protoc.exe，windows平台编译受限，很难自己手动编译，直接去网站下载一个，地址：https://github.com/protocolbuffers/protobuf/releases/tag/v3.9.0 ，同样放在GOPATH/bin下
 
 ### proto 服务定义
 
-> gRPC 使用protocol buffer 来定义服务接口，protocol buffer和 XML、JSON一样是一种结构化数据序列化的可扩展存储结构，protocol buffer是一种语言中立，结构简单高效，比XML更小更简单，可以通过特殊的插件自动生成代码来读写操作这个数据结构。
-
-~~~protobuf
+gRPC 使用protocol buffer 来定义服务接口，protocol buffer和 XML、JSON一样是一种结构化数据序列化的可扩展存储结构，protocol buffer是一种语言中立，结构简单高效，比XML更小更简单，可以通过特殊的插件自动生成代码来读写操作这个数据结构。
+```protobuf
 import "myproject/other_protos.proto";		// 导入其他 proto文件
+syntax = "proto3"; // 指定proto版本
+package hello;     // 指定默认包名
+
+// 指定golang包名
+option go_package = "hello";
 
 message SearchRequest 
 {
@@ -97,16 +95,16 @@ message SomeOtherMessage
 service List{				// 定义gRPC服务接口
 	rpc getList(SearchRequest) returns (SearchResponse);
 }
-~~~
+```
 
-~~~go
+```go
 // 插件自动生成gRPC骨架和存根
 protoc --go_out=plugins=grpc: ./ *.proto
-
+```
 后面需要实现服务端具体的逻辑就行，然后注册到gRPC服务器
 客户端在调用远程方法时会使用阻塞式存根，所以gRPC主要使用同步的方式通信，在建立连接后，可以使用流的方式操作。
 客户端编排为protocol buffer的格式，服务端再解排执行，以HTTP2 传输
-~~~
+
 
 ### gRPC 优势
 
@@ -121,103 +119,124 @@ protoc --go_out=plugins=grpc: ./ *.proto
 
 `protocol buffer`
 
-~~~protobuf
+```protobuf
 syntax = "proto3";
-package ecommerce;
+package hello;
+// 第一个分割参数，输出路径；第二个设置生成类的包路径
 
-service ProductInfo {
-    rpc addProduct(Product) returns (ProductID);
-    rpc getProduct(ProductID) returns (Product);
+option go_package = "./proto/hello";
+
+
+
+// 设置服务名称
+service Greeter {
+  // 设置方法
+  rpc SayHello (HelloRequest) returns (HelloReply) {}
 }
 
-message Product {
-    string id = 1;
-    string name = 2;
-    string description = 3;
-    float price = 4;
+// 请求信息用户名.
+message HelloRequest {
+  string name = 1;
 }
 
-message ProductID {
-    string value = 1;
+// 响应信息
+message HelloReply {
+  string message = 1;
 }
-~~~
+```
 
 `服务端`
 
 ~~~go
-// server is used to implement ecommerce/product_info.
+package main
+
+import (
+	"context"
+	"flag"
+	"fmt"
+	"log"
+	"net"
+
+	"google.golang.org/grpc"
+	pb "mygrpc/proto/hello"
+)
+
+var (
+	port = flag.Int("port", 50051, "The server port")
+)
+
 type server struct {
-	productMap map[string]*pb.Product
+	pb.UnimplementedGreeterServer
 }
 
-// AddProduct implements ecommerce.AddProduct
-func (s *server) AddProduct(ctx context.Context,
-	in *pb.Product) (*pb.ProductID, error) {
-	out, err := uuid.NewV4()
-	if err != nil {
-		return nil, status.Errorf(codes.Internal, "Error while generating Product ID", err)
-	}
-	in.Id = out.String()
-	if s.productMap == nil {
-		s.productMap = make(map[string]*pb.Product)
-	}
-	s.productMap[in.Id] = in
-	log.Printf("Product %v : %v - Added.", in.Id, in.Name)
-	return &pb.ProductID{Value: in.Id}, status.New(codes.OK, "").Err()
-}
-
-// GetProduct implements ecommerce.GetProduct
-func (s *server) GetProduct(ctx context.Context, in *pb.ProductID) (*pb.Product, error) {
-	product, exists := s.productMap[in.Value]
-	if exists && product != nil {
-		log.Printf("Product %v : %v - Retrieved.", product.Id, product.Name)
-		return product, status.New(codes.OK, "").Err()
-	}
-	return nil, status.Errorf(codes.NotFound, "Product does not exist.", in.Value)
+func (s *server) SayHello(ctx context.Context, in *pb.HelloRequest) (*pb.HelloReply, error) {
+	log.Printf("Received: %v", in.GetName())
+	return &pb.HelloReply{Message: "Hello " + in.GetName()}, nil
 }
 
 func main() {
-	lis, err := net.Listen("tcp", port)
+	flag.Parse()
+	lis, err := net.Listen("tcp", fmt.Sprintf(":%d", *port))
 	if err != nil {
 		log.Fatalf("failed to listen: %v", err)
 	}
+	// 开启rpc
 	s := grpc.NewServer()
-	pb.RegisterProductInfoServer(s, &server{})
+	// 注册服务
+	pb.RegisterGreeterServer(s, &server{})
+	log.Printf("server listening at %v", lis.Addr())
 	if err := s.Serve(lis); err != nil {
 		log.Fatalf("failed to serve: %v", err)
 	}
 }
+
 ~~~
 
 `客户端`
 
 ~~~go
+package main
+
+import (
+	"context"
+	"flag"
+	"log"
+	"time"
+
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
+	pb "mygrpc/proto/hello" // 引入编译生成的包
+)
+
+const (
+	defaultName = "world"
+)
+
+var (
+	addr = flag.String("addr", "localhost:50051", "the address to connect to")
+	name = flag.String("name", defaultName, "Name to greet")
+)
+
 func main() {
-	// Set up a connection to the server.
-	conn, err := grpc.Dial(address, grpc.WithInsecure())
+	flag.Parse()
+	// 与服务建立连接.
+	conn, err := grpc.Dial(*addr, grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if err != nil {
 		log.Fatalf("did not connect: %v", err)
 	}
 	defer conn.Close()
-	c := pb.NewProductInfoClient(conn)
+	// 创建指定服务的客户端
+	c := pb.NewGreeterClient(conn)
 
-	// Contact the server and print out its response.
-	name := "Apple iPhone 11"
-	description := "Meet Apple iPhone 11. All-new dual-camera system with Ultra Wide and Night mode."
-	price := float32(699.00)
+	// 连接服务器并打印出其响应。
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	defer cancel()
-	r, err := c.AddProduct(ctx, &pb.Product{Name: name, Description: description, Price: price})
+	// 调用指定方法
+	r, err := c.SayHello(ctx, &pb.HelloRequest{Name: *name})
 	if err != nil {
-		log.Fatalf("Could not add product: %v", err)
+		log.Fatalf("could not greet: %v", err)
 	}
-	log.Printf("Product ID: %s added successfully", r.Value)
-
-	product, err := c.GetProduct(ctx, &pb.ProductID{Value: r.Value})
-	if err != nil {
-		log.Fatalf("Could not get product: %v", err)
-	}
-	log.Printf("Product: %v", product.String())
+	log.Printf("Greeting: %s", r.GetMessage())
 }
 
 ~~~
