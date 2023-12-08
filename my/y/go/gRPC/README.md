@@ -18,7 +18,7 @@
 　　　　当 read 实际是一个远程过程时（比如调用远程文件服务器提供的方法），调用方程序中需要引入 read 的接口定义，称为客户端存根（client-stub）。远程过程 read 的客户端存根与本地方法的 read 函数类似，都执行了本地函数调用。不同的是它底层实现上不是进行操作系统调用读取本地文件来提供数据，而是将参数打包成网络消息，并将此网络消息发送到远程服务器，交由远程服务执行对应的方法，在发送完调用请求后，客户端存根随即阻塞，直到收到服务器发回的响应消息为止。
 
 
-下图展示了远程方法调用过程中的客户端和服务端各个阶段的操作。
+　　　　下图展示了远程方法调用过程中的客户端和服务端各个阶段的操作。
 　　　　
 ![Alt text](image.png)
 
@@ -242,307 +242,24 @@ func main() {
 ~~~
 
 客户端连接gRPC服务器以后，就可以像调用本地函数一样操作远程服务器。
-
-### 一元RPC
-
-> 通信时始终只有一个请求和一个响应
-
-~~~protobuf
-service OrderManagement {
-    rpc addOrder(Order) returns (google.protobuf.StringValue);
-    rpc getOrder(google.protobuf.StringValue) returns (Order);
-}
-
-message Order {
-    string id = 1;
-    repeated string items = 2;
-    string description = 3;
-    float price = 4;
-    string destination = 5;
-}
-
-message CombinedShipment {
-    string id = 1;
-    string status = 2;
-    repeated Order ordersList = 3;
-}
-~~~
-
-`服务端`
-
-~~~go
-func (s *server) AddOrder(ctx context.Context, orderReq *pb.Order) (*wrapper.StringValue, error) {
-	log.Printf("Order Added. ID : %v", orderReq.Id)
-	orderMap[orderReq.Id] = *orderReq
-	return &wrapper.StringValue{Value: "Order Added: " + orderReq.Id}, nil
-}
-
-func (s *server) GetOrder(ctx context.Context, orderId *wrapper.StringValue) (*pb.Order, error) {
-	ord, exists := orderMap[orderId.Value]
-	if exists {
-		return &ord, status.New(codes.OK, "").Err()
-	}
-	return nil, status.Errorf(codes.NotFound, "Order does not exist. : ", orderId)
-}
-
-func main() {
-	lis, err := net.Listen("tcp", port)
-	if err != nil {
-		log.Fatalf("failed to listen: %v", err)
-	}
-	s := grpc.NewServer()
-	pb.RegisterOrderManagementServer(s, &server{})
-	if err := s.Serve(lis); err != nil {
-		log.Fatalf("failed to serve: %v", err)
-	}
-}
-~~~
-
-`客户端`
-
-~~~go
-func main() {
-	// Setting up a connection to the server.
-	conn, err := grpc.Dial(address, grpc.WithInsecure())
-	if err != nil {
-		log.Fatalf("did not connect: %v", err)
-	}
-	defer conn.Close()
-	client := pb.NewOrderManagementClient(conn)
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second*5)
-	defer cancel()
-
-	// Add Order
-	order1 := pb.Order{Id: "101", Items: []string{"iPhone XS", "Mac Book Pro"}, Destination: "San Jose, CA", Price: 2300.00}
-	res, _ := client.AddOrder(ctx, &order1)
-	if res != nil {
-		log.Print("AddOrder Response -> ", res.Value)
-	}
-  // Get Order
-	retrievedOrder , err := client.GetOrder(ctx, &wrapper.StringValue{Value: "106"})
-	log.Print("GetOrder Response -> : ", retrievedOrder)
-} 
-~~~
-
-### 服务流RPC
-
-> 通信时可以是一个请求，服务端多次响应，比如查询业务，服务端模糊匹配找到一次就返回客户端一次响应这样的多次响应
-
-~~~protobuf
-rpc searchOrders(google.protobuf.StringValue) returns (stream Order);
-~~~
-
-~~~go
-func (s *server) SearchOrders(searchQuery *wrappers.StringValue, stream pb.OrderManagement_SearchOrdersServer) error {
-	for key, order := range orderMap {
-		log.Print(key, order)
-		for _, itemStr := range order.Items {
-			log.Print(itemStr)
-      // 检查字段是否包含查询字符串
-			if strings.Contains(itemStr, searchQuery.Value) {
-				// 服务端 Send 方法写入流中发送给客户端
-				err := stream.Send(&order)
-				if err != nil {
-					return fmt.Errorf("error sending message to stream : %v", err)
-				}
-				log.Print("Matching Order Found : " + key)
-				break
-			}
-		}
-	}
-	return nil
-}
-~~~
-
-~~~go
-searchStream, _ := client.SearchOrders(ctx, &wrapper.StringValue{Value: "Google"})
-	for {
-    // 客户端 Recv 方法接收服务端发送的流
-		searchOrder, err := searchStream.Recv()
-		if err == io.EOF {
-			log.Print("EOF")
-			break
-		}
-		if err == nil {
-			log.Print("Search Result : ", searchOrder)
-		}
-	}
-~~~
-
-### 客户流RPC
-
-> 客户端多个请求发给服务端，服务端发送一个响应给客户端，比如更新业务，客户端的读个请求发过来，服务端更新完返回一个成功的结果
-
-~~~protobuf
-rpc updateOrders(stream Order) returns (google.protobuf.StringValue);
-~~~
-
-~~~go
-func (s *server) UpdateOrders(stream pb.OrderManagement_UpdateOrdersServer) error {
-  
-	ordersStr := "Updated Order IDs : "
-	for {
-    // Recv 对客户端发来的请求接收
-		order, err := stream.Recv()
-		if err == io.EOF {
-			// 流结束，关闭并发送响应给客户端
-			return stream.SendAndClose(&wrapper.StringValue{Value: "Orders processed " + ordersStr})
-		}
-		if err != nil {
-			return err
-		}
-		// 更新数据
-		orderMap[order.Id] = *order
-		log.Printf("Order ID : %s - %s", order.Id, "Updated")
-		ordersStr += order.Id + ", "
-	}
-}
-~~~
-
-~~~go
-updateStream, err := client.UpdateOrders(ctx)
-	if err != nil {
-		log.Fatalf("%v.UpdateOrders(_) = _, %v", client, err)
-	}
-	// Updating order 1
-	if err := updateStream.Send(&updOrder1); err != nil {
-		log.Fatalf("%v.Send(%v) = %v", updateStream, updOrder1, err)
-	}
-	// Updating order 2
-	if err := updateStream.Send(&updOrder2); err != nil {
-		log.Fatalf("%v.Send(%v) = %v", updateStream, updOrder2, err)
-	}
-	// 发送关闭信号并接收服务端响应
-updateRes, err := updateStream.CloseAndRecv()
-	if err != nil {
-		log.Fatalf("%v.CloseAndRecv() got error %v, want %v", updateStream, err, nil)
-	}
-	log.Printf("Update Orders Res : %s", updateRes)
-~~~
-
-### 双工流RPC
-
-> 对应的业务就比如实时的消息流
-
-~~~protobuf
-rpc processOrders(stream google.protobuf.StringValue) returns (stream CombinedShipment);
-~~~
-
-~~~go
-func (s *server) ProcessOrders(stream pb.OrderManagement_ProcessOrdersServer) error {
-
-	batchMarker := 1
-	var combinedShipmentMap = make(map[string]pb.CombinedShipment)
-	for {
-    // 接收请求
-		orderId, err := stream.Recv()
-		log.Printf("Reading Proc order : %s", orderId)
-		if err == io.EOF {
-			// 客户端请求发完，返回对应响应
-			log.Printf("EOF : %s", orderId)
-			for _, shipment := range combinedShipmentMap {
-				if err := stream.Send(&shipment); err != nil {
-					return err
-				}
-			}
-			return nil
-		}
-		if err != nil {
-			log.Println(err)
-			return err
-		}
-		// 处理逻辑
-		destination := orderMap[orderId.GetValue()].Destination
-		shipment, found := combinedShipmentMap[destination]
-
-		if found {
-			ord := orderMap[orderId.GetValue()]
-			shipment.OrdersList = append(shipment.OrdersList, &ord)
-			combinedShipmentMap[destination] = shipment
-		} else {
-			comShip := pb.CombinedShipment{Id: "cmb - " + (orderMap[orderId.GetValue()].Destination), Status: "Processed!"}
-			ord := orderMap[orderId.GetValue()]
-			comShip.OrdersList = append(shipment.OrdersList, &ord)
-			combinedShipmentMap[destination] = comShip
-			log.Print(len(comShip.OrdersList), comShip.GetId())
-		}
-		// 分批块发送回响应
-		if batchMarker == orderBatchSize {
-			for _, comb := range combinedShipmentMap {
-				log.Printf("Shipping : %v -> %v", comb.Id, len(comb.OrdersList))
-				if err := stream.Send(&comb); err != nil {
-					return err
-				}
-			}
-			batchMarker = 0
-			combinedShipmentMap = make(map[string]pb.CombinedShipment)
-		} else {
-			batchMarker++
-		}
-	}
-}
-~~~
-
-~~~go
-func main(){
-streamProcOrder, err := client.ProcessOrders(ctx)
-
-	if err := streamProcOrder.Send(&wrapper.StringValue{Value: "102"}); err != nil {
-		log.Fatalf("%v.Send(%v) = %v", client, "102", err)
-	}
-
-	if err := streamProcOrder.Send(&wrapper.StringValue{Value: "103"}); err != nil {
-		log.Fatalf("%v.Send(%v) = %v", client, "103", err)
-	}
-
-channel := make(chan struct{})
-  // 起个协程接收返回的响应
-	go asncClientBidirectionalRPC(streamProcOrder, channel)
-  // 模拟消息延迟，发送请求 1
-	time.Sleep(time.Millisecond * 1000)
-  if err := streamProcOrder.Send(&wrapper.StringValue{Value: "101"}); err != nil {
-		log.Fatalf("%v.Send(%v) = %v", client, "101", err)
-	}
-	// 关闭流
-	if err := streamProcOrder.CloseSend(); err != nil {
-		log.Fatal(err)
-	}
-	channel <- struct{}{}
-}
-
-func asncClientBidirectionalRPC(streamProcOrder pb.OrderManagement_ProcessOrdersClient, c chan struct{}) {
-	for {
-		combinedShipment, errProcOrder := streamProcOrder.Recv()
-		if errProcOrder == io.EOF {
-			break
-		}
-		log.Printf("Combined shipment : ", combinedShipment.OrdersList)
-	}
-	<-c
-}
-~~~
-
-# gRPC底层原理
-
+# gRPC三种流和消息格式
+## 消息格式
 ### RPC流
 
-> 服务端实现protocol buffer定义的方法，客户端保留一个存根，提供服务端方法的抽象，客户端只需要调用存根中的方法，就可以远程调用服务端方法。
->
-> - 调用存根方法
-> - 存根创建HTTP POST请求（==gRPC中所有请求都是 POST==），设置`content-type`为`application/grpc`
-> - 到达服务端，会先检查请求头是不是gRPC请求，否则返回415
+服务端实现protocol buffer定义的方法，客户端保留一个存根，提供服务端方法的抽象，客户端只需要调用存根中的方法，就可以远程调用服务端方法。
+- 调用存根方法
+- 存根创建HTTP POST请求（==gRPC中所有请求都是 POST==），设置`content-type`为`application/grpc`
+- 到达服务端，会先检查请求头是不是gRPC请求，否则返回415
 
-![image-20221221122031502](img/image-20221221122031502.png)
 
 ### 长度前缀的消息分帧
 
-> 在写入消息前，先写入长度消息表明每条消息的大小。
->
-> 每条消息都有额外的4字节来设置大小，也就是说消息的大小不能超过4GB
+在写入消息前，先写入长度消息表明每条消息的大小。
 
-> 帧首中还有单字节无符号整数，用来表明数据是否进行了压缩
->
-> 为1表示使用 `message-encoding`中的编码机制进行了压缩
+每条消息都有额外的4字节来设置大小，也就是说消息的大小不能超过4GB
+
+帧首中还有单字节无符号整数，用来表明数据是否进行了压缩
+为1表示使用 `message-encoding`中的编码机制进行了压缩
 
 ![image-20221219230630096](img/image-20221219230630096.png)
 
@@ -583,74 +300,676 @@ func asncClientBidirectionalRPC(streamProcOrder pb.OrderManagement_ProcessOrders
 ![image-20221219232919946](img/image-20221219232919946.png)
 
 ![image-20221219233002668](img/image-20221219233002668.png)
+## 三种流
+### 一元RPC
 
-### 通信模式下的消息流
-
-`一元RPC`
+> 通信时始终只有一个请求和一个响应
 
 ![image-20221219233629213](img/image-20221219233629213.png)
 
-`服务流RPC`
 
+`protocol buffer`
+
+```protobuf
+syntax = "proto3";
+package hello;
+// 第一个分割参数，输出路径；第二个设置生成类的包路径
+
+option go_package = "./proto/hello";
+
+
+
+// 设置服务名称
+service Greeter {
+  // 设置方法
+  rpc SayHello (HelloRequest) returns (HelloReply) {}
+}
+
+// 请求信息用户名.
+message HelloRequest {
+  string name = 1;
+}
+
+// 响应信息
+message HelloReply {
+  string message = 1;
+}
+```
+
+`服务端`
+
+~~~go
+package main
+
+import (
+	"context"
+	"flag"
+	"fmt"
+	"log"
+	"net"
+
+	"google.golang.org/grpc"
+	pb "mygrpc/proto/hello"
+)
+
+var (
+	port = flag.Int("port", 50051, "The server port")
+)
+
+type server struct {
+	pb.UnimplementedGreeterServer
+}
+
+func (s *server) SayHello(ctx context.Context, in *pb.HelloRequest) (*pb.HelloReply, error) {
+	log.Printf("Received: %v", in.GetName())
+	return &pb.HelloReply{Message: "Hello " + in.GetName()}, nil
+}
+
+func main() {
+	flag.Parse()
+	lis, err := net.Listen("tcp", fmt.Sprintf(":%d", *port))
+	if err != nil {
+		log.Fatalf("failed to listen: %v", err)
+	}
+	// 开启rpc
+	s := grpc.NewServer()
+	// 注册服务
+	pb.RegisterGreeterServer(s, &server{})
+	log.Printf("server listening at %v", lis.Addr())
+	if err := s.Serve(lis); err != nil {
+		log.Fatalf("failed to serve: %v", err)
+	}
+}
+
+~~~
+
+`客户端`
+
+~~~go
+package main
+
+import (
+	"context"
+	"flag"
+	"log"
+	"time"
+
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
+	pb "mygrpc/proto/hello" // 引入编译生成的包
+)
+
+const (
+	defaultName = "world"
+)
+
+var (
+	addr = flag.String("addr", "localhost:50051", "the address to connect to")
+	name = flag.String("name", defaultName, "Name to greet")
+)
+
+func main() {
+	flag.Parse()
+	// 与服务建立连接.
+	conn, err := grpc.Dial(*addr, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	if err != nil {
+		log.Fatalf("did not connect: %v", err)
+	}
+	defer conn.Close()
+	// 创建指定服务的客户端
+	c := pb.NewGreeterClient(conn)
+
+	// 连接服务器并打印出其响应。
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	// 调用指定方法
+	r, err := c.SayHello(ctx, &pb.HelloRequest{Name: *name})
+	if err != nil {
+		log.Fatalf("could not greet: %v", err)
+	}
+	log.Printf("Greeting: %s", r.GetMessage())
+}
+
+~~~
+
+### 服务流RPC
+
+> 通信时可以是一个请求，服务端多次响应，比如查询业务，服务端模糊匹配找到一次就返回客户端一次响应这样的多次响应。
 ![image-20221219233707823](img/image-20221219233707823.png)
 
-`客户流RPC`
+在protobuf中的 service添加以下代码
+~~~protobuf
+rpc searchOrders(google.protobuf.StringValue) returns (stream Order);
+~~~
+
+`服务端代码`
+~~~go
+package main
+
+import (
+	"context"
+	"flag"
+	"fmt"
+	"google.golang.org/grpc"
+	"io"
+	"log"
+	pb "mygrpc/proto/hello"
+	"net"
+)
+
+var (
+	port = flag.Int("port", 50051, "The service port")
+)
+
+type server struct {
+	pb.UnimplementedGreeterServer
+}
+
+func (s *server) SayHello(ctx context.Context, in *pb.HelloRequest) (*pb.HelloReply, error) {
+	log.Printf("Received: %v", in.GetName())
+	return &pb.HelloReply{Message: "Hello " + in.GetName()}, nil
+}
+func (s *server) SearchOrders(req *pb.HelloRequest, stream pb.Greeter_SearchOrdersServer) error {
+	log.Printf("Recved %v", req.GetName())
+	// 具体返回多少个response根据业务逻辑调整
+	for i := 0; i < 10; i++ {
+		// 通过 send 方法不断推送数据
+		err := stream.Send(&pb.HelloReply{})
+		if err != nil {
+			log.Fatalf("Send error:%v", err)
+			return err
+		}
+	}
+	return nil
+}
+func (s *server) UpdateOrders(stream pb.Greeter_UpdateOrdersServer) error {
+
+	for {
+		log.Println("开始接受客户端的流")
+		// Recv 对客户端发来的请求接收
+		order, err := stream.Recv()
+		if err == io.EOF {
+			// 流结束，关闭并发送响应给客户端
+			return stream.Send(&pb.HelloReply{Message: "接受客户流结束"})
+		}
+		if err != nil {
+			return err
+		}
+		// 更新数据
+		log.Printf("Order ID : %s - %s", order.GetName(), "Updated")
+	}
+}
+func main() {
+	flag.Parse()
+	lis, err := net.Listen("tcp", fmt.Sprintf(":%d", *port))
+	if err != nil {
+		log.Fatalf("failed to listen: %v", err)
+	}
+	// 开启rpc
+	s := grpc.NewServer()
+	// 注册服务
+	pb.RegisterGreeterServer(s, &server{})
+	log.Printf("service listening at %v", lis.Addr())
+	if err := s.Serve(lis); err != nil {
+		log.Fatalf("failed to serve: %v", err)
+	}
+}
+
+
+~~~
+`客户端代码`
+~~~go
+package main
+
+import (
+	"context"
+	"flag"
+	"io"
+	"log"
+	"time"
+
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
+	pb "mygrpc/proto/hello" // 引入编译生成的包
+)
+
+const (
+	defaultName = "world"
+)
+
+var (
+	addr = flag.String("addr", "localhost:50051", "the address to connect to")
+	name = flag.String("name", defaultName, "Name to greet")
+)
+
+func main() {
+	flag.Parse()
+	// 与服务建立连接.
+	conn, err := grpc.Dial(*addr, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	if err != nil {
+		log.Fatalf("did not connect: %v", err)
+	}
+	defer func(conn *grpc.ClientConn) {
+		err := conn.Close()
+		if err != nil {
+
+		}
+	}(conn)
+	// 创建指定服务的客户端
+	c := pb.NewGreeterClient(conn)
+
+	// 连接服务器并打印出其响应。
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	// 调用指定方法
+	searchStream, _ := c.SearchOrders(ctx, &pb.HelloRequest{Name: "开始服务端rpc流测试"})
+	for {
+		// 客户端 Recv 方法接收服务端发送的流
+		searchOrder, err := searchStream.Recv()
+		if err == io.EOF {
+			log.Print("EOF")
+			break
+		}
+		if err == nil {
+			log.Print("Search Result : ", searchOrder)
+		}
+	}
+	r, err := c.SayHello(ctx, &pb.HelloRequest{Name: *name})
+	if err != nil {
+		log.Fatalf("could not greet: %v", err)
+	}
+	log.Printf("Greeting: %s", r.GetMessage())
+}
+
+~~~
+
+### 客户流RPC
+
+> 客户端多个请求发给服务端，服务端发送一个响应给客户端，比如更新业务，客户端的读个请求发过来，服务端更新完返回一个成功的结果
 
 ![image-20221219233740220](img/image-20221219233740220.png)
 
-`双工流RPC`
+在protobuf中的 service添加以下代码
+~~~protobuf
+rpc updateOrders(stream HelloRequest) returns (stream HelloReply);
+~~~
+`服务端代码`
+~~~go
+func (s *server) UpdateOrders(stream pb.OrderManagement_UpdateOrdersServer) error {
+  
+	ordersStr := "Updated Order IDs : "
+	for {
+    // Recv 对客户端发来的请求接收
+		order, err := stream.Recv()
+		if err == io.EOF {
+			// 流结束，关闭并发送响应给客户端
+			return stream.SendAndClose(&wrapper.StringValue{Value: "Orders processed " + ordersStr})
+		}
+		if err != nil {
+			return err
+		}
+		// 更新数据
+		orderMap[order.Id] = *order
+		log.Printf("Order ID : %s - %s", order.Id, "Updated")
+		ordersStr += order.Id + ", "
+	}
+}
+~~~
+`客户端代码`
+~~~go
+package main
+
+import (
+	"context"
+	"flag"
+	"log"
+	"time"
+
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
+	pb "mygrpc/proto/hello" // 引入编译生成的包
+)
+
+const (
+	defaultName = "world"
+)
+
+var (
+	addr = flag.String("addr", "localhost:50051", "the address to connect to")
+	name = flag.String("name", defaultName, "Name to greet")
+)
+
+func main() {
+	flag.Parse()
+	// 与服务建立连接.
+	conn, err := grpc.Dial(*addr, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	if err != nil {
+		log.Fatalf("did not connect: %v", err)
+	}
+	defer func(conn *grpc.ClientConn) {
+		err := conn.Close()
+		if err != nil {
+
+		}
+	}(conn)
+	// 创建指定服务的客户端
+	c := pb.NewGreeterClient(conn)
+
+	// 连接服务器并打印出其响应。
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	// 调用指定方法
+	updateStream, err := c.UpdateOrders(ctx)
+	if err != nil {
+		log.Fatalf("%v.UpdateOrders(_) = _, %v", c, err)
+	}
+	// Updating order 1
+	if err := updateStream.Send(&pb.HelloRequest{Name: "1"}); err != nil {
+		log.Fatalf("%v.Send(%v) = %v", updateStream, &pb.HelloRequest{Name: "1"}, err)
+	}
+	// Updating order 2
+	if err := updateStream.Send(&pb.HelloRequest{Name: "2"}); err != nil {
+		log.Fatalf("%v.Send(%v) = %v", updateStream, &pb.HelloRequest{Name: "2"}, err)
+	}
+	// 发送关闭信号并接收服务端响应
+	err = updateStream.CloseSend()
+	if err != nil {
+		log.Fatalf("%v.CloseAndRecv() got error %v, want %v", updateStream, err, nil)
+	}
+	log.Printf("客户端流传输结束")
+}
+
+~~~
+
+### 双工流RPC
+
+> 对应的业务就比如实时的消息流
 
 ![image-20221219233826911](img/image-20221219233826911.png)
 
+`protobuf`
+~~~protobuf
+  // 设置双工rpc
+  rpc processOrders(stream HelloRequest) returns (stream HelloReply);
+~~~
+`服务端`
+~~~go
+package main
+
+import (
+	"flag"
+	"fmt"
+	"google.golang.org/grpc"
+	"io"
+	"log"
+	pb "mygrpc/proto/hello"
+	"net"
+	"sync"
+)
+
+var (
+	port = flag.Int("port", 50051, "The service port")
+)
+
+type server struct {
+	pb.UnimplementedGreeterServer
+}
+
+func (s *server) ProcessOrders(stream pb.Greeter_ProcessOrdersServer) error {
+	var (
+		waitGroup sync.WaitGroup // 一组 goroutine 的结束
+		// 设置通道
+		msgCh = make(chan *pb.HelloReply)
+	)
+	// 计数器加1
+	waitGroup.Add(1)
+	// 消费队列中的内容
+	go func() {
+		// 计数器减一
+		defer waitGroup.Done()
+		for {
+			v := <-msgCh
+			fmt.Println(v)
+			err := stream.Send(v)
+			if err != nil {
+				fmt.Println("Send error:", err)
+				break
+			}
+		}
+	}()
+	waitGroup.Add(1)
+	// 向队列中添加内容
+	go func() {
+		defer waitGroup.Done()
+		for {
+			req, err := stream.Recv()
+			if err == io.EOF {
+				break
+			}
+			if err != nil {
+				log.Fatalf("recv error:%v", err)
+			}
+			fmt.Printf("Recved :%v \n", req.GetName())
+			msgCh <- &pb.HelloReply{Message: "服务端传输数据"}
+		}
+		close(msgCh)
+	}()
+	// 等待 计数器问0 推出
+	waitGroup.Wait()
+
+	// 返回nil表示已经完成响应
+	return nil
+}
+func main() {
+	flag.Parse()
+	lis, err := net.Listen("tcp", fmt.Sprintf(":%d", *port))
+	if err != nil {
+		log.Fatalf("failed to listen: %v", err)
+	}
+	// 开启rpc
+	s := grpc.NewServer()
+	// 注册服务
+	pb.RegisterGreeterServer(s, &server{})
+	log.Printf("service listening at %v", lis.Addr())
+	if err := s.Serve(lis); err != nil {
+		log.Fatalf("failed to serve: %v", err)
+	}
+}
+
+~~~
+`客户端`
+~~~go
+package main
+
+import (
+	"context"
+	"flag"
+	"fmt"
+	"io"
+	"log"
+	"sync"
+	"time"
+
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
+	pb "mygrpc/proto/hello" // 引入编译生成的包
+)
+
+const (
+	defaultName = "world"
+)
+
+var (
+	addr = flag.String("addr", "localhost:50051", "the address to connect to")
+	name = flag.String("name", defaultName, "Name to greet")
+)
+
+func main() {
+	flag.Parse()
+	// 与服务建立连接.
+	conn, err := grpc.Dial(*addr, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	if err != nil {
+		log.Fatalf("did not connect: %v", err)
+	}
+	defer func(conn *grpc.ClientConn) {
+		err := conn.Close()
+		if err != nil {
+		}
+	}(conn)
+	// 创建指定服务的客户端
+	c := pb.NewGreeterClient(conn)
+
+	// 连接服务器并打印出其响应。
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	// 设置
+	var wg sync.WaitGroup
+	// 调用指定方法
+	stream, _ := c.ProcessOrders(ctx)
+	if err != nil {
+		panic(err)
+	}
+	// 3.开两个goroutine 分别用于Recv()和Send()
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		for {
+			req, err := stream.Recv()
+			if err == io.EOF {
+				fmt.Println("Server Closed")
+				break
+			}
+			if err != nil {
+				continue
+			}
+			fmt.Printf("Recv Data:%v \n", req.GetMessage())
+		}
+	}()
+
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+
+		for i := 0; i < 2; i++ {
+			err := stream.Send(&pb.HelloRequest{Name: "hello world"})
+			if err != nil {
+				log.Printf("send error:%v\n", err)
+			}
+		}
+		// 4. 发送完毕关闭stream
+		err := stream.CloseSend()
+		if err != nil {
+			log.Printf("Send error:%v\n", err)
+			return
+		}
+	}()
+	wg.Wait()
+	log.Printf("服务端流传输结束")
+}
+~~~
+
+
+
+
 # gRPC进阶
+## 拦截器
+gRPC拦截器（interceptor）是一种函数，它可以在gRPC调用之前和之后执行一些逻辑，例如认证、授权、日志记录、监控和统计等。拦截器函数是gRPC中非常重要的概念，它允许我们在服务端和客户端添加自定义逻辑，以满足业务需求和运维需求。
+
+在gRPC中，拦截器函数通常通过实现grpc.UnaryServerInterceptor和grpc.StreamServerInterceptor接口来定义。UnaryServerInterceptor用于拦截一元RPC请求，而StreamServerInterceptor用于拦截流式RPC请求。在客户端中，我们可以使用grpc.UnaryClientInterceptor和grpc.StreamClientInterceptor来拦截gRPC调用。
+
+在gRPC中，拦截器函数可以被链接起来，形成一个拦截器链。在这个拦截器链中，每个拦截器函数都可以处理请求并将其转发给下一个拦截器函数，或者直接返回响应。因此，我们可以在拦截器函数中编写不同的逻辑，例如实现认证、授权、监控和统计等。
+以下是一些常见的gRPC拦截器：
+- **认证和授权拦截器**：用于对gRPC调用进行身份验证和权限控制，例如检查token、验证用户名和密码、检查访问控制列表等；
+- **日志记录拦截器**：用于记录gRPC调用的日志，例如记录请求的方法、参数、响应状态等；
+- **监控和统计拦截器**：用于监控gRPC调用的性能和吞吐量，例如记录调用次数、响应时间、错误率等；
+- **缓存拦截器**：用于在服务端或客户端缓存一些数据，例如缓存计算结果、缓存数据库查询结果等。
 
 ### 服务端拦截器
 
 ![image-20221220103033241](img/image-20221220103033241.png)
 
-`一元拦截器`
+#### 一元拦截器
 
 ~~~go
-func orderUnaryServerInterceptor(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (interface{}, error) {
-  
-	// 前置处理逻辑
-	log.Println("======= [Server Interceptor] ", info.FullMethod)
-	log.Printf(" Pre Proc Message : %s", req)
+package main
 
-  // 调用handle 执行一元RPC
-	m, err := handler(ctx, req)
+import (
+	"context"
+	"flag"
+	"log"
+	"time"
 
-	// 后置处理逻辑
-	log.Printf(" Post Proc Message : %s", m)
-	return m, err
-}
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
+	pb "mygrpc/proto/hello" // 引入编译生成的包
+)
 
-func main(){
-  lis, err := net.Listen("tcp", port)
-  // 服务端注册拦截器
-	s := grpc.NewServer(grpc.UnaryInterceptor(orderUnaryServerInterceptor))
-	pb.RegisterOrderManagementServer(s, &server{})
-	
-	reflection.Register(s)
-	if err := s.Serve(lis); err != nil {
-		log.Fatalf("failed to serve: %v", err)
+const (
+	defaultName = "world"
+)
+
+var (
+	addr = flag.String("addr", "localhost:50051", "the address to connect to")
+	name = flag.String("name", defaultName, "Name to greet")
+)
+
+func main() {
+	flag.Parse()
+	// 与服务建立连接.
+	conn, err := grpc.Dial(*addr, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	if err != nil {
+		log.Fatalf("did not connect: %v", err)
 	}
+	defer conn.Close()
+	// 创建指定服务的客户端
+	c := pb.NewGreeterClient(conn)
+
+	// 连接服务器并打印出其响应。
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	// 调用指定方法
+	r, err := c.SayHello(ctx, &pb.HelloRequest{Name: *name})
+	if err != nil {
+		log.Fatalf("could not greet: %v", err)
+	}
+	log.Printf("Greeting: %s", r.GetMessage())
 }
 ~~~
+**结果**
+```shell
+2023/12/07 14:52:55 ======= [Server Interceptor]  /hello.Greeter/SayHello
+2023/12/07 14:52:55  Pre Proc Message : name:"world"
+2023/12/07 14:52:55 Received: world
+2023/12/07 14:52:55  Post Proc Message : message:"Hello world"
 
-`流拦截器`
-
+```
+#### 流拦截器
+流式拦截器需要对grpc.ServerStream进行包装，重新实现RecvMsg和SendMsg方法。
 ~~~go
-type wrappedStream struct {
-  // 包装器流
-	grpc.ServerStream
+func (s *server) SearchOrders(req *pb.HelloRequest, stream pb.Greeter_SearchOrdersServer) error {
+	log.Printf("Recved %v", req.GetName())
+	// 具体返回多少个response根据业务逻辑调整
+	for i := 0; i < 10; i++ {
+		// 通过 send 方法不断推送数据
+		err := stream.Send(&pb.HelloReply{})
+		if err != nil {
+			log.Fatalf("Send error:%v", err)
+			return err
+		}
+	}
+	return nil
 }
 
+type wrappedStream struct {
+	// 包装器流
+	grpc.ServerStream
+}
+// 接受信息拦截器
 func (w *wrappedStream) RecvMsg(m interface{}) error {
 	log.Printf("====== [Server Stream Interceptor Wrapper] Receive a message (Type: %T) at %s", m, time.Now().Format(time.RFC3339))
 	return w.ServerStream.RecvMsg(m)
 }
-
+// 发送消息拦截器
 func (w *wrappedStream) SendMsg(m interface{}) error {
 	log.Printf("====== [Server Stream Interceptor Wrapper] Send a message (Type: %T) at %v", m, time.Now().Format(time.RFC3339))
 	return w.ServerStream.SendMsg(m)
@@ -671,25 +990,53 @@ func orderServerStreamInterceptor(srv interface{}, ss grpc.ServerStream, info *g
 	}
 	return err
 }
-
-func main(){
-  lis, err := net.Listen("tcp", port)
-  // 服务端注册拦截器
-  s := grpc.NewServer(grpc.StreamInterceptor(orderServerStreamInterceptor))
-	pb.RegisterOrderManagementServer(s, &server{})
-	
-	reflection.Register(s)
+func main() {
+	flag.Parse()
+	lis, err := net.Listen("tcp", fmt.Sprintf(":%d", *port))
+	if err != nil {
+		log.Fatalf("failed to listen: %v", err)
+	}
+	// 开启rpc
+	s := grpc.NewServer(grpc.StreamInterceptor(orderServerStreamInterceptor))
+	// 注册服务
+	pb.RegisterGreeterServer(s, &server{})
+	log.Printf("service listening at %v", lis.Addr())
 	if err := s.Serve(lis); err != nil {
 		log.Fatalf("failed to serve: %v", err)
 	}
 }
+
 ~~~
+**结果**
+```shell
+GOROOT=D:\software\Go #gosetup
+GOPATH=D:\software\golibrary #gosetup
+D:\software\Go\bin\go.exe build -o C:\Users\29071\AppData\Local\JetBrains\GoLand2023.3\tmp\GoLand\___go_build_mygrpc_service_steamInterceptorservice.exe mygrpc/service/steamInterceptorservice #gosetup
+C:\Users\29071\AppData\Local\JetBrains\GoLand2023.3\tmp\GoLand\___go_build_mygrpc_service_steamInterceptorservice.exe
+2023/12/07 15:07:48 service listening at [::]:50051
+2023/12/07 15:08:07 ====== [Server Stream Interceptor]  /hello.Greeter/searchOrders
+2023/12/07 15:08:07 ====== [Server Stream Interceptor Wrapper] Receive a message (Type: *hello.HelloRequest) at 2023-12-07T15:08:07+08:00
+2023/12/07 15:08:07 Recved 开始服务端rpc流测试
+2023/12/07 15:08:07 ====== [Server Stream Interceptor Wrapper] Send a message (Type: *hello.HelloReply) at 2023-12-07T15:08:07+08:00
+2023/12/07 15:08:07 ====== [Server Stream Interceptor Wrapper] Send a message (Type: *hello.HelloReply) at 2023-12-07T15:08:07+08:00
+2023/12/07 15:08:07 ====== [Server Stream Interceptor Wrapper] Send a message (Type: *hello.HelloReply) at 2023-12-07T15:08:07+08:00
+2023/12/07 15:08:07 ====== [Server Stream Interceptor Wrapper] Send a message (Type: *hello.HelloReply) at 2023-12-07T15:08:07+08:00
+2023/12/07 15:08:07 ====== [Server Stream Interceptor Wrapper] Send a message (Type: *hello.HelloReply) at 2023-12-07T15:08:07+08:00
+2023/12/07 15:08:07 ====== [Server Stream Interceptor Wrapper] Send a message (Type: *hello.HelloReply) at 2023-12-07T15:08:07+08:00
+2023/12/07 15:08:07 ====== [Server Stream Interceptor Wrapper] Send a message (Type: *hello.HelloReply) at 2023-12-07T15:08:07+08:00
+2023/12/07 15:08:07 ====== [Server Stream Interceptor Wrapper] Send a message (Type: *hello.HelloReply) at 2023-12-07T15:08:07+08:00
+2023/12/07 15:08:07 ====== [Server Stream Interceptor Wrapper] Send a message (Type: *hello.HelloReply) at 2023-12-07T15:08:07+08:00
+2023/12/07 15:08:07 ====== [Server Stream Interceptor Wrapper] Send a message (Type: *hello.HelloReply) at 2023-12-07T15:08:07+08:00
+Process finished with the exit code -1073741510 (0xC000013A: interrupted by Ctrl+C)
+
+
+```
 
 ### 客户端拦截器
 
 ![image-20221220104848824](img/image-20221220104848824.png)
 
-`一元拦截器`
+#### 一元拦截器
 
 ~~~go
 func orderUnaryClientInterceptor(ctx context.Context, method string, req, reply interface{}, cc *grpc.ClientConn, invoker grpc.UnaryInvoker, opts ...grpc.CallOption) error {
@@ -704,26 +1051,37 @@ func orderUnaryClientInterceptor(ctx context.Context, method string, req, reply 
 	return err
 }
 
-func main(){
-  // 注册拦截器到客户端流
- conn,err:=grpc.Dial(address,grpc.WithInsecure(),grpc.WithUnaryInterceptor(orderUnaryClientInterceptor)
+func main() {
+	flag.Parse()
+	// 与服务建立连接.
+	conn, err := grpc.Dial(*addr, grpc.WithTransportCredentials(insecure.NewCredentials()),
+		grpc.WithUnaryInterceptor(orderUnaryClientInterceptor)) //添加拦截器
 	if err != nil {
 		log.Fatalf("did not connect: %v", err)
 	}
 	defer conn.Close()
-                     
-	c := pb.NewOrderManagementClient(conn)
-  ctx, cancel := context.WithTimeout(context.Background(), time.Second*5)
-	defer cancel()
+	// 创建指定服务的客户端
+	c := pb.NewGreeterClient(conn)
 
-  // 调用一元RPC方法
-	order1 := pb.Order{Id: "101", Items: []string{"iPhone XS", "Mac Book Pro"}, Destination: "San Jose, CA", Price: 2300.00}
-	res, _ := c.AddOrder(ctx, &order1)
-	log.Print("AddOrder Response -> ", res.Value)
+	// 连接服务器并打印出其响应。
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second) // 设置超时时间为一秒
+	defer cancel()
+	// 调用指定方法
+	r, err := c.SayHello(ctx, &pb.HelloRequest{Name: *name})
+	if err != nil {
+		log.Fatalf("could not greet: %v", err)
+	}
+	log.Printf("Greeting: %s", r.GetMessage())
 }
 ~~~
+**结果**
+```shell
+2023/12/07 16:37:28 Method : /hello.Greeter/SayHello
+2023/12/07 16:37:28 message:"Hello world"
+2023/12/07 16:37:28 Greeting: Hello worl
+```
 
-`流拦截器`
+#### 流拦截`
 
 ~~~go
 type wrappedStream struct {
@@ -783,12 +1141,69 @@ func main(){
 	}
 }
 ~~~
+**结果**
+```shell
+2023/12/07 17:10:43 ====== [Client Stream Interceptor] Send a message (Type: *hello.HelloRequest) at 2023-12-07T17:10:43+08:00
+2023/12/07 17:10:43 ====== [Client Stream Interceptor] Send a message (Type: *hello.HelloRequest) at 2023-12-07T17:10:43+08:00
+2023/12/07 17:10:43 客户端流传输结束
+```
+### 多个拦截器
+在grpc中默认的拦截器不可以传多个，因为在源码中，存在一些问题
+```go
+func chainUnaryClientInterceptors(cc *ClientConn) {
+	interceptors := cc.dopts.chainUnaryInts
+	if cc.dopts.unaryInt != nil {
+		interceptors = append([]UnaryClientInterceptor{cc.dopts.unaryInt}, interceptors...)
+	}
+	var chainedInt UnaryClientInterceptor
+	if len(interceptors) == 0 {
+		chainedInt = nil
+	} else if len(interceptors) == 1 {
+		chainedInt = interceptors[0]
+	} else {
+		chainedInt = func(ctx context.Context, method string, req, reply interface{}, cc *ClientConn, invoker UnaryInvoker, opts ...CallOption) error {
+			return interceptors[0](ctx, method, req, reply, cc, getChainUnaryInvoker(interceptors, 0, invoker), opts...)
+		}
+	}
+	cc.dopts.unaryInt = chainedInt
+}
 
-### 截止时间、超时时间
+```
+当存在多个拦截器时，取的就是第一个拦截器。因此结论是允许传多个，但并没有用。
 
-> 截止时间：从请求开始时间+持续时间的偏移，多个服务调用，整个请求链需要在截止时间前响应，避免持续的等待RPC响应，造成资源消耗服务延迟
->
-> 超时时间：指定等待RPC完成的时间，超时以错误结束返回
+如果真的需要多个拦截器，可以使用 go-grpc-middleware 提供的 grpc.UnaryInterceptor 和 grpc.StreamInterceptor 链式方法。核心方法如下
+```go
+func ChainUnaryClient(interceptors ...grpc.UnaryClientInterceptor) grpc.UnaryClientInterceptor {
+	n := len(interceptors)
+	if n > 1 {
+		lastI := n - 1
+		return func(ctx context.Context, method string, req, reply interface{}, cc *grpc.ClientConn, invoker grpc.UnaryInvoker, opts ...grpc.CallOption) error {
+			var (
+				chainHandler grpc.UnaryInvoker
+				curI         int
+			)
+
+			chainHandler = func(currentCtx context.Context, currentMethod string, currentReq, currentRepl interface{}, currentConn *grpc.ClientConn, currentOpts ...grpc.CallOption) error {
+				if curI == lastI {
+					return invoker(currentCtx, currentMethod, currentReq, currentRepl, currentConn, currentOpts...)
+				}
+				curI++
+				err := interceptors[curI](currentCtx, currentMethod, currentReq, currentRepl, currentConn, chainHandler, currentOpts...)
+				curI--
+				return err
+			}
+
+			return interceptors[0](ctx, method, req, reply, cc, chainHandler, opts...)
+		}
+	}
+    ...
+}
+```
+## 截止时间、超时时间
+
+截止时间：从请求开始时间+持续时间的偏移，多个服务调用，整个请求链需要在截止时间前响应，避免持续的等待RPC响应，造成资源消耗服务延迟
+
+超时时间：指定等待RPC完成的时间，超时以错误结束返回
 
 `截止时间`
 
@@ -886,9 +1301,9 @@ res, addOrderError := client.AddOrder(ctx, &order1)
 
 ### 多路复用
 
-> 同一台服务器上的多个RPC服务的多路复用，比如同时保存一个订单的存根、一个欢迎的存根
->
-> 因为多个RPC服务运行在一个服务端上，所以客户端的多个存根之间是可以共享gRPC连接的
+同一台服务器上的多个RPC服务的多路复用，比如同时保存一个订单的存根、一个欢迎的存根
+
+因为多个RPC服务运行在一个服务端上，所以客户端的多个存根之间是可以共享gRPC连接的
 
 ~~~go
 func main() {
@@ -948,9 +1363,9 @@ md := metadata.New(map[string]string{"1":"v1","2":"v2"})
 
 `客户端收发`
 
-> 在context中设置的元数据会转换成线路层的gRPC头信息和 trailer
->
-> 客户端发送这些头信息，收件方会以头信息的形式接收他们
+在context中设置的元数据会转换成线路层的gRPC头信息和 trailer
+
+客户端发送这些头信息，收件方会以头信息的形式接收他们
 
 ~~~go
 	// 创建元数据
@@ -1005,11 +1420,11 @@ grpc.SetTrailer(ctx,trailer)
 
 `负载均衡器代理`
 
-> 也就是说后端的结构对gRPC客户端是不透明的，客户端只需要知道均衡器的断点就可以了
->
-> 比如NGINX代理、Envoy代理
+也就是说后端的结构对gRPC客户端是不透明的，客户端只需要知道均衡器的断点就可以了
 
-![image-20221220182855476](Untitled.assets/image-20221220182855476.png)
+比如NGINX代理、Envoy代理
+
+
 
 `客户端负载均衡`
 
@@ -1134,7 +1549,7 @@ func main() {
 
 ### basic 认证
 
-> 这个比较简单了，客户端发送的头信息中 Authorization由字符串“ basic base64(user：passwd) ”组成
+这个比较简单了，客户端发送的头信息中 Authorization由字符串“ basic base64(user：passwd) ”组成
 
 ~~~go
 type basicAuth struct { 
