@@ -1201,31 +1201,36 @@ func ChainUnaryClient(interceptors ...grpc.UnaryClientInterceptor) grpc.UnaryCli
 ```
 ## 截止时间、超时时间
 
-截止时间：从请求开始时间+持续时间的偏移，多个服务调用，整个请求链需要在截止时间前响应，避免持续的等待RPC响应，造成资源消耗服务延迟
+**截止时间**：从请求开始时间+持续时间的偏移，多个服务调用，整个请求链需要在截止时间前响应，避免持续的等待RPC响应，造成资源消耗服务延迟
 
-超时时间：指定等待RPC完成的时间，超时以错误结束返回
+**超时时间**：指定等待RPC完成的时间，超时以错误结束返回
 
 `截止时间`
-
+**客户端代码**
 ~~~go
-func main(){
-  conn, err := grpc.Dial(address, grpc.WithInsecure())
+func main() {
+	flag.Parse()
+	// 与服务建立连接.
+	conn, err := grpc.Dial(*addr, grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if err != nil {
 		log.Fatalf("did not connect: %v", err)
 	}
 	defer conn.Close()
-	client := pb.NewOrderManagementClient(conn)
+	// 创建指定服务的客户端
+	c := pb.NewGreeterClient(conn)
 
-  // 设置截止时间+持续时间的偏移
-	clientDeadline := time.Now().Add(time.Duration(2 * time.Second))
-	ctx, cancel := context.WithDeadline(context.Background(), clientDeadline)
+	// 连接服务器并打印出其响应。
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)// 设置截止时间
 	defer cancel()
-
-	order1 := pb.Order{Id: "101", Items: []string{"iPhone XS", "Mac Book Pro"}, Destination: "San Jose, CA", Price: 2300.00}
-	res, addErr := client.AddOrder(ctx, &order1)
+	// 调用指定方法
+	r, err := c.SayHello(ctx, &pb.HelloRequest{Name: *name})
+	if err != nil {
+		log.Fatalf("could not greet: %v", err)
+	}
+	log.Printf("Greeting: %s", r.GetMessage())
 }
 ~~~
-
+**服务端代码**
 ~~~go
 // 服务端判断客户端是否满足截止时间的状态，然后丢弃这个RPC返回一个错误，可以是select来实现
 if ctx.Err() == context.DeadlineExceeded {
@@ -1235,7 +1240,7 @@ if ctx.Err() == context.DeadlineExceeded {
 ~~~
 
 `超时时间`
-
+**客户端代码**
 ~~~go
 func main(){
   conn, err := grpc.Dial(address, grpc.WithInsecure())
@@ -1254,57 +1259,90 @@ func main(){
 }
 ~~~
 
-### 错误处理
+## 错误处理
+gRPC 一般不在 message 中定义错误。毕竟每个 gRPC 服务本身就带一个 error 的返回值，这是用来传输错误的专用通道。gRPC 中所有的错误返回都应该是 nil 或者 由 status.Status 产生的一个error。这样error可以直接被调用方Client识别。
 
-~~~go
-// 服务端
-// 通过 status包创建所需的错误码和错误状态
-errorStatus := status.New(codes.InvalidArgument, "Invalid information received")
-// 错误详情
-ds, err := errorStatus.WithDetails(
-	&epb.BadRequest_FieldViolation{
-		Field:"ID",
-    Description: fmt.Sprintf("Order ID received is not valid %s:%s",orderReq.Id,orderReq.Description),
-	},
+### 常规用法
+当遇到一个go错误的时候，直接返回是无法被下游client识别的。
+
+**恰当的做法是**：
+调用 status.New 方法，并传入一个适当的错误码，生成一个 status.Status 对象
+调用该 status.Err 方法生成一个能被调用方识别的error，然后返回
+st := status.New(codes.NotFound, "some description")
+err := st.Err()
+传入的错误码是 codes.Code 类型。
+
+此外还有更便捷的办法：使用 status.Error。它避免了手动转换的操作。
+```go
+err := status.Error(codes.NotFound, "some description")
+```
+
+### 进阶用法
+上面的错误有个问题，就是 code.Code 定义的错误码只有固定的几种，无法详尽地表达业务中遇到的错误场景。
+
+gRPC 提供了在错误中补充信息的机制：status.WithDetails 方法
+
+Client 通过将 error 重新转换位 status.Status ，就可以通过 status.Details 方法直接获取其中的内容。
+
+status.Detials 返回的是个slice， 是interface{}的slice，然而go已经自动做了类型转换，可以通过断言直接使用。
+
+**服务端示例**
+- 生成一个 status.Status 对象
+- 填充错误的补充信息
+```go
+// 生成一个 status.Status 
+st := status.New(codes.ResourceExhausted, "Request limit exceeded.")
+// 填充错误的补充信息 WithDetails
+ds, err := st.WithDetails(
+    &epb.QuotaFailure{
+        Violations: []*epb.QuotaFailure_Violation{{
+            Subject:     fmt.Sprintf("name:%s", in.Name),
+            Description: "Limit one greeting per person",
+        }},
+    },
 )
 if err != nil {
-	return nil, errorStatus.Err()
+    return nil, st.Err()
 }
-// 返回错误
 return nil, ds.Err()
-~~~
+```
 
-~~~go
-// 客户端	
-res, addOrderError := client.AddOrder(ctx, &order1)
+**客户端的示例**
+- 调用RPC错误后，解析错误信息
+- 通过断言直接获取错误详情
+```go
+r, err := c.SayHello(ctx, &pb.HelloRequest{Name: "world"})
+// 调用 RPC 如果遇到错误就对错误处理
+if err != nil {
+    // 转换错误
+    s := status.Convert(err)
+    // 解析错误信息
+    for _, d := range s.Details() {
+        // 通过断言直接使用
+        switch info := d.(type) {
+            case *epb.QuotaFailure:
+            log.Printf("Quota failure: %s", info)
+            default:
+            log.Printf("Unexpected type: %s", info)
+        }
+    }
+}
+```
+### 原理
+这个错误是如何传递给调用方Client的呢？
 
-	if addOrderError != nil {
-		errorCode := status.Code(addOrderError)
-		if errorCode == codes.InvalidArgument {
-			log.Printf("Invalid Argument Error : %s", errorCode)
-			errorStatus := status.Convert(addOrderError)
-			for _, d := range errorStatus.Details() {
-				switch info := d.(type) {
-				case *epb.BadRequest_FieldViolation:
-					log.Printf("Request Field Invalid: %s", info)
-				default:
-					log.Printf("Unexpected error type: %s", info)
-				}
-			}
-		} else {
-			log.Printf("Unhandled error : %s ", errorCode)
-		}
-	} else {
-		log.Print("AddOrder Response -> ", res.Value)
-	}
-~~~
+是放到 metadata中的，而metadata是放到HTTP的header中的。
 
-### 多路复用
+metadata是key：value格式的数据。错误的传递中，key是个固定值：grpc-status-details-bin。
 
-同一台服务器上的多个RPC服务的多路复用，比如同时保存一个订单的存根、一个欢迎的存根
+而value，是被proto编码过的，是二进制安全的。
 
-因为多个RPC服务运行在一个服务端上，所以客户端的多个存根之间是可以共享gRPC连接的
+目前大多数语言都实现了这个机制。
 
+## 多路复用
+
+同一台服务器上的多个RPC服务的多路复用，比如同时保存一个订单的存根、一个欢迎的存根因为多个RPC服务运行在一个服务端上，所以客户端的多个存根之间是可以共享gRPC连接的
+**服务端代码**
 ~~~go
 func main() {
 	lis, err := net.Listen("tcp", port)
@@ -1319,7 +1357,7 @@ func main() {
 	hello_pb.RegisterGreeterServer(grpcServer, &helloServer{}) 
 }
 ~~~
-
+**客户端代码**
 ~~~go
 func main() {
 	conn, err := grpc.Dial(address, grpc.WithInsecure())
@@ -1346,10 +1384,10 @@ func main() {
 }
 ~~~
 
-### 元数据
+## 元数据
+在多个微服务的调用当中，信息交换常常是使用方法之间的参数传递的方式，但是在有些场景下，一些信息可能和 RPC 方法的业务参数没有直接的关联，所以不能作为参数的一部分，在 gRPC 中，可以使用元数据来存储这类信息。
 
 `元数据创建`
-
 ~~~go
 // 方法1
 md := metadata.Pairs(
@@ -1416,13 +1454,11 @@ trailer := metadata.Pairs("status","ok")
 grpc.SetTrailer(ctx,trailer)
 ~~~
 
-### 负载均衡
+## 负载均衡
 
 `负载均衡器代理`
 
-也就是说后端的结构对gRPC客户端是不透明的，客户端只需要知道均衡器的断点就可以了
-
-比如NGINX代理、Envoy代理
+也就是说后端的结构对gRPC客户端是不透明的，客户端只需要知道均衡器的断点就可以了,比如NGINX代理、Envoy代理
 
 
 
@@ -1461,11 +1497,10 @@ func callUnary(c ecpb.EchoClient) {
 
 ![image-20221220203959071](img/image-20221220203959071.png)
 
-### 压缩数据
+## 压缩数据
 
-> 在服务端会对已注册的压缩器自动解码，响应时自动编码
->
-> 始终从客户端获取指定的压缩方法，如果没被注册就会返回Unimplemented
+在服务端会对已注册的压缩器自动解码，响应时自动编码
+始终从客户端获取指定的压缩方法，如果没被注册就会返回Unimplemented
 
 ~~~go
 func main() {
