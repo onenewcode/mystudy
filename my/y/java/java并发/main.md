@@ -586,3 +586,837 @@ class Test{
  }
 }
 ```
+### 线程八锁
+所谓的“线程八锁”，其实就是考察 synchronized 锁住的是哪个对象
+**情况1：12 或 21**
+```java
+ @Slf4j(topic = "c.Number")
+ class Number{
+ public synchronized void a() {
+ log.debug("1");
+    }
+ public synchronized void b() {
+ log.debug("2");
+    }
+ }
+ public static void main(String[] args) {
+ Number n1 = new Number();
+ new Thread(()->{ n1.a(); }).start();
+ new Thread(()->{ n1.b(); }).start();
+ }
+```
+
+**情况2：1s后12，或 2 1s后 1**
+```java
+ @Slf4j(topic = "c.Number")
+ class Number{
+ public synchronized void a() {
+ sleep(1);
+ log.debug("1");
+    }
+ public synchronized void b() {
+ log.debug("2");
+    }
+ }
+ public static void main(String[] args) {
+ Number n1 = new Number();
+ new Thread(()->{ n1.a(); }).start();
+ new Thread(()->{ n1.b(); }).start();
+ }
+```
+
+**情况3：3 1s 12 或 23 1s 1 或 32 1s 1**
+```java
+ @Slf4j(topic = "c.Number")
+class Number{
+ public synchronized void a() {
+ sleep(1);
+ log.debug("1");
+    }
+ public synchronized void b() {
+ log.debug("2");
+    }
+ public void c() {
+ log.debug("3");
+    }
+ }
+ public static void main(String[] args) {
+ Number n1 = new Number();
+ new Thread(()->{ n1.a(); }).start();
+ new Thread(()->{ n1.b(); }).start();
+ new Thread(()->{ n1.c(); }).start();
+ }
+```
+
+**情况4：2 1s 后 1**
+```java
+ @Slf4j(topic = "c.Number")
+ class Number{
+ public synchronized void a() {
+ sleep(1);
+ log.debug("1");
+    }
+ public synchronized void b() {
+ log.debug("2");
+    }
+ }
+ public static void main(String[] args) {
+ Number n1 = new Number();
+ Number n2 = new Number();
+ new Thread(()->{ n1.a(); }).start();
+ new Thread(()->{ n2.b(); }).start();
+ }
+```
+
+**情况5：2 1s 后 1**
+```java
+ @Slf4j(topic = "c.Number")
+ class Number{
+ public static synchronized void a() {
+ sleep(1);
+ log.debug("1");
+    }
+ public synchronized void b() {
+ log.debug("2");
+    }
+
+}
+ public static void main(String[] args) {
+ Number n1 = new Number();
+ new Thread(()->{ n1.a(); }).start();
+ new Thread(()->{ n1.b(); }).start();
+ }
+```
+
+**情况6：1s 后12， 或 2 1s后 1**
+```java
+ @Slf4j(topic = "c.Number")
+ class Number{
+ public static synchronized void a() {
+ sleep(1);
+ log.debug("1");
+    }
+ public static synchronized void b() {
+ log.debug("2");
+    }
+ }
+ public static void main(String[] args) {
+ Number n1 = new Number();
+ new Thread(()->{ n1.a(); }).start();
+ new Thread(()->{ n1.b(); }).start();
+ }
+```
+
+**情况7：2 1s 后 1**
+```java
+ @Slf4j(topic = "c.Number")
+ class Number{
+ public static synchronized void a() {
+ sleep(1);
+ log.debug("1");
+    }
+ public synchronized void b() {
+ log.debug("2");
+    }
+ }
+ public static void main(String[] args) {
+ Number n1 = new Number();
+ Number n2 = new Number();
+ new Thread(()->{ n1.a(); }).start();
+ new Thread(()->{ n2.b(); }).start();
+ }
+```
+
+**情况8：1s 后12， 或 2 1s后 1**
+```java
+ @Slf4j(topic = "c.Number")
+class Number{
+ public static synchronized void a() {
+ sleep(1);
+ log.debug("1");
+    }
+ public static synchronized void b() {
+ log.debug("2");
+    }
+ }
+ public static void main(String[] args) {
+ Number n1 = new Number();
+ Number n2 = new Number();
+ new Thread(()->{ n1.a(); }).start();
+ new Thread(()->{ n2.b(); }).start();
+ }
+```
+
+## 变量的线程安全分析
+成员变量和静态变量是否线程安全？ 
+- 如果它们没有共享，则线程安全
+- 如果它们被共享了，根据它们的状态是否能够改变，又分两种情况
+    - 如果只有读操作，则线程安全
+    - 如果有读写操作，则这段代码是临界区，需要考虑线程安全
+
+局部变量是否线程安全？ 
+- 局部变量是线程安全的
+- 但局部变量引用的对象则未必
+    - 如果该对象没有逃离方法的作用访问，它是线程安全的
+    - 如果该对象逃离方法的作用范围，需要考虑线程安全
+
+常见线程安全类 
+- String
+- Integer
+- StringBuffer
+- Random
+- Vector
+- Hashtable
+- java.util.concurrent 包下的类
+这里说它们是线程安全的是指，多个线程调用它们同一个实例的某个方法时，是线程安全的。也可以理解为
+##  Monitor 概念 
+Java 对象头 以 32 位虚拟机为
+**普通对象**
+![Alt text](image-10.png)
+**数组对象**
+![Alt text](image-11.png)
+
+**其中 Mark Word 结构为**
+![Alt text](image-12.png)
+**64 位虚拟机 Mark Word**
+![Alt text](image-13.png)
+
+
+**小故事**
+故事角色
+- 老王 - JVM
+- 小南 - 线程
+- 小女 - 线程
+- 房间 - 对象
+- 房间门上 - 防盗锁 - Monitor
+- 房间门上 - 小南书包 - 轻量级锁
+- 房间门上 - 刻上小南大名 - 偏向锁 
+- 批量重刻名 - 一个类的偏向锁撤销到达 20 阈值 
+- 不能刻名字 - 批量撤销该类对象的偏向锁，设置该类不可偏向
+
+小南要使用房间保证计算不被其它人干扰（原子性），最初，他用的是防盗锁，当上下文切换时，锁住门。这样，即使他离开了，别人也进不了门，他的工作就是安全的。
+
+但是，很多情况下没人跟他来竞争房间的使用权。小女是要用房间，但使用的时间上是错开的，小南白天用，小女晚上用。每次上锁太麻烦了，有没有更简单的办法呢？
+
+小南和小女商量了一下，约定不锁门了，而是谁用房间，谁把自己的书包挂在门口，但他们的书包样式都一样，因此每次进门前得翻翻书包，看课本是谁的，如果是自己的，那么就可以进门，这样省的上锁解锁了。万一书包不是自己的，那么就在门外等，并通知对方下次用锁门的方式。
+
+后来，小女回老家了，很长一段时间都不会用这个房间。小南每次还是挂书包，翻书包，虽然比锁门省事了，但仍然觉得麻烦。
+于是，小南干脆在门上刻上了自己的名字：【小南专属房间，其它人勿用】，下次来用房间时，只要名字还在，那么说明没人打扰，还是可以安全地使用房间。如果这期间有其它人要用这个房间，那么由使用者将小南刻的名字擦掉，升级为挂书包的方式。
+
+同学们都放假回老家了，小南就膨胀了，在 20 个房间刻上了自己的名字，想进哪个进哪个。后来他自己放假回老家了，这时小女回来了（她也要用这些房间），结果就是得一个个地擦掉小南刻的名字，升级为挂书包的方式。老王觉得这成本有点高，提出了一种批量重刻名的方法，他让小女不用挂书包了，可以直接在门上刻上自己的名字
+
+后来，刻名的现象越来越频繁，老王受不了了：算了，这些房间都不能刻名了，只能挂书包
+
+##  wait notify
+小故事 - 为什么需要 wait
+
+- 由于条件不满足，小南不能继续进行计算
+- 但小南如果一直占用着锁，其它人就得一直阻塞，效率太低
+![Alt text](image-14.png)
+- 于是老王单开了一间休息室（调用 wait 方法），让小南到休息室（WaitSet）等着去了，但这时锁释放开，
+其它人可以由老王随机安排进屋
+- 直到小M将烟送来，大叫一声 [ 你的烟到了 ] （调用 notify 方法）
+![Alt text](image-15.png)
+小南于是可以离开休息室，重新进入竞争锁的队列
+![Alt text](image-16.png)
+
+### API 介绍 
+- obj.wait() 让进入 object 监视器的线程到 waitSet 等待
+- obj.notify() 在 object 上正在 waitSet 等待的线程中挑一个唤醒 
+- obj.notifyAll() 让 object 上正在 waitSet 等待的线程全部唤醒
+
+它们都是线程之间进行协作的手段，都属于 Object 对象的方法。必须获得此对象的锁，才能调用这几个方法
+
+```java
+final static Object obj = new Object();
+ public static void main(String[] args) {
+ new Thread(() -> {
+ synchronized (obj) {
+ log.debug("执行....");
+ try {
+ obj.wait(); // 让线程在obj上一直等待下去
+            } 
+catch (InterruptedException e) {
+ e.printStackTrace();
+            }
+ log.debug("其它代码....");
+        }
+    }).start();
+ new Thread(() -> {
+ synchronized (obj) {
+ log.debug("执行....");
+ try {
+ obj.wait(); // 让线程在obj上一直等待下去
+            } 
+catch (InterruptedException e) {
+ e.printStackTrace();
+            }
+ log.debug("其它代码....");
+        }
+    }).start();
+     // 主线程两秒后执行
+sleep(2);
+ log.debug("唤醒 obj 上其它线程");
+ synchronized (obj) {
+ obj.notify(); // 唤醒obj上一个线程
+// obj.notifyAll(); // 唤醒obj上所有等待线程
+    }
+ }
+```
+
+notify 的一种结果:
+```shell
+20:00:53.096 [Thread-0] c.TestWaitNotify - 执行.... 
+20:00:53.099 [Thread-1] c.TestWaitNotify - 执行.... 
+20:00:55.096 [main] c.TestWaitNotify - 唤醒 obj 上其它线程 
+20:00:55.096 [Thread-0] c.TestWaitNotify - 其它代码....
+```
+notifyAll 的结果
+```shell
+19:58:15.457 [Thread-0] c.TestWaitNotify - 执行.... 
+19:58:15.460 [Thread-1] c.TestWaitNotify - 执行.... 
+19:58:17.456 [main] c.TestWaitNotify - 唤醒 obj 上其它线程 
+19:58:17.456 [Thread-1] c.TestWaitNotify - 其它代码.... 
+19:58:17.456 [Thread-0] c.TestWaitNotify - 其它代码....
+```
+
+wait() 方法会释放对象的锁，进入 WaitSet 等待区，从而让其他线程就机会获取对象的锁。无限制等待，直到notify 为止
+wait(long n) 有时限的等待, 到 n 毫秒后结束等待，或是被 notify
+
+**提示**
+**sleep(long n) 和 wait(long n) 的区别** 
+1. sleep 是 Thread 方法，而 wait 是 Object 的方法 
+2. sleep 不需要强制和 synchronized 配合使用，但 wait 需要和 synchronized 一起用 
+3. sleep 在睡眠的同时，不会释放对象锁的，但 wait 在等待的时候会释放对象锁 
+4. 它们状态 TIMED_WAITING
+
+## Park & Unpark
+基本使用 
+它们是 LockSupport 类中的方法
+```java
+// 暂停当前线程
+LockSupport.park(); 
+// 恢复某个线程的运行
+LockSupport.unpark(暂停线程对象)
+```
+先 park 再 unpark
+```java
+Thread t1 = new Thread(() -> {
+ log.debug("start...");
+ sleep(1);
+ log.debug("park...");
+ LockSupport.park();
+ log.debug("resume...");
+ },"t1");
+ t1.start();
+ sleep(2);
+ log.debug("unpark...");
+ LockSupport.unpark(t1);
+```
+**输出**
+```shell
+18:42:52.585 c.TestParkUnpark [t1] - start... 
+18:42:53.589 c.TestParkUnpark [t1] - park... 
+18:42:54.583 c.TestParkUnpark [main] - unpark... 
+18:42:54.583 c.TestParkUnpark [t1] - resume... 
+
+```
+
+
+**特点**
+与 Object 的 wait & notify 相比
+- wait，notify 和 notifyAll 必须配合 Object Monitor 一起使用，而 park，unpark 不必
+- park & unpark 是以线程为单位来【阻塞】和【唤醒】线程，而 notify 只能随机唤醒一个等待线程，notifyAll 是唤醒所有等待线程，就不那么【精确】
+- park & unpark 可以先 unpark，而 wait & notify 不能先 notify
+
+##  重新理解线程状态转换
+![Alt text](image-17.png)
+
+假设有线程 Thread t
+**情况 1 NEW --> RUNNABLE**
+当调用 t.start() 方法时，由 NEW --> RUNNABLE 
+**情况 2  RUNNABLE <--> WAITING**
+t 线程用 synchronized(obj) 获取了对象锁后
+- 调用 obj.wait() 方法时，t 线程从 调用RUNNABLE --> WAITING
+- obj.notify() ，obj.notifyAll() ，t.interrupt() 时
+    - 竞争锁成功，t 线程从  WAITING --> RUNNABLE 
+    - 竞争锁失败，t 线程从WAITING --> BLOCKED
+```java
+public class TestWaitNotify {
+ final static Object obj = new Object();
+ public static void main(String[] args) {
+    new Thread(() -> {
+ synchronized (obj) {
+ log.debug("执行....");
+ try {
+ obj.wait();
+                } 
+catch (InterruptedException e) {
+ e.printStackTrace();
+                }
+ log.debug("其它代码...."); // 断点
+            }
+        },"t1").start();
+ new Thread(() -> {
+ synchronized (obj) {
+ log.debug("执行....");
+ try {
+ obj.wait();
+                } 
+catch (InterruptedException e) {
+ e.printStackTrace();
+                }
+ log.debug("其它代码...."); // 断点
+            }
+        },"t2").start();
+ sleep(0.5);
+ log.debug("唤醒 obj 上其它线程");
+ synchronized (obj) {
+ obj.notifyAll(); // 唤醒obj上所有等待线程  断点
+        }
+    }
+ }
+```
+
+**情况 3 RUNNABLE <--> WAITING**
+- **当前线程**调用 t.join() 方法时，当前线程从 RUNNABLE --> WAITING
+    - 注意**是当前线程**在t 线程对象的监视器上等待
+    - t 线程运行结束，或调用了**当前线程**的 interrupt() 时，当前线程从 WAITING --> RUNNABLE
+
+**情况 4 RUNNABLE <--> WAITING**
+- 当前线程调用  LockSupport.park() 方法会让当前线程从RUNNABLE --> WAITING
+- 调用LockSupport.unpark(目标线程) 或调用了线程 的 interrupt() ，会让目标线程从 
+WAITING --> RUNNABLE
+
+**情况 5 RUNNABLE <--> TIMED_WAITING**
+- t 线程用 synchronized(obj) 获取了对象锁后
+    - 调用 obj.wait(long n) 方法时，t 线程从 RUNNABLE --> TIMED_WAITING
+    - t 线程等待时间超过了 n 毫秒，或调用 obj.notify() ，obj.notifyAll() ，
+        - 争锁成功，t 线程从  
+        - TIMED_WAITING --> RUNNABLE 
+        - 竞争锁失败，t 线程从  TIMED_WAITING --> BLOCKED 
+
+**情况 6 RUNNABLE <--> TIMED_WAITING**
+- 当前线程调用 t.interrupt() 时t.join(long n) 方法时，当前线程从 RUNNABLE --> TIMED_WAITING
+    - 注意是当前线程在t 线程对象的监视器上等待
+- 当前线程等待时间超过了 n 毫秒，或t 线程运行结束，或调用了当前线程的 interrupt() 时，当前线程从TIMED_WAITING --> RUNNABLE
+
+**情况 7 RUNNABLE <--> TIMED_WAITING**
+- 当前线程调用Thread.sleep(long n) ，当前线程从 RUNNABLE --> TIMED_WAITING 
+- 当前线程等待时间超过了 n 毫秒，当前线程从TIMED_WAITING --> RUNNABLE 
+**情况 8 RUNNABLE <--> TIMED_WAITING** 
+- 当前线程调用 LockSupport.parkNanos(long nanos) 或 程从 RUNNABLE --> IMED_WAITING
+- 调用 LockSupport.parkUntil(long millis) 时，当前线LockSupport.unpark(目标线程) 或调用了线程 的 interrupt() ，或是等待超时，会让目标线程从 TIMED_WAITING--> RUNNABLE
+
+**情况 9 RUNNABLE <--> BLOCKED**
+- t 线程用  synchronized(obj) 获取了对象锁时如果竞争失败，从  RUNNABLE --> BLOCKED 
+- 持 obj 锁线程的同步代码块执行完毕，会唤醒该对象上所有 BLOCKED  的线程重新竞争，如果其中 t 线程竞争成功，从 BLOCKED --> RUNNABLE ，其它失败的线程仍然  BLOCKED 
+**情况 10 RUNNABLE <--> TERMINATED**
+当前线程所有代码运行完毕，进入TERMINATED
+
+##  多把锁
+一间大屋子有两个功能：睡觉、学习，互不相干。
+现在小南要学习，小女要睡觉，但如果只用一间屋子（一个对象锁）的话，那么并发度很低
+解决方法是准备多个房间（多个对象锁）
+**例子**
+```java
+class BigRoom {
+ private final Object studyRoom = new Object();
+ private final Object bedRoom = new Object();
+ public void sleep() {
+    synchronized (bedRoom) {
+ log.debug("sleeping 2 小时");
+ Sleeper.sleep(2);
+        }
+    }
+ public void study() {
+ synchronized (studyRoom) {
+ log.debug("study 1 小时");
+ Sleeper.sleep(1);
+        }
+    }
+ }
+```
+将锁的粒度细分
+- 好处，是可以增强并发度
+- 坏处，如果一个线程需要同时获得多把锁，就容易发生死锁
+
+## 活跃性
+### 死锁
+有这样的情况：一个线程需要同时获取多把锁，这时就容易发生死锁
+t1 线程 获得 A对象 锁，接下来想获取  B对象 的锁 t2 线程 获得 B对象 锁，
+接下来想获取 A对象 的锁 例：
+```java
+Object A = new Object();
+ Object B = new Object();
+ Thread t1 = new Thread(() -> {
+ synchronized (A) {
+ log.debug("lock A");
+ sleep(1);
+ synchronized (B) {
+ log.debug("lock B");
+ log.debug("操作...");
+        }
+    }
+ }, "t1");
+ Thread t2 = new Thread(() -> {
+ synchronized (B) {
+ log.debug("lock B");
+ sleep(0.5);
+ synchronized (A) {
+ log.debug("lock A");
+log.debug("操作...");
+        }
+    }
+ }, "t2");
+ t1.start();
+ t2.start();
+```
+**结果**
+```shell
+12:22:06.962 [t2] c.TestDeadLock - lock B 
+12:22:06.962 [t1] c.TestDeadLock - lock A 
+```
+
+**定位死锁**
+- 检测死锁可以使用 jconsole工具，或者使用 jps 定位进程 id，再用 jstack 定位死锁：
+```shell
+cmd > jps
+ Picked up JAVA_TOOL_OPTIONS: -Dfile.encoding=UTF-8
+ 12320 Jps
+ 22816 KotlinCompileDaemon
+ 33200 TestDeadLock              // JVM 进程
+11508 Main
+ 28468 Launcher
+
+```
+
+```shell
+
+cmd > jstack 33200
+ Picked up JAVA_TOOL_OPTIONS: -Dfile.encoding=UTF-8
+ 2018-12-29 05:51:40
+ Full thread dump Java HotSpot(TM) 64-Bit Server VM (25.91-b14 mixed mode):
+ "DestroyJavaVM" #13 prio=5 os_prio=0 tid=0x0000000003525000 nid=0x2f60 waiting on condition 
+[0x0000000000000000]
+   java.lang.Thread.State: RUNNABLE
+ "Thread-1" #12 prio=5 os_prio=0 tid=0x000000001eb69000 nid=0xd40 waiting for monitor entry 
+[0x000000001f54f000]
+   java.lang.Thread.State: BLOCKED (on object monitor)
+        at thread.TestDeadLock.lambda$main$1(TestDeadLock.java:28)- waiting to lock <0x000000076b5bf1c0> (a java.lang.Object)- locked <0x000000076b5bf1d0> (a java.lang.Object)
+        at thread.TestDeadLock$$Lambda$2/883049899.run(Unknown Source)
+        at java.lang.Thread.run(Thread.java:745)
+ "Thread-0" #11 prio=5 os_prio=0 tid=0x000000001eb68800 nid=0x1b28 waiting for monitor entry 
+[0x000000001f44f000]
+   java.lang.Thread.State: BLOCKED (on object monitor)
+        at thread.TestDeadLock.lambda$main$0(TestDeadLock.java:15)- waiting to lock <0x000000076b5bf1d0> (a java.lang.Object)
+        - locked <0x000000076b5bf1c0> (a java.lang.Object)
+        at thread.TestDeadLock$$Lambda$1/495053715.run(Unknown Source)
+        at java.lang.Thread.run(Thread.java:745)
+ // 略去部分输出
+Found one Java-level deadlock:
+ =============================
+ "Thread-1":
+  waiting to lock monitor 0x000000000361d378 (object 0x000000076b5bf1c0, a java.lang.Object),
+  which is held by "Thread-0"
+ "Thread-0":
+  waiting to lock monitor 0x000000000361e768 (object 0x000000076b5bf1d0, a java.lang.Object),
+  which is held by "Thread-1"
+ Java stack information for the threads listed above:
+ ===================================================
+ "Thread-1":
+        at thread.TestDeadLock.lambda$main$1(TestDeadLock.java:28)- waiting to lock <0x000000076b5bf1c0> (a java.lang.Object)- locked <0x000000076b5bf1d0> (a java.lang.Object)
+        at thread.TestDeadLock$$Lambda$2/883049899.run(Unknown Source)
+        at java.lang.Thread.run(Thread.java:745)
+ "Thread-0":
+        at thread.TestDeadLock.lambda$main$0(TestDeadLock.java:15)- waiting to lock <0x000000076b5bf1d0> (a java.lang.Object)- locked <0x000000076b5bf1c0> (a java.lang.Object)
+        at thread.TestDeadLock$$Lambda$1/495053715.run(Unknown Source)
+        at java.lang.Thread.run(Thread.java:745)
+ Found 1 deadlock.      
+```
+
+- 避免死锁要注意加锁顺序
+- 另外如果由于某个线程进入了死循环，导致其它线程一直等待，对于这种情况 linux 下可以通过 top 先定位到 CPU 占用高的 Java 进程，再利用 top -Hp 进程id 来定位是哪个线程，最后再用 jstack 排查
+
+### 活锁
+活锁出现在两个线程互相改变对方的结束条件，最后谁也无法结束，例如
+```java
+public class TestLiveLock {
+ static volatile int count = 10;
+static final Object lock = new Object();
+ public static void main(String[] args) {
+ new Thread(() -> {
+ // 期望减到 0 退出循环
+while (count > 0) {
+ sleep(0.2);
+ count--;
+ log.debug("count: {}", count);
+            }
+        }, 
+"t1").start();
+ new Thread(() -> {
+ // 期望超过 20 退出循环
+while (count < 20) {
+ sleep(0.2);
+ count++;
+ log.debug("count: {}", count);
+        }
+            },"t2").start()
+        }, 
+}
+```
+
+### 饥饿
+饥饿定义为，一个线程由于优先级太低，始终得不到 CPU 调度执行，也不能够结束，饥饿的情况不
+易演示，讲读写锁时会涉及饥饿问题
+下面我讲一下我遇到的一个线程饥饿的例子，先来看看使用顺序加锁的方式解决之前的死锁问题
+![Alt text](image-18.png)
+
+顺序加锁的解决方案
+![Alt text](image-19.png)
+
+##  ReentrantLock
+相对于 synchronized 它具备如下特点
+- 可中断
+- 可以设置超时时间
+- 可以设置为公平锁
+- 支持多个条件变量
+
+与 synchronized 一样，都支持可重入
+基本语法
+```java
+// 获取锁
+reentrantLock.lock();
+ try {
+ // 临界区
+} finally {
+ // 释放锁
+reentrantLock.unlock();
+ }
+
+```
+**可重入**
+可重入是指同一个线程如果首次获得了这把锁，那么因为它是这把锁的拥有者，因此有权利再次获取这把锁如果是不可重入锁，那么第二次获得锁时，自己也会被锁挡
+
+**可打断**
+一个线程在等待锁的过程中，可以被其他线程打断而提前结束等待
+```java
+ReentrantLock lock = new ReentrantLock();
+ Thread t1 = new Thread(() -> {
+    log.debug("启动...");
+ try {
+ lock.lockInterruptibly();
+    } 
+catch (InterruptedException e) {
+ e.printStackTrace();
+ log.debug("等锁的过程中被打断");
+ return;
+    }
+ try {
+ log.debug("获得了锁");
+    } 
+finally {
+ lock.unlock();
+    }
+ }, "t1");
+ lock.lock();
+ log.debug("获得了锁");
+ t1.start();
+ try {
+ sleep(1);
+ t1.interrupt();
+ log.debug("执行打断");
+ } finally {
+ lock.unlock();
+ }
+```
+输出
+```shell
+18:02:40.520 [main] c.TestInterrupt - 获得了锁 
+18:02:40.524 [t1] c.TestInterrupt - 启动... 
+18:02:41.530 [main] c.TestInterrupt - 执行打断 
+java.lang.InterruptedException 
+at 
+java.util.concurrent.locks.AbstractQueuedSynchronizer.doAcquireInterruptibly(AbstractQueuedSynchr
+ onizer.java:898) 
+at 
+java.util.concurrent.locks.AbstractQueuedSynchronizer.acquireInterruptibly(AbstractQueuedSynchron
+ izer.java:1222) 
+at java.util.concurrent.locks.ReentrantLock.lockInterruptibly(ReentrantLock.java:335) 
+at cn.itcast.n4.reentrant.TestInterrupt.lambda$main$0(TestInterrupt.java:17) 
+at java.lang.Thread.run(Thread.java:748) 
+18:02:41.532 [t1] c.TestInterrupt - 等锁的过程中被打断
+```
+**锁超时**
+如果某个线程在规定的时间内无法获取到锁，就会超时放弃.可以一定限度防止死锁。
+```java
+ReentrantLock lock = new ReentrantLock();
+ Thread t1 = new Thread(() -> {
+ log.debug("启动...");
+ try {
+ if (!lock.tryLock(1, TimeUnit.SECONDS)) {
+ log.debug("获取等待 1s 后失败，返回");
+ return;
+        }
+    } 
+catch (InterruptedException e) {
+ e.printStackTrace();
+    }
+ try {
+ log.debug("获得了锁");
+    } 
+finally {
+ lock.unlock();
+    }
+ }, "t1");
+ lock.lock();
+ log.debug("获得了锁");
+ t1.start();
+ try {
+ sleep(2);
+ } finally {
+ lock.unlock();
+ }
+```
+输出
+```shell
+18:19:40.537 [main] c.TestTimeout - 获得了锁 
+18:19:40.544 [t1] c.TestTimeout - 启动... 
+18:19:41.547 [t1] c.TestTimeout - 获取等待 1s 后失败，返回 
+```
+**不公平锁**
+表示获取锁的抢占机制，是随机获取锁的，和公平锁不一样的就是先来的不一定能拿到锁， 有可能一直拿不到锁，所以结果不公平。
+
+ReentrantLock 默认是不公平的
+```java
+ReentrantLock lock = new ReentrantLock(false);
+ lock.lock();
+ for (int i = 0; i < 500; i++) {
+ new Thread(() -> {
+ lock.lock();
+ try {
+ System.out.println(Thread.currentThread().getName() + " running...");
+        } 
+finally {
+ lock.unlock();
+        }
+    }, "t" + i).start();
+} 
+ // 1s 之后去争抢锁
+Thread.sleep(1000);
+ new Thread(() -> {
+ System.out.println(Thread.currentThread().getName() + " start...");
+ lock.lock();
+ try {
+ System.out.println(Thread.currentThread().getName() + " running...");
+    } 
+    finally {
+    lock.unlock();
+    }
+ }, "强行插入").start();
+ lock.unlock();
+```
+强行插入，有机会在中间输出
+```shell
+t39 running... 
+t40 running... 
+t41 running... 
+t42 running... 
+t43 running... 
+强行插入 start... 
+强行插入 running... 
+t44 running... 
+t45 running... 
+t46 running... 
+t47 running... 
+t49 running... 
+```
+
+**条件变量**
+synchronized 中也有条件变量，就是我们讲原理时那个 waitSet 休息室，当条件不满足时进入 waitSet 等待
+ReentrantLock 的条件变量比 synchronized 强大之处在于，它是支持多个条件变量的，这就好比
+- synchronized 是那些不满足条件的线程都在一间休息室等消息
+- 而 ReentrantLock 支持多间休息室，有专门等烟的休息室、专门等早餐的休息室、唤醒时也是按休息室来唤醒
+
+使用要点：
+- await 前需要获得锁
+- await 执行后，会释放锁，进入 conditionObject 等待
+-  await 的线程被唤醒（或打断、或超时）取重新竞争 lock 锁
+- 竞争 lock 锁成功后，从 await 后继续执行
+
+```java
+static ReentrantLock lock = new ReentrantLock();
+ static Condition waitCigaretteQueue = lock.newCondition();
+ static Condition waitbreakfastQueue = lock.newCondition();
+ static volatile boolean hasCigrette = false;
+ static volatile boolean hasBreakfast = false;
+ public static void main(String[] args) {
+ new Thread(() -> {
+ try {
+ lock.lock();
+ while (!hasCigrette) {
+    try {
+ waitCigaretteQueue.await();
+                } 
+catch (InterruptedException e) {
+ e.printStackTrace();
+                }
+            }
+ log.debug("等到了它的烟");
+        } 
+finally {
+ lock.unlock();
+        }
+    }).start();
+ new Thread(() -> {
+ try {
+ lock.lock();
+ while (!hasBreakfast) {
+ try {
+ waitbreakfastQueue.await();
+                } 
+catch (InterruptedException e) {
+ e.printStackTrace();
+                }
+            }
+ log.debug("等到了它的早餐");
+        } 
+finally {
+ lock.unlock();
+        }
+    }).start();
+ sleep(1);
+ sendBreakfast();
+ sleep(1);
+ sendCigarette();
+ }
+ private static void sendCigarette() {
+ lock.lock();
+ try {
+ log.debug("送烟来了");
+ hasCigrette = true;
+ waitCigaretteQueue.signal();
+    } 
+finally {
+ lock.unlock();
+    }
+ }
+ private static void sendBreakfast() {
+ lock.lock();
+ try {
+ log.debug("送早餐来了");
+ hasBreakfast = true;
+ waitbreakfastQueue.signal();
+    } 
+finally {
+ lock.unlock();
+    }
+ }
+```
+输出
+```shell
+18:52:27.680 [main] c.TestCondition - 送早餐来了 
+18:52:27.682 [Thread-1] c.TestCondition - 等到了它的早餐 
+18:52:28.683 [main] c.TestCondition - 送烟来了 
+18:52:28.683 [Thread-0] c.TestCondition - 等到了它的烟 
+```
