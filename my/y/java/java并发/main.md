@@ -1420,3 +1420,297 @@ finally {
 18:52:28.683 [main] c.TestCondition - 送烟来了 
 18:52:28.683 [Thread-0] c.TestCondition - 等到了它的烟 
 ```
+
+# 共享模型之内存 
+##  Java 内存模型 
+JMM 即 Java Memory Model，它定义了主存、工作内存抽象概念，底层对应着 CPU 寄存器、缓存、硬件内存、CPU 指令优化等。
+
+JMM 体现在以下几个方面
+- 原子性 - 保证指令不会受到线程上下文切换的影响
+- 可见性 - 保证指令不会受 cpu 缓存的影响
+- 有序性 - 保证指令不会受 cpu 指令并行优化的影响
+## 可见性 
+**退不出的循环**
+先来看一个现象，main 线程对 run 变量的修改对于 t 线程不可见，导致了 t 线程无法停止：
+```java
+static boolean run = true;
+ public static void main(String[] args) throws InterruptedException {
+ Thread t = new Thread(()->{
+ while(run){
+ // ....
+        }
+    });
+ t.start();
+ }
+ sleep(1);
+ run = false; // 线程t不会如预想的停下来
+```
+
+为什么呢？分析一下：
+1. 初始状态， t 线程刚开始从主内存读取了 run 的值到工作内存。
+![Alt text](image-20.png)
+2. 因为 t 线程要频繁从主内存中读取 run 的值，JIT 编译器会将 run 的值缓存至自己工作内存中的高速缓存中，减少对主存中 run 的访问，提高效率
+![Alt text](image-21.png)
+3. 1 秒之后，main 线程修改了 run 的值，并同步至主存，而 t 是从自己工作内存中的高速缓存中读取这个变量的值，结果永远是旧值
+![Alt text](image-22.png)
+
+### 解决方法 
+volatile（易变关键字）
+它可以用来修饰成员变量和静态成员变量，他可以避免线程从自己的工作缓存中查找变量的值，必须到主存中获取它的值，线程操作 volatile 变量都是直接操作主存
+**可见性 vs 原子性**
+前面例子体现的实际就是可见性，它保证的是在多个线程之间，一个线程对 volatile 变量的修改对另一个线程可见， 不能保证原子性，仅用在一个写线程，多个读线程的情况： 上例从字节码理解是这样的：
+```shell
+getstatic     run   // 线程 t 获取 run true 
+getstatic     run   // 线程 t 获取 run true 
+getstatic     run   // 线程 t 获取 run true 
+getstatic     run   // 线程 t 获取 run true 
+putstatic     run  //  线程 main 修改 run 为 false， 仅此一次 
+getstatic     run   // 线程 t 获取 run false 
+```
+
+比较一下之前我们将线程安全时举的例子：两个线程一个 i++ 一个 i-- ，只能保证看到最新值，不能解决指令交错
+```shell
+// 假设i的初始值为0 
+getstatic     i  // 线程2-获取静态变量i的值 线程内i=0 
+getstatic     i  // 线程1-获取静态变量i的值 线程内i=0 
+iconst_1         // 线程1-准备常量1 
+iadd             // 线程1-自增 线程内i=1 
+putstatic     i  // 线程1-将修改后的值存入静态变量i 静态变量i=1 
+iconst_1         // 线程2-准备常量1 
+isub             // 线程2-自减 线程内i=-1 
+putstatic     i  // 线程2-将修改后的值存入静态变量i 静态变量i=-1 
+```
+**注意** synchronized 语句块既可以保证代码块的原子性，也同时保证代码块内变量的可见性。但缺点是synchronized 是属于重量级操作，性能相对更低如果在前面示例的死循环中加入 System.out.println() 会发现即使不加 volatile 修饰符，线程 t 也能正确看到
+
+## 有序性 
+JVM 会在不影响正确性的前提下，可以调整语句的执行顺序，思考下面一段代码
+```java
+static int i;
+static int j;
+ // 在某个线程内执行如下赋值操作
+i = ...; 
+j = ...; 
+```
+
+可以看到，至于是先执行 i 还是 先执行 j ，对最终的结果不会产生影响。所以，上面代码真正执行时，既可以是
+```java
+i = ...; 
+j = ...;
+```
+也可以是
+```java
+j = ...;
+i = ...; 
+```
+
+这种特性称之为『指令重排』，多线程下『指令重排』会影响正确性。为什么要有重排指令这项优化呢？从 CPU执行指令的原理来理解一下吧
+* 原理之指令级并行  
+**诡异的结果**
+```java
+int num = 0;
+boolean ready = false;
+ // 线程1 执行此方法
+public void actor1(I_Result r) {
+ if(ready) {
+ r.r1 = num + num;
+    } 
+else {
+ r.r1 = 1;
+    }
+ }
+ // 线程2 执行此方法
+public void actor2(I_Result r) {        
+num = 2;
+ ready = true;    
+}
+```
+
+I_Result 是一个对象，有一个属性 r1 用来保存结果，问，可能的结果有几种？
+有同学这么分析
+情况1：线程1 先执行，这时 ready = false，所以进入 else 分支结果为 1
+情况2：线程2 先执行 num = 2，但没来得及执行 ready = true，线程1 执行，还是进入 else 分支，结果为1
+情况3：线程2 执行到 ready = true，线程1 执行，这回进入 if 分支，结果为 4（因为 num 已经执行过了）
+但我告诉你，结果还有可能是 0 😁😁😁，信不信吧！
+这种情况下是：线程2 执行 ready = true，切换到线程1，进入 if 分支，相加为 0，再切回线程2 执行 num = 2
+相信很多人已经晕了 😵😵😵
+这种现象叫做指令重排，是 JIT 编译器在运行时的一些优化，这个现象需要通过大量测试才能复现：
+借助 java 并发压测工具 jcstress https://wiki.openjdk.java.net/display/CodeTools/jcstress
+```shell
+mvn archetype:generate  -DinteractiveMode=false -DarchetypeGroupId=org.openjdk.jcstress - DarchetypeArtifactId=jcstress-java-test-archetype -DarchetypeVersion=0.5 -DgroupId=cn.itcast DartifactId=ordering -Dversion=1.0 
+```
+
+创建 maven 项目，提供如下测试类
+```java
+@JCStressTest
+ @Outcome(id = {"1", "4"}, expect = Expect.ACCEPTABLE, desc = "ok")
+ @Outcome(id = "0", expect = Expect.ACCEPTABLE_INTERESTING, desc = "!!!!")
+ @State
+ public class ConcurrencyTest {
+ int num = 0;
+ boolean ready = false;
+@Actor
+ public void actor1(I_Result r) {
+ if(ready) {
+ r.r1 = num + num;
+        } 
+else {
+ r.r1 = 1;
+        }
+    }
+ @Actor
+ public void actor2(I_Result r) {
+ num = 2;
+ ready = true;
+    }
+ }
+```
+执行
+```java
+mvn clean install 
+java -jar target/jcstress.jar 
+```
+
+会输出我们感兴趣的结果，摘录其中一次结果：
+```shell
+*** INTERESTING tests 
+  Some interesting behaviors observed. This is for the plain curiosity. 
+  2 matching test results. 
+      [OK] test.ConcurrencyTest 
+    (JVM args: [-XX:-TieredCompilation]) 
+  Observed state   Occurrences              Expectation  Interpretation 
+               0         1,729   ACCEPTABLE_INTERESTING  !!!! 
+               1    42,617,915               ACCEPTABLE  ok 
+               4     5,146,627               ACCEPTABLE  ok 
+      [OK] test.ConcurrencyTest 
+    (JVM args: []) 
+  Observed state   Occurrences              Expectation  Interpretation 
+               0         1,652   ACCEPTABLE_INTERESTING  !!!! 
+               1    46,460,657               ACCEPTABLE  ok 
+               4     4,571,072               ACCEPTABLE  ok 
+```
+
+可以看到，出现结果为 0 的情况有 638 次，虽然次数相对很少，但毕竟是出现了。
+### 解决方法 
+volatile 修饰的变量，可以禁用指令重排
+```java
+@JCStressTest
+@Outcome(id = {"1", "4"}, expect = Expect.ACCEPTABLE, desc = "ok")
+ @Outcome(id = "0", expect = Expect.ACCEPTABLE_INTERESTING, desc = "!!!!")
+ @State
+ public class ConcurrencyTest {
+ int num = 0;
+ volatile boolean ready = false;
+ @Actor
+ public void actor1(I_Result r) {
+ if(ready) {
+ r.r1 = num + num;
+        } 
+else {
+ r.r1 = 1;
+        }
+    }
+ @Actor
+ public void actor2(I_Result r) {
+ num = 2;
+ ready = true;
+    }
+ }
+```
+
+结果为：
+```shell
+*** INTERESTING tests 
+  Some interesting behaviors observed. This is for the plain curiosity. 
+  0 matching test results. 
+```
+
+* 原理之 volatile 
+**happens-before**
+happens-before 规定了对共享变量的写操作对其它线程的读操作可见，它是可见性与有序性的一套规则总结，抛开以下 happens-before 规则，JMM 并不能保证一个线程对共享变量的写，对于其它线程对该共享变量的读可见
+- 线程解锁 m 之前对变量的写，对于接下来对 m 加锁的其它线程对该变量的读可见
+```java
+static int x;
+ static Object m = new Object();
+ new Thread(()->{
+ synchronized(m) {
+ x = 10;
+    }
+ },"t1").start();
+ new Thread(()->{
+ synchronized(m) {
+ System.out.println(x);
+    }
+ },"t2").start();
+```
+
+- 线程对 volatile 变量的写，对接下来其它线程对该变量的读可见
+```java
+volatile static int x;
+ new Thread(()->{
+ x = 10;
+ },"t1").start();
+ new Thread(()->{
+ System.out.println(x);
+ },"t2").start();
+```
+
+- 线程 start 前对变量的写，对该线程开始后对该变量的读可见
+```java
+static int x;
+ x = 10;
+ new Thread(()->{
+ System.out.println(x);
+ },"t2").start();
+```
+
+- 线程结束前对变量的写，对其它线程得知它结束后的读可见（比如其它线程调用 t1.isAlive() 或 t1.join()等待它结束）
+```java
+static int x;
+ Thread t1 = new Thread(()->{
+ x = 10;
+ },"t1");
+ t1.start();
+ t1.join();
+ System.out.println(x);
+```
+- 线程 t1 打断 t2（interrupt）前对变量的写，对于其他线程得知 t2 被打断后对变量的读可见（通过
+t2.interrupted 或 t2.isInterrupted）
+```java
+static int x;
+ public static void main(String[] args) {
+ Thread t2 = new Thread(()->{
+ while(true) {
+ if(Thread.currentThread().isInterrupted()) {
+ System.out.println(x);
+ break;
+            }
+        }
+    },"t2");
+ t2.start();
+ new Thread(()->{
+ sleep(1);
+ x = 10;
+ t2.interrupt();
+    },"t1").start();
+     while(!t2.isInterrupted()) {
+ Thread.yield();
+    }
+ System.out.println(x);
+ }
+ 
+```
+
+- 对变量默认值（0，false，null）的写，对其它线程对该变量的读可见
+- 具有传递性，如果   x hb-> y 并且y hb-> z 那么有x hb-> z ，配合 volatile 的防指令重排，有下面的例子
+```java
+volatile static int x;
+ static int y;
+ new Thread(()->{    
+y = 10;
+ x = 20;
+ },"t1").start();
+ new Thread(()->{
+ // x=20 对 t2 可见, 同时 y=10 也对 t2 可见
+System.out.println(x); 
+},"t2").start();
+```

@@ -501,7 +501,7 @@ Mybatis 官网也是推荐使用 Mapper 代理的方式。
 
     ![Alt text](image-11.png)
 
-  * 结果：List<Brand>
+  * 结果：List&lt;Brand>
 
     我们会将查询出来的每一条数据封装成一个 `Brand` 对象，而多条数据封装多个 `Brand` 对象，需要将这些对象封装到List集合中返回。
 
@@ -541,7 +541,7 @@ public interface BrandMapper {
 </mapper>
 ```
 
-#### 1.2.3  编写测试方法
+####   编写测试方法
 
 在 `MybatisTest` 类中编写测试查询所有的方法
 
@@ -663,8 +663,8 @@ public void testSelectAll() throws IOException {
 实体类属性名 和 数据库表列名 不一致，不能自动封装数据
 
 * ==起别名：==在SQL语句中，对不一样的列名起别名，别名和实体类属性名一样
-  * 可以定义 <sql>片段，提升复用性 
-* ==resultMap：==定义<resultMap> 完成不一致的属性名和列名的映射
+  * 可以定义 &lt;sql>片段，提升复用性 
+* ==resultMap：==定义&lt;resultMap> 完成不一致的属性名和列名的映射
 
 而我们最终选择使用 resultMap的方式。查询映射配置文件中查询所有的 statement 书写如下：
 
@@ -821,8 +821,6 @@ mybatis提供了两种参数占位符：
   下图的 `&lt;` 就是 `<` 的转义字符。
 
 ![Alt text](image-19.png)
-
-* <![CDATA[内容]]>
 
 ![Alt text](image-20.png)
 
@@ -1216,7 +1214,7 @@ public void testAdd() throws IOException {
 
 * 添加订单数据
 
-![Alt text](image-26.png)
+![Alt text](image--26.png)
 
 * 添加订单项数据，订单项中需要设置所属订单的id
 
@@ -1254,9 +1252,9 @@ void update(Brand brand);
 
 > 上述方法参数 Brand 就是封装了需要修改的数据，而id肯定是有数据的，这也是和添加方法的区别。
 
-#### 1 编写SQL语句
+####  编写SQL语句
 
-在 `BrandMapper.xml` 映射配置文件中编写修改数据的 `statement`。
+
 
 ```xml
 <update id="update">
@@ -1329,7 +1327,7 @@ public void testUpdate() throws IOException {
 
 执行测试方法结果如下：
 
-![image-20210729224205522](assets/image-20210729224205522.png)
+
 
 从结果中SQL语句可以看出，只修改了 `status`  字段值，因为我们给的数据中只给Brand实体对象的 `status` 属性设置值了。这就是 `set` 标签的作用。
 
@@ -1681,12 +1679,6 @@ Mybatis 针对 CURD 操作都提供了对应的注解，已经做到见名知意
 * 运行测试程序也能正常查询到数据
 
 我们课程上只演示这一个查询的注解开发，其他的同学们下来可以自己实现，都是比较简单。
-
-==注意：==在官方文档中 `入门` 中有这样的一段话：
-
-![image-20210805234302849](assets/image-20210805234302849.png)
-
-所以，==注解完成简单功能，配置文件完成复杂功能。==
 
 
 

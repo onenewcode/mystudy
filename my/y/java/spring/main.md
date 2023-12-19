@@ -1413,7 +1413,7 @@ response,
  System.out.println(jsessionid);
  }
 ```
-## 文件上传
+    ## 文件上传
 ### 文件上传客户端三要素
  表单项type=“file”
   表单的提交方式是post
@@ -1690,8 +1690,7 @@ http://localhost:8080/onenewcode_springmvc1/quick23
 ## 拦截器方法说明
 |方法|名说明|
 |---------|--------|
-|preHandle()|方法将在请求处理之前进行调用，该方法的返回值是布尔值Boolean类型的，
-当它返回为false 时，表示请求结束，后续的Interceptor 和Controller 都不会再执行；当返回值为true 时就会继续调用下一个Interceptor 的preHandle方法|
+|preHandle()|方法将在请求处理之前进行调用，该方法的返回值是布尔值Boolean类型的，当它返回为false 时，表示请求结束，后续的Interceptor 和Controller 都不会再执行；当返回值为true 时就会继续调用下一个Interceptor 的preHandle方法|
 |postHandle()|该方法是在当前请求进行处理之后被调用，前提是preHandle方法的返回值为true 时才能被调用，且它会在DispatcherServlet进行视图返回渲染之前被调用，所以我们可以在这个方法中对Controller 处理之后的ModelAndView对象进行操作|
 |afterCompletion()|该方法将在整个请求结束之后，也就是在DispatcherServlet渲染了对应的视图之后执行，前提是preHandle方法的返回值为true 时才能被调用|
 
@@ -1710,9 +1709,9 @@ SpringMVC已经定义好了该类型转换器，在使用时可以根据项目�
 ```xml
 <!--配置简单映射异常处理器-->
  <bean class="org.springframework.web.servlet.handler.SimpleMappingExceptionResolver">
- <property name="defaultErrorView" value="error"/>   默认错误视图
+ <property name="defaultErrorView" value="error"/>   
 <property name="exceptionMappings">
- <map>异常类型错误视图
+ <map>
 <entry key="com.onenewcode.exception.MyException" value="error"/>
  <entry key="java.lang.ClassCastException" value="error"/>
  </map>
@@ -2122,7 +2121,6 @@ public void before(){
 |最终通知|@After|用于配置最终通知。无论增强方式执行是否有异常都会执行|
 
 # 声明式事务控制
-
 ##  编程式事务控制相关对象
 ###  PlatformTransactionManager 
 PlatformTransactionManager 接口是spring 的事务管理器，它里面提供了我们常用的操作事务的方法。
@@ -2260,12 +2258,10 @@ com.onenewcode.service.impl.*.*(..))"/>
  @Autowired
  private JdbcTemplate jdbcTemplate;
  public void out(String outMan, double money) {
- jdbcTemplate.update("update account set money=money-? where 
-name=?",money,outMan);
+ jdbcTemplate.update("update account set money=money-? where name=?",money,outMan);
  }
  public void in(String inMan, double money) {
- jdbcTemplate.update("update account set money=money+? where 
-name=?",money,inMan);
+ jdbcTemplate.update("update account set money=money+? where name=?",money,inMan);
  }
  }
 ```
