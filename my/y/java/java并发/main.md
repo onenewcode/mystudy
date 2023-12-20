@@ -3279,7 +3279,7 @@ public static ExecutorService newSingleThreadExecutor() {
 - Executors.newFixedThreadPool(1) 初始时为1，以后还可以修改
    - 对外暴露的是 ThreadPoolExecutor 对象，可以强转后调用 setCorePoolSize 等方法进行修改
 
-### 提交任务
+#### 提交任务
 ```java
 // 执行任务
 void execute(Runnable command);
@@ -3300,7 +3300,7 @@ void execute(Runnable command);
  long timeout, TimeUnit unit)
  throws InterruptedException, ExecutionException, TimeoutException;
 ```
-### 关闭线程池
+#### 关闭线程池
 **shutdown**
 ```java
  /*
@@ -3367,7 +3367,7 @@ tryTerminate();
  // 调用 shutdown 后，由于调用线程并不会等待所有任务运行结束，因此如果它想在线程池 TERMINATED 后做些事情，可以利用此方法等待
 boolean awaitTermination(long timeout, TimeUnit unit) throws InterruptedException;
 ```
-### 任务调度线程池
+#### 任务调度线程池
 在『任务调度线程池』功能加入之前，可以使用 java.util.Timer 来实现定时功能，Timer 的优点在于简单易用，但由于所有任务都是由同一个线程来调度，因此所有任务都是串行执行的，同一时间只能有一个任务在执行，前一个任务的延迟或异常都将会影响到之后的任务。
 ```java
 public static void main(String[] args) {
@@ -3414,7 +3414,7 @@ executor.schedule(() -> {
 任务1，执行时间：Thu Jan 03 12:45:17 CST 2019 
 任务2，执行时间：Thu Jan 03 12:45:17 CST 2019 
 ```
-###  正确处理执行任务异常
+####  正确处理执行任务异常
 **方法1：主动捉异常**
 ```java
 ExecutorService pool = Executors.newFixedThreadPool(1);
@@ -3465,7 +3465,7 @@ at java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:114
 at java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:624) 
 at java.lang.Thread.run(Thread.java:748) 
 ```
-###  Tomcat 线程池
+####  Tomcat 线程池
 Tomcat 在哪里用到了线程池呢
 - LimitLatch 用来限流，可以控制最大连接个数，类似 J.U.C 中的  Semaphore 后面再讲
 - Acceptor 只负责【接收新的 socket 连接】
@@ -3527,29 +3527,2249 @@ throw new RejectedExecutionException(
 
 **Executor 线程配置**
 |配置项|默认值|说明|
-|
-threadPriority
- daemon
+|threadPriority|5|线程优先级|
+|daemon| true|是否守护线程|
+|minSpareThreads|25|核心线程数，即 corePoolSize|
+| maxThreads|200|最大线程数，即 maximumPoolSize|
+|maxIdleTime|60000|线程生存时间，单位是毫秒，默认值即 1 分钟|
+|maxQueueSize|Integer.MAX_VALUE|队列长度|
+|prestartminSpareThreads|false|核心线程是否在服务器启动时启动|
 
-5
- true
+![Alt text](image-37.png)
+## Fork/Join
 
-线程优先级
-是否守护线程
-minSpareThreads
- maxThreads
- 25
- 200
-核心线程数，即 corePoolSize
-最大线程数，即 maximumPoolSize
- maxIdleTime
- maxQueueSize
- 60000
- Integer.MAX_VALUE
-线程生存时间，单位是毫秒，默认值即 1 分钟
-队列长度
-prestartminSpareThreads
-添加新任务
-false
-提交任务 < 核心线程
-核心线程是否在服务器启动时启动
+1) **概念**
+Fork/Join 是 JDK 1.7 加入的新的线程池实现，它体现的是一种分治思想，适用于能够进行任务拆分的 cpu 密集型运算.所谓的任务拆分，是将一个大任务拆分为算法上相同的小任务，直至不能拆分可以直接求解。跟递归相关的一些计算，如归并排序、斐波那契数列、都可以用分治思想进行求解.Fork/Join 在分治的基础上加入了多线程，可以把每个任务的分解和合并交给不同的线程来完成，进一步提升了运算效率
+Fork/Join 默认会创建与 cpu 核心数大小相同的线程池
+2) **使用**
+提交给 Fork/Join 线程池的任务需要继承 RecursiveTask（有返回值）或 RecursiveAction（没有返回值），例如下面定义了一个对 1~n 之间的整数求和的任务
+```java
+@Slf4j(topic = "c.AddTask")
+class AddTask1 extends RecursiveTask<Integer> {
+ int n;
+ public AddTask1(int n) {
+ this.n = n;
+ }
+ @Override
+ public String toString() {
+ return "{" + n + '}';
+ }
+ @Override
+ protected Integer compute() {
+ // 如果 n 已经为 1，可以求得结果了
+ if (n == 1) {
+ log.debug("join() {}", n);
+ return n;
+ }
+ 
+ // 将任务进行拆分(fork)
+ AddTask1 t1 = new AddTask1(n - 1);
+ t1.fork();
+ log.debug("fork() {} + {}", n, t1);
+ 
+ // 合并(join)结果
+ int result = n + t1.join();
+ log.debug("join() {} + {} = {}", n, t1, result);
+ return result;
+ }
+}
+```
+然后提交给 ForkJoinPool 来执行
+```java
+public static void main(String[] args) {
+ ForkJoinPool pool = new ForkJoinPool(4);
+ System.out.println(pool.invoke(new AddTask1(5)));
+}
+
+```
+**结果**
+```shell
+[ForkJoinPool-1-worker-0] - fork() 2 + {1} 
+[ForkJoinPool-1-worker-1] - fork() 5 + {4} 
+[ForkJoinPool-1-worker-0] - join() 1 
+[ForkJoinPool-1-worker-0] - join() 2 + {1} = 3 
+[ForkJoinPool-1-worker-2] - fork() 4 + {3} 
+[ForkJoinPool-1-worker-3] - fork() 3 + {2} 
+[ForkJoinPool-1-worker-3] - join() 3 + {2} = 6 
+[ForkJoinPool-1-worker-2] - join() 4 + {3} = 10 
+[ForkJoinPool-1-worker-1] - join() 5 + {4} = 15 
+15 
+```
+**用图来表示**
+![Alt text](image-38.png)
+
+**改进**
+```java
+class AddTask3 extends RecursiveTask<Integer> {
+ 
+ int begin;
+ int end;
+ public AddTask3(int begin, int end) {
+ this.begin = begin;
+ this.end = end;
+ }
+ @Override
+ public String toString() {
+ return "{" + begin + "," + end + '}';
+ }
+ @Override
+ protected Integer compute() {
+ // 5, 5
+ if (begin == end) {
+ log.debug("join() {}", begin);
+ return begin;
+ }
+ // 4, 5
+if (end - begin == 1) {
+ log.debug("join() {} + {} = {}", begin, end, end + begin);
+ return end + begin;
+ }
+ 
+ // 1 5
+ int mid = (end + begin) / 2; // 3
+ AddTask3 t1 = new AddTask3(begin, mid); // 1,3
+ t1.fork();
+ AddTask3 t2 = new AddTask3(mid + 1, end); // 4,5
+ t2.fork();
+ log.debug("fork() {} + {} = ?", t1, t2);
+ int result = t1.join() + t2.join();
+ log.debug("join() {} + {} = {}", t1, t2, result);
+ return result;
+ }
+}
+```
+**然后提交给 ForkJoinPool 来执行**
+```java
+public static void main(String[] args) {
+ ForkJoinPool pool = new ForkJoinPool(4);
+ System.out.println(pool.invoke(new AddTask3(1, 10)));
+}
+```
+```shell
+[ForkJoinPool-1-worker-0] - join() 1 + 2 = 3 
+[ForkJoinPool-1-worker-3] - join() 4 + 5 = 9 
+[ForkJoinPool-1-worker-0] - join() 3 
+[ForkJoinPool-1-worker-1] - fork() {1,3} + {4,5} = ? 
+[ForkJoinPool-1-worker-2] - fork() {1,2} + {3,3} = ? 
+[ForkJoinPool-1-worker-2] - join() {1,2} + {3,3} = 6 
+[ForkJoinPool-1-worker-1] - join() {1,3} + {4,5} = 15 
+15 
+```
+**用图来表示**
+![Alt text](image-39.png)
+
+## J.U.C
+### 读写锁 ReentrantReadWriteLock
+当读操作远远高于写操作时，这时候使用 读写锁 让 读-读 可以并发，提高性能。 类似于数据库中的 select ...from ... lock in share mode 提供一个 数据容器类 内部分别使用读锁保护数据的 read() 方法，写锁保护数据的 write() 方法
+```java
+class DataContainer {
+ private Object data;
+ private ReentrantReadWriteLock rw = new ReentrantReadWriteLock();
+ private ReentrantReadWriteLock.ReadLock r = rw.readLock();
+ private ReentrantReadWriteLock.WriteLock w = rw.writeLock();
+ public Object read() {
+ log.debug("获取读锁...");
+ r.lock();
+ try {
+ log.debug("读取");
+ sleep(1);
+ return data;
+ } finally {
+ log.debug("释放读锁...");
+ r.unlock();
+ }
+ }
+ public void write() {
+ log.debug("获取写锁...");
+ w.lock();
+ try {
+ log.debug("写入");
+ sleep(1);
+ } finally {
+ log.debug("释放写锁...");
+ w.unlock();
+ }
+ }
+}
+```
+测试 读锁-读锁 可以并发
+```java
+DataContainer dataContainer = new DataContainer();
+new Thread(() -> {
+ dataContainer.read();
+}, "t1").start();
+new Thread(() -> {
+ dataContainer.read();
+}, "t2").start();
+
+```
+输出结果，从这里可以看到 Thread-0 锁定期间，Thread-1 的读操作不受影响
+```shell
+14:05:14.341 c.DataContainer [t2] - 获取读锁... 
+14:05:14.341 c.DataContainer [t1] - 获取读锁... 
+14:05:14.345 c.DataContainer [t1] - 读取
+14:05:14.345 c.DataContainer [t2] - 读取
+14:05:15.365 c.DataContainer [t2] - 释放读锁... 
+14:05:15.386 c.DataContainer [t1] - 释放读锁...
+```
+测试 读锁-写锁 相互阻塞
+```java
+DataContainer dataContainer = new DataContainer();
+new Thread(() -> {
+ dataContainer.read();
+}, "t1").start();
+Thread.sleep(100);
+new Thread(() -> {
+ dataContainer.write();
+}, "t2").start();
+```
+**输出结果**
+```shell
+14:04:21.838 c.DataContainer [t1] - 获取读锁... 
+14:04:21.838 c.DataContainer [t2] - 获取写锁... 
+14:04:21.841 c.DataContainer [t2] - 写入
+14:04:22.843 c.DataContainer [t2] - 释放写锁... 
+14:04:22.843 c.DataContainer [t1] - 读取
+14:04:23.843 c.DataContainer [t1] - 释放读锁... 
+
+```
+**注意事项**
+- 读锁不支持条件变量
+- 重入时升级不支持：即持有读锁的情况下去获取写锁，会导致获取写锁永久等待
+```java
+r.lock();
+try {
+ // ...
+ w.lock();
+ try {
+ // ...
+ } finally{
+ w.unlock();
+ }
+} finally{
+ r.unlock();
+}
+```
+- 重入时降级支持：即持有写锁的情况下去获取读锁
+```java
+class CachedData {
+ Object data;
+ // 是否有效，如果失效，需要重新计算 data
+ volatile boolean cacheValid;
+ final ReentrantReadWriteLock rwl = new ReentrantReadWriteLock();
+ void processCachedData() {
+ rwl.readLock().lock();
+ if (!cacheValid) {
+ // 获取写锁前必须释放读锁
+ rwl.readLock().unlock();
+ rwl.writeLock().lock();
+ try {
+ // 判断是否有其它线程已经获取了写锁、更新了缓存, 避免重复更新
+ if (!cacheValid) {
+ data = ...
+ cacheValid = true;
+ }
+ // 降级为读锁, 释放写锁, 这样能够让其它线程读取缓存
+ rwl.readLock().lock();
+ } finally {
+   rwl.writeLock().unlock();
+ }
+ }
+ // 自己用完数据, 释放读锁 
+ try {
+ use(data);
+ } finally {
+ rwl.readLock().unlock();
+ }
+ }
+}
+
+```
+###  StampedLock
+该类自 JDK 8 加入，是为了进一步优化读性能，它的特点是在使用读锁、写锁时都必须配合【戳】使用
+**加解读锁**
+```java
+long stamp = lock.readLock();
+lock.unlockRead(stamp);
+```
+**加解写锁**
+```java
+long stamp = lock.writeLock();
+lock.unlockWrite(stamp);
+```
+乐观读，StampedLock 支持 tryOptimisticRead() 方法（乐观读），读取完毕后需要做一次 戳校验 如果校验通过，表示这期间确实没有写操作，数据可以安全使用，如果校验没通过，需要重新获取读锁，保证数据安全。
+```java
+long stamp = lock.tryOptimisticRead();
+// 验戳
+if(!lock.validate(stamp)){
+ // 锁升级
+}
+```
+提供一个 数据容器类 内部分别使用读锁保护数据的 read() 方法，写锁保护数据的 write() 方法
+```java
+class DataContainerStamped {
+ private int data;
+private final StampedLock lock = new StampedLock();
+ public DataContainerStamped(int data) {
+ this.data = data;
+ }
+ public int read(int readTime) {
+ long stamp = lock.tryOptimisticRead();
+ log.debug("optimistic read locking...{}", stamp);
+ sleep(readTime);
+ if (lock.validate(stamp)) {
+ log.debug("read finish...{}, data:{}", stamp, data);
+ return data;
+ }
+ // 锁升级 - 读锁
+ log.debug("updating to read lock... {}", stamp);
+ try {
+ stamp = lock.readLock();
+ log.debug("read lock {}", stamp);
+ sleep(readTime);
+ log.debug("read finish...{}, data:{}", stamp, data);
+ return data;
+ } finally {
+ log.debug("read unlock {}", stamp);
+ lock.unlockRead(stamp);
+ }
+ }
+ public void write(int newData) {
+ long stamp = lock.writeLock();
+ log.debug("write lock {}", stamp);
+ try {
+ sleep(2);
+ this.data = newData;
+ } finally {
+ log.debug("write unlock {}", stamp);
+ lock.unlockWrite(stamp);
+ }
+ }
+}
+```
+测试 读-读 可以优化
+```java
+public static void main(String[] args) {
+ DataContainerStamped dataContainer = new DataContainerStamped(1);
+ new Thread(() -> {
+ dataContainer.read(1);
+ }, "t1").start();
+ sleep(0.5);
+ new Thread(() -> {
+ dataContainer.read(0);
+ }, "t2").start();
+}
+```
+输出结果，可以看到实际没有加读锁
+```shell
+15:58:50.217 c.DataContainerStamped [t1] - optimistic read locking...256 
+15:58:50.717 c.DataContainerStamped [t2] - optimistic read locking...256 
+15:58:50.717 c.DataContainerStamped [t2] - read finish...256, data:1 
+15:58:51.220 c.DataContainerStamped [t1] - read finish...256, data:1 
+```
+测试 读-写 时优化读补加读锁
+```java
+public static void main(String[] args) {
+ DataContainerStamped dataContainer = new DataContainerStamped(1);
+ new Thread(() -> {
+ dataContainer.read(1);
+ }, "t1").start();
+ sleep(0.5);
+ new Thread(() -> {
+ dataContainer.write(100);
+ }, "t2").start();
+}
+```
+
+输出结果
+```shell
+输出结果
+15:57:00.219 c.DataContainerStamped [t1] - optimistic read locking...256 
+15:57:00.717 c.DataContainerStamped [t2] - write lock 384 
+15:57:01.225 c.DataContainerStamped [t1] - updating to read lock... 256 
+15:57:02.719 c.DataContainerStamped [t2] - write unlock 384 
+15:57:02.719 c.DataContainerStamped [t1] - read lock 513 
+15:57:03.719 c.DataContainerStamped [t1] - read finish...513, data:1000 
+15:57:03.719 c.DataContainerStamped [t1] - read unlock 513
+```
+### Semaphore
+**基本使用**
+[ˈsɛməˌfɔr] 信号量，用来限制能同时访问共享资源的线程上限。
+```java
+public static void main(String[] args) {
+ // 1. 创建 semaphore 对象
+ Semaphore semaphore = new Semaphore(3);
+ // 2. 10个线程同时运行
+ for (int i = 0; i < 10; i++) {
+ new Thread(() -> {
+ // 3. 获取许可
+ try {
+ semaphore.acquire();
+ } catch (InterruptedException e) {
+ e.printStackTrace();
+ }
+ try {
+ log.debug("running...");
+ sleep(1);
+ log.debug("end...");
+ } finally {
+ // 4. 释放许可
+ semaphore.release();
+ }
+ }).start();
+ }
+ }
+```
+输出
+```shell
+07:35:15.485 c.TestSemaphore [Thread-2] - running... 
+07:35:15.485 c.TestSemaphore [Thread-1] - running... 
+07:35:15.485 c.TestSemaphore [Thread-0] - running... 
+07:35:16.490 c.TestSemaphore [Thread-2] - end... 
+07:35:16.490 c.TestSemaphore [Thread-0] - end... 
+07:35:16.490 c.TestSemaphore [Thread-1] - end... 
+07:35:16.490 c.TestSemaphore [Thread-3] - running... 
+07:35:16.490 c.TestSemaphore [Thread-5] - running... 
+07:35:16.490 c.TestSemaphore [Thread-4] - running... 
+07:35:17.490 c.TestSemaphore [Thread-5] - end... 
+07:35:17.490 c.TestSemaphore [Thread-4] - end... 
+07:35:17.490 c.TestSemaphore [Thread-3] - end... 
+07:35:17.490 c.TestSemaphore [Thread-6] - running... 
+07:35:17.490 c.TestSemaphore [Thread-7] - running... 
+07:35:17.490 c.TestSemaphore [Thread-9] - running... 
+07:35:18.491 c.TestSemaphore [Thread-6] - end... 
+07:35:18.491 c.TestSemaphore [Thread-7] - end... 
+07:35:18.491 c.TestSemaphore [Thread-9] - end... 
+07:35:18.491 c.TestSemaphore [Thread-8] - running... 
+07:35:19.492 c.TestSemaphore [Thread-8] - end... 
+
+```
+### CountdownLatch
+用来进行线程同步协作，等待所有线程完成倒计时。
+其中构造参数用来初始化等待计数值，await() 用来等待计数归零，countDown() 用来让计数减一
+```java
+public static void main(String[] args) throws InterruptedException {
+ CountDownLatch latch = new CountDownLatch(3);
+ new Thread(() -> {
+ log.debug("begin...");
+ sleep(1);
+ latch.countDown();
+ log.debug("end...{}", latch.getCount());
+ }).start();
+ new Thread(() -> {
+ log.debug("begin...");
+ sleep(2);
+ latch.countDown();
+ log.debug("end...{}", latch.getCount());
+ }).start();
+ new Thread(() -> {
+ log.debug("begin...");
+ sleep(1.5);
+ latch.countDown();
+ log.debug("end...{}", latch.getCount());
+ }).start();
+ log.debug("waiting...");
+ latch.await();
+ log.debug("wait end...");
+}
+```
+**输出**
+```shell
+18:44:00.778 c.TestCountDownLatch [main] - waiting... 
+18:44:00.778 c.TestCountDownLatch [Thread-2] - begin... 
+18:44:00.778 c.TestCountDownLatch [Thread-0] - begin... 
+18:44:00.778 c.TestCountDownLatch [Thread-1] - begin... 
+18:44:01.782 c.TestCountDownLatch [Thread-0] - end...2 
+18:44:02.283 c.TestCountDownLatch [Thread-2] - end...1 
+18:44:02.782 c.TestCountDownLatch [Thread-1] - end...0 
+18:44:02.782 c.TestCountDownLatch [main] - wait end... 
+```
+可以配合线程池使用，改进如下
+```java
+public static void main(String[] args) throws InterruptedException {
+ CountDownLatch latch = new CountDownLatch(3);
+ ExecutorService service = Executors.newFixedThreadPool(4);
+ service.submit(() -> {
+ log.debug("begin...");
+ sleep(1);
+ latch.countDown();
+ log.debug("end...{}", latch.getCount());
+ });
+ service.submit(() -> {
+ log.debug("begin...");
+ sleep(1.5);
+ latch.countDown();
+ log.debug("end...{}", latch.getCount());
+ });
+ service.submit(() -> {
+ log.debug("begin...");
+ sleep(2);
+ latch.countDown();
+ log.debug("end...{}", latch.getCount());
+ });
+ service.submit(()->{
+ try {
+ log.debug("waiting...");
+ latch.await();
+ log.debug("wait end...");
+ } catch (InterruptedException e) {
+ e.printStackTrace();
+ }
+ });
+}
+```
+**输出**
+```shell
+18:52:25.831 c.TestCountDownLatch [pool-1-thread-3] - begin... 
+18:52:25.831 c.TestCountDownLatch [pool-1-thread-1] - begin... 
+18:52:25.831 c.TestCountDownLatch [pool-1-thread-2] - begin... 
+18:52:25.831 c.TestCountDownLatch [pool-1-thread-4] - waiting... 
+18:52:26.835 c.TestCountDownLatch [pool-1-thread-1] - end...2 
+18:52:27.335 c.TestCountDownLatch [pool-1-thread-2] - end...1 
+18:52:27.835 c.TestCountDownLatch [pool-1-thread-3] - end...0 
+18:52:27.835 c.TestCountDownLatch [pool-1-thread-4] - wait end... 
+```
+可以配合线程池使用，改进如下
+```java
+public static void main(String[] args) throws InterruptedException {
+ CountDownLatch latch = new CountDownLatch(3);
+ ExecutorService service = Executors.newFixedThreadPool(4);
+ service.submit(() -> {
+ log.debug("begin...");
+ sleep(1);
+ latch.countDown();
+ log.debug("end...{}", latch.getCount());
+ });
+ service.submit(() -> {
+ log.debug("begin...");
+ sleep(1.5);
+ latch.countDown();
+ log.debug("end...{}", latch.getCount());
+ });
+ service.submit(() -> {
+ log.debug("begin...");
+ sleep(2);
+ latch.countDown();
+ log.debug("end...{}", latch.getCount());
+ });
+ service.submit(()->{
+ try {
+ log.debug("waiting...");
+ latch.await();
+ log.debug("wait end...");
+ } catch (InterruptedException e) {
+ e.printStackTrace();
+ }
+ });
+}
+```
+**输出**
+```shell
+18:52:25.831 c.TestCountDownLatch [pool-1-thread-3] - begin... 
+18:52:25.831 c.TestCountDownLatch [pool-1-thread-1] - begin... 
+18:52:25.831 c.TestCountDownLatch [pool-1-thread-2] - begin... 
+18:52:25.831 c.TestCountDownLatch [pool-1-thread-4] - waiting... 
+18:52:26.835 c.TestCountDownLatch [pool-1-thread-1] - end...2 
+18:52:27.335 c.TestCountDownLatch [pool-1-thread-2] - end...1 
+18:52:27.835 c.TestCountDownLatch [pool-1-thread-3] - end...0 
+18:52:27.835 c.TestCountDownLatch [pool-1-thread-4] - wait end... 
+```
+####  应用之同步等待多线程准备完毕
+```java
+AtomicInteger num = new AtomicInteger(0);
+ExecutorService service = Executors.newFixedThreadPool(10, (r) -> {
+    return new Thread(r, "t" + num.getAndIncrement());
+});
+CountDownLatch latch = new CountDownLatch(10);
+String[] all = new String[10];
+Random r = new Random();
+for (int j = 0; j < 10; j++) {
+ int x = j;
+ service.submit(() -> {
+ for (int i = 0; i <= 100; i++) {
+ try {
+ Thread.sleep(r.nextInt(100));
+ } catch (InterruptedException e) {
+ }
+ all[x] = Thread.currentThread().getName() + "(" + (i + "%") + ")";
+ System.out.print("\r" + Arrays.toString(all));
+ }
+ latch.countDown();
+ });
+}
+latch.await();
+System.out.println("\n游戏开始...");
+service.shutdown();
+```
+**中间输出**
+```shell
+[t0(52%), t1(47%), t2(51%), t3(40%), t4(49%), t5(44%), t6(49%), t7(52%), t8(46%), t9(46%)] 
+```
+**最后输出**
+```shell
+[t0(100%), t1(100%), t2(100%), t3(100%), t4(100%), t5(100%), t6(100%), t7(100%), t8(100%), 
+t9(100%)] 
+游戏开始... 
+
+```
+#### 应用之同步等待多个远程调用结束
+```java
+@RestController
+public class TestCountDownlatchController {
+ @GetMapping("/order/{id}")
+ public Map<String, Object> order(@PathVariable int id) {
+ HashMap<String, Object> map = new HashMap<>();
+ map.put("id", id);
+ map.put("total", "2300.00");
+ sleep(2000);
+ return map;
+ }
+ @GetMapping("/product/{id}")
+ public Map<String, Object> product(@PathVariable int id) {
+   HashMap<String, Object> map = new HashMap<>();
+ if (id == 1) {
+ map.put("name", "小爱音箱");
+ map.put("price", 300);
+ } else if (id == 2) {
+ map.put("name", "小米手机");
+ map.put("price", 2000);
+ }
+ map.put("id", id);
+ sleep(1000);
+ return map;
+ }
+ @GetMapping("/logistics/{id}")
+ public Map<String, Object> logistics(@PathVariable int id) {
+ HashMap<String, Object> map = new HashMap<>();
+ map.put("id", id);
+ map.put("name", "中通快递");
+ sleep(2500);
+ return map;
+ }
+ private void sleep(int millis) {
+ try {
+ Thread.sleep(millis);
+ } catch (InterruptedException e) {
+ e.printStackTrace();
+ }
+ }
+}
+```
+**rest 远程调用**
+```java
+RestTemplate restTemplate = new RestTemplate();
+log.debug("begin");
+ExecutorService service = Executors.newCachedThreadPool();
+CountDownLatch latch = new CountDownLatch(4);
+Future<Map<String,Object>> f1 = service.submit(() -> {
+ Map<String, Object> r =
+ restTemplate.getForObject("http://localhost:8080/order/{1}", Map.class, 1);
+ return r;
+});
+Future<Map<String, Object>> f2 = service.submit(() -> {
+ Map<String, Object> r =
+ restTemplate.getForObject("http://localhost:8080/product/{1}", Map.class, 1);
+ return r;
+});
+Future<Map<String, Object>> f3 = service.submit(() -> {
+ Map<String, Object> r =
+ restTemplate.getForObject("http://localhost:8080/product/{1}", Map.class, 2);
+ return r;
+});
+Future<Map<String, Object>> f4 = service.submit(() -> {
+ Map<String, Object> r =
+ restTemplate.getForObject("http://localhost:8080/logistics/{1}", Map.class, 1);
+ return r;
+});
+System.out.println(f1.get());
+System.out.println(f2.get());
+System.out.println(f3.get());
+System.out.println(f4.get());
+log.debug("执行完毕");
+service.shutdown();
+
+```
+**执行结果**
+```shell
+19:51:39.711 c.TestCountDownLatch [main] - begin 
+{total=2300.00, id=1} 
+{price=300, name=小爱音箱, id=1} 
+{price=2000, name=小米手机, id=2} 
+{name=中通快递, id=1} 
+19:51:42.407 c.TestCountDownLatch [main] - 执行完毕
+
+```
+### CyclicBarrier
+[ˈsaɪklɪk ˈbæriɚ] 循环栅栏，用来进行线程协作，等待线程满足某个计数。构造时设置『计数个数』，每个线程执行到某个需要“同步”的时刻调用 await() 方法进行等待，当等待的线程数满足『计数个数』时，继续执行
+```java
+CyclicBarrier cb = new CyclicBarrier(2); // 个数为2时才会继续执行
+new Thread(()->{
+ System.out.println("线程1开始.."+new Date());
+ try {
+ cb.await(); // 当个数不足时，等待
+ } catch (InterruptedException | BrokenBarrierException e) {
+ e.printStackTrace();
+ }
+ System.out.println("线程1继续向下运行..."+new Date());
+}).start();
+new Thread(()->{
+ System.out.println("线程2开始.."+new Date());
+ try { Thread.sleep(2000); } catch (InterruptedException e) { }
+ try {
+ cb.await(); // 2 秒后，线程个数够2，继续运行
+ } catch (InterruptedException | BrokenBarrierException e) {
+ e.printStackTrace();
+ }
+ System.out.println("线程2继续向下运行..."+new Date());
+}).start();
+
+```
+###  线程安全集合类概述
+![Alt text](image-40.png)
+
+线程安全集合类可以分为三大类：
+- 遗留的线程安全集合如 Hashtable ， Vector
+- 使用 Collections 装饰的线程安全集合，如：
+   - Collections.synchronizedCollection
+   - Collections.synchronizedList
+   - Collections.synchronizedMap
+   - Collections.synchronizedSet
+   - Collections.synchronizedNavigableMap
+   - Collections.synchronizedNavigableSet 
+   - Collections.synchronizedSortedMap
+   - Collections.synchronizedSortedSet
+- java.util.concurrent.*
+
+重点介绍 java.util.concurrent.* 下的线程安全集合类，可以发现它们有规律，里面包含三类关键词：
+Blocking、CopyOnWrite、Concurrent
+- Blocking 大部分实现基于锁，并提供用来阻塞的方法
+- CopyOnWrite 之类容器修改开销相对较重
+- Concurrent 类型的容器
+   - 内部很多操作使用 cas 优化，一般可以提供较高吞吐量
+   - 弱一致性
+      - 遍历时弱一致性，例如，当利用迭代器遍历时，如果容器发生修改，迭代器仍然可以继续进行遍
+      - 历，这时内容是旧的
+      - 求大小弱一致性，size 操作未必是 100% 准确
+      - 读取弱一致性
+###  ConcurrentHashMap
+练习：单词计数
+生成测试数据
+```java
+static final String ALPHA = "abcedfghijklmnopqrstuvwxyz";
+public static void main(String[] args) {
+ int length = ALPHA.length();
+ int count = 200;
+ List<String> list = new ArrayList<>(length * count);
+ for (int i = 0; i < length; i++) {
+ char ch = ALPHA.charAt(i);
+ for (int j = 0; j < count; j++) {
+ list.add(String.valueOf(ch));
+ }
+ }
+ Collections.shuffle(list);
+ for (int i = 0; i < 26; i++) {
+ try (PrintWriter out = new PrintWriter(
+ new OutputStreamWriter(
+ new FileOutputStream("tmp/" + (i+1) + ".txt")))) {
+ String collect = list.subList(i * count, (i + 1) * count).stream()
+ .collect(Collectors.joining("\n"));
+ out.print(collect);
+ } catch (IOException e) {
+ }
+ }
+}
+
+```
+模版代码，模版代码中封装了多线程读取文件的代码
+```java
+private static <V> void demo(Supplier<Map<String,V>> supplier, 
+BiConsumer<Map<String,V>,List<String>> consumer) {
+ Map<String, V> counterMap = supplier.get();
+ List<Thread> ts = new ArrayList<>();
+ for (int i = 1; i <= 26; i++) {
+ int idx = i;
+ Thread thread = new Thread(() -> {
+ List<String> words = readFromFile(idx);
+ consumer.accept(counterMap, words);
+ });
+ ts.add(thread);
+ }
+ ts.forEach(t->t.start());
+ ts.forEach(t-> {
+ try {
+ t.join();
+ } catch (InterruptedException e) {
+ e.printStackTrace();
+ }
+ });
+ System.out.println(counterMap);
+}
+public static List<String> readFromFile(int i) {
+ ArrayList<String> words = new ArrayList<>();
+ try (BufferedReader in = new BufferedReader(new InputStreamReader(new FileInputStream("tmp/"
++ i +".txt")))) {
+ while(true) {
+ String word = in.readLine();
+ if(word == null) {
+ break;
+ }
+ words.add(word);
+ }
+ return words;
+ } catch (IOException e) {
+ throw new RuntimeException(e);
+ }
+}
+```
+你要做的是实现两个参数
+- 一是提供一个 map 集合，用来存放每个单词的计数结果，key 为单词，value 为计数
+- 二是提供一组操作，保证计数的安全性，会传递 map 集合以及 单词 List
+正确结果输出应该是每个单词出现 200 次
+```shell
+{a=200, b=200, c=200, d=200, e=200, f=200, g=200, h=200, i=200, j=200, k=200, l=200, m=200, 
+n=200, o=200, p=200, q=200, r=200, s=200, t=200, u=200, v=200, w=200, x=200, y=200, z=200} 
+
+```
+下面的实现为：
+```java
+demo(
+ // 创建 map 集合
+ // 创建 ConcurrentHashMap 对不对？
+ () -> new HashMap<String, Integer>(),
+ // 进行计数
+ (map, words) -> {
+ for (String word : words) {
+ Integer counter = map.get(word);
+ int newValue = counter == null ? 1 : counter + 1;
+ map.put(word, newValue);
+ }
+ }
+);
+```
+### BlockingQueue
+### ConcurrentLinkedQueue
+ConcurrentLinkedQueue 的设计与 LinkedBlockingQueue 非常像，也是
+- 两把【锁】，同一时刻，可以允许两个线程同时（一个生产者与一个消费者）执行
+- dummy 节点的引入让两把【锁】将来锁住的是不同对象，避免竞争
+- 只是这【锁】使用了 cas 来实现
+事实上，ConcurrentLinkedQueue 应用还是非常广泛的
+例如之前讲的 Tomcat 的 Connector 结构时，Acceptor 作为生产者向 Poller 消费者传递事件信息时，正是采用了ConcurrentLinkedQueue 将 SocketChannel 给 Poller 使用
+###  CopyOnWriteArrayList
+CopyOnWriteArraySet 是它的马甲 底层实现采用了 写入时拷贝 的思想，增删改操作会将底层数组拷贝一份，更改操作在新数组上执行，这时不影响其它线程的并发读，读写分离。 以新增为例：
+```java
+public boolean add(E e) {
+ synchronized (lock) {
+ // 获取旧的数组
+ Object[] es = getArray();
+ int len = es.length;
+ // 拷贝新的数组（这里是比较耗时的操作，但不影响其它读线程）
+ es = Arrays.copyOf(es, len + 1);
+ // 添加新元素
+ es[len] = e;
+ // 替换旧的数组
+ setArray(es);
+ return true;
+ }
+}
+```
+其它读操作并未加锁，例如：
+```java
+public void forEach(Consumer<? super E> action) {
+ Objects.requireNonNull(action);
+ for (Object x : getArray()) {
+ @SuppressWarnings("unchecked") E e = (E) x;
+ action.accept(e);
+ }
+}
+```
+适合『读多写少』的应用场景
+**get 弱一致性**
+![Alt text](image-41.png)
+|时间点| 操作|
+|------------|-------------|
+|1| Thread-0 getArray()|
+|2| Thread-1 getArray()|
+|3| Thread-1 setArray(arrayCopy)|
+|4| Thread-0 array[index]|
+
+迭代器弱一致性
+```java
+迭代器弱一致性
+不要觉得弱一致性就不好
+数据库的 MVCC 都是弱一致性的表现
+并发高和一致性是矛盾的，需要权衡
+CopyOnWriteArrayList<Integer> list = new CopyOnWriteArrayList<>();
+list.add(1);
+list.add(2);
+list.add(3);
+Iterator<Integer> iter = list.iterator();
+new Thread(() -> {
+ list.remove(0);
+ System.out.println(list);
+}).start();
+sleep1s();
+while (iter.hasNext()) {
+ System.out.println(iter.next());
+}
+```
+# 模式篇
+## 同步模式之保护性暂停
+### 定义
+即 Guarded Suspension，用在一个线程等待另一个线程的执行结果
+**要点**
+- 有一个结果需要从一个线程传递到另一个线程，让他们关联同一个 GuardedObject
+- 如果有结果不断从一个线程到另一个线程那么可以使用消息队列（见生产者/消费者）
+- JDK 中，join 的实现、Future 的实现，采用的就是此模式
+- 因为要等待另一方的结果，因此归类到同步模式
+
+![Alt text](image-42.png)
+
+###  实现
+```java
+class GuardedObject {
+ private Object response;
+ private final Object lock = new Object();
+ public Object get() {
+synchronized (lock) {
+// 条件不满足则等待
+while (response == null) {
+try {
+lock.wait();
+} catch (InterruptedException e) {
+e.printStackTrace();
+}
+}
+return response;
+}
+ }
+ public void complete(Object response) {
+synchronized (lock) {
+// 条件满足，通知等待线程
+this.response = response;
+lock.notifyAll();
+}
+ }
+}
+```
+一个线程等待另一个线程的执行结果
+```java
+public static void main(String[] args) {
+ GuardedObject guardedObject = new GuardedObject();
+ new Thread(() -> {
+try {
+// 子线程执行下载
+List<String> response = download();
+log.debug("download complete...");
+guardedObject.complete(response);
+} catch (IOException e) {
+e.printStackTrace();
+}
+ }).start();
+ log.debug("waiting...");
+ // 主线程阻塞等待
+ Object response = guardedObject.get();
+ log.debug("get response: [{}] lines", ((List<String>) response).size());
+}
+
+```
+**执行结果**
+```shell
+08:42:18.568 [main] c.TestGuardedObject - waiting...
+08:42:23.312 [Thread-0] c.TestGuardedObject - download complete...
+08:42:23.312 [main] c.TestGuardedObject - get response: [3] lines
+```
+### 带超时版 GuardedObject
+如果要控制超时时间呢
+```java
+class GuardedObjectV2 {
+ private Object response;
+ private final Object lock = new Object();
+ public Object get(long millis) {
+synchronized (lock) {
+// 1) 记录最初时间
+long begin = System.currentTimeMillis();
+// 2) 已经经历的时间
+long timePassed = 0;
+while (response == null) {
+// 4) 假设 millis 是 1000，结果在 400 时唤醒了，那么还有 600 要等
+long waitTime = millis - timePassed;
+log.debug("waitTime: {}", waitTime);
+if (waitTime <= 0) {
+log.debug("break...");
+break;
+}
+try {
+lock.wait(waitTime);
+} catch (InterruptedException e) {
+e.printStackTrace();
+}
+// 3) 如果提前被唤醒，这时已经经历的时间假设为 400
+timePassed = System.currentTimeMillis() - begin;
+log.debug("timePassed: {}, object is null {}", 
+timePassed, response == null);
+}
+return response;
+}
+ }
+ public void complete(Object response) {
+synchronized (lock) {
+// 条件满足，通知等待线程
+this.response = response;
+log.debug("notify...");
+lock.notifyAll();
+}
+ }
+}
+```
+测试，没有超时
+```java
+public static void main(String[] args) {
+ GuardedObjectV2 v2 = new GuardedObjectV2();
+ new Thread(() -> {
+sleep(1);
+v2.complete(null);
+sleep(1);
+v2.complete(Arrays.asList("a", "b", "c"));
+ }).start();
+ Object response = v2.get(2500);
+ if (response != null) {
+log.debug("get response: [{}] lines", ((List<String>) response).size());
+} else {
+log.debug("can't get response");
+ }
+}
+```
+**输出**
+```shell
+08:49:39.917 [main] c.GuardedObjectV2 - waitTime: 2500
+08:49:40.917 [Thread-0] c.GuardedObjectV2 - notify...
+08:49:40.917 [main] c.GuardedObjectV2 - timePassed: 1003, object is null true
+08:49:40.917 [main] c.GuardedObjectV2 - waitTime: 1497
+08:49:41.918 [Thread-0] c.GuardedObjectV2 - notify...
+08:49:41.918 [main] c.GuardedObjectV2 - timePassed: 2004, object is null false
+08:49:41.918 [main] c.TestGuardedObjectV2 - get response: [3] lines
+```
+**测试，超时**
+```java
+// 等待时间不足
+List<String> lines = v2.get(1500);
+```
+**输出**
+```shell
+08:47:54.963 [main] c.GuardedObjectV2 - waitTime: 1500
+08:47:55.963 [Thread-0] c.GuardedObjectV2 - notify...
+08:47:55.963 [main] c.GuardedObjectV2 - timePassed: 1002, object is null true
+08:47:55.963 [main] c.GuardedObjectV2 - waitTime: 498
+08:47:56.461 [main] c.GuardedObjectV2 - timePassed: 1500, object is null true
+08:47:56.461 [main] c.GuardedObjectV2 - waitTime: 0
+08:47:56.461 [main] c.GuardedObjectV2 - break...
+08:47:56.461 [main] c.TestGuardedObjectV2 - can't get response
+08:47:56.963 [Thread-0] c.GuardedObjectV2 - notify...
+```
+### 多任务版 GuardedObject
+图中 Futures 就好比居民楼一层的信箱（每个信箱有房间编号），左侧的 t0，t2，t4 就好比等待邮件的居民，右侧的 t1，t3，t5 就好比邮递员
+如果需要在多个类之间使用 GuardedObject 对象，作为参数传递不是很方便，因此设计一个用来解耦的中间类，这样不仅能够解耦【结果等待者】和【结果生产者】，还能够同时支持多个任务的管理
+![Alt text](image-43.png)
+新增 id 用来标识 Guarded Object
+```java
+class GuardedObject {
+ // 标识 Guarded Object
+ private int id;
+ public GuardedObject(int id) {
+ this.id = id;
+ }
+ public int getId() {
+ return id;
+ }
+ // 结果
+ private Object response;
+ // 获取结果
+ // timeout 表示要等待多久 2000
+ public Object get(long timeout) {
+ synchronized (this) {
+ // 开始时间 15:00:00
+ long begin = System.currentTimeMillis();
+ // 经历的时间
+ long passedTime = 0;
+ while (response == null) {
+ // 这一轮循环应该等待的时间
+ long waitTime = timeout - passedTime;
+ // 经历的时间超过了最大等待时间时，退出循环
+ if (timeout - passedTime <= 0) {
+ break;
+ }
+ try {
+ this.wait(waitTime); // 虚假唤醒 15:00:01
+ } catch (InterruptedException e) {
+ e.printStackTrace();
+ }
+ // 求得经历时间
+ passedTime = System.currentTimeMillis() - begin; // 15:00:02 1s
+ }
+ return response;
+ }
+ }
+ // 产生结果
+ public void complete(Object response) {
+ synchronized (this) {
+ // 给结果成员变量赋值
+ this.response = response;
+ this.notifyAll();
+ }
+ }
+}
+```
+**中间解耦类**
+```java
+class Mailboxes {
+ private static Map<Integer, GuardedObject> boxes = new Hashtable<>();
+ private static int id = 1;
+ // 产生唯一 id
+ private static synchronized int generateId() {
+ return id++;
+ }
+ public static GuardedObject getGuardedObject(int id) {
+ return boxes.remove(id);
+ }
+ public static GuardedObject createGuardedObject() {
+ GuardedObject go = new GuardedObject(generateId());
+ boxes.put(go.getId(), go);
+ return go;
+ }
+ public static Set<Integer> getIds() {
+ return boxes.keySet();
+ }
+}
+```
+```java
+class People extends Thread{
+ @Override
+ public void run() {
+ // 收信
+ GuardedObject guardedObject = Mailboxes.createGuardedObject();
+ log.debug("开始收信 id:{}", guardedObject.getId());
+ Object mail = guardedObject.get(5000);
+ log.debug("收到信 id:{}, 内容:{}", guardedObject.getId(), mail);
+ }
+}
+```
+```java
+class Postman extends Thread {
+ private int id;
+ private String mail;
+ public Postman(int id, String mail) {
+ this.id = id;
+ this.mail = mail;
+ }
+ @Override
+ public void run() {
+ GuardedObject guardedObject = Mailboxes.getGuardedObject(id);
+ log.debug("送信 id:{}, 内容:{}", id, mail);
+ guardedObject.complete(mail);
+ }
+}
+
+```
+**测试**
+```java
+public static void main(String[] args) throws InterruptedException {
+ for (int i = 0; i < 3; i++) {
+ new People().start();
+ }
+ Sleeper.sleep(1);
+ for (Integer id : Mailboxes.getIds()) {
+ new Postman(id, "内容" + id).start();
+ }
+}
+```
+**某次运行结果**
+```shell
+10:35:05.689 c.People [Thread-1] - 开始收信 id:3
+10:35:05.689 c.People [Thread-2] - 开始收信 id:1
+10:35:05.689 c.People [Thread-0] - 开始收信 id:2
+10:35:06.688 c.Postman [Thread-4] - 送信 id:2, 内容:内容2
+10:35:06.688 c.Postman [Thread-5] - 送信 id:1, 内容:内容1
+10:35:06.688 c.People [Thread-0] - 收到信 id:2, 内容:内容2
+10:35:06.688 c.People [Thread-2] - 收到信 id:1, 内容:内容1
+10:35:06.688 c.Postman [Thread-3] - 送信 id:3, 内容:内容3
+10:35:06.689 c.People [Thread-1] - 收到信 id:3, 内容:内容3
+```
+## 同步模式之 Balking
+### 定义
+Balking （犹豫）模式用在一个线程发现另一个线程或本线程已经做了某一件相同的事，那么本线程就无需再做了，直接结束返回
+### 实现
+```java
+public class MonitorService {
+ // 用来表示是否已经有线程已经在执行启动了
+ private volatile boolean starting;
+ public void start() {
+ log.info("尝试启动监控线程...");
+ synchronized (this) {
+ if (starting) {
+ return;
+ }
+ starting = true;
+ }
+ 
+ // 真正启动监控线程...
+ }
+}
+```
+当前端页面多次点击按钮调用 start 时
+**输出**
+```shell
+[http-nio-8080-exec-1] cn.itcast.monitor.service.MonitorService - 该监控线程已启动?(false)
+[http-nio-8080-exec-1] cn.itcast.monitor.service.MonitorService - 监控线程已启动...
+[http-nio-8080-exec-2] cn.itcast.monitor.service.MonitorService - 该监控线程已启动?(true)
+[http-nio-8080-exec-3] cn.itcast.monitor.service.MonitorService - 该监控线程已启动?(true)
+[http-nio-8080-exec-4] cn.itcast.monitor.service.MonitorService - 该监控线程已启动?(true)
+
+```
+它还经常用来实现线程安全的单例
+```java
+public final class Singleton {
+ private Singleton() {
+ }
+ private static Singleton INSTANCE = null;
+ public static synchronized Singleton getInstance() {
+ if (INSTANCE != null) {
+ return INSTANCE;
+ }
+ 
+ INSTANCE = new Singleton();
+ return INSTANCE;
+ }
+}
+```
+对比一下保护性暂停模式：保护性暂停模式用在一个线程等待另一个线程的执行结果，当条件不满足时线程等待。
+## 同步模式之顺序控制
+### 固定运行顺序
+比如，必须先 2 后 1 打印
+####  wait notify 版
+```java
+// 用来同步的对象
+static Object obj = new Object();
+// t2 运行标记， 代表 t2 是否执行过
+static boolean t2runed = false;
+public static void main(String[] args) {
+ Thread t1 = new Thread(() -> {
+ synchronized (obj) {
+ // 如果 t2 没有执行过
+ while (!t2runed) { 
+ try {
+ // t1 先等一会
+ obj.wait(); 
+ } catch (InterruptedException e) {
+ e.printStackTrace():
+  }
+ }
+ }
+ System.out.println(1);
+ });
+ Thread t2 = new Thread(() -> {
+ System.out.println(2);
+ synchronized (obj) {
+ // 修改运行标记
+ t2runed = true;
+ // 通知 obj 上等待的线程（可能有多个，因此需要用 notifyAll）
+ obj.notifyAll();
+ }
+ });
+ t1.start();
+ t2.start();
+}
+```
+####  Park Unpark 版
+可以看到，实现上很麻烦：
+- 首先，需要保证先 wait 再 notify，否则 wait 线程永远得不到唤醒。因此使用了『运行标记』来判断该不该wait
+- 第二，如果有些干扰线程错误地 notify 了 wait 线程，条件不满足时还要重新等待，使用了 while 循环来解决此问题
+- 最后，唤醒对象上的 wait 线程需要使用 notifyAll，因为『同步对象』上的等待线程可能不止一个
+
+可以使用 LockSupport 类的 park 和 unpark 来简化上面的题目：
+```java
+Thread t1 = new Thread(() -> {
+ try { Thread.sleep(1000); } catch (InterruptedException e) { }
+ // 当没有『许可』时，当前线程暂停运行；有『许可』时，用掉这个『许可』，当前线程恢复运行
+ LockSupport.park();
+ System.out.println("1");
+});
+Thread t2 = new Thread(() -> {
+ System.out.println("2");
+ // 给线程 t1 发放『许可』（多次连续调用 unpark 只会发放一个『许可』）
+ LockSupport.unpark(t1);
+});
+t1.start();
+t2.start();
+```
+park 和 unpark 方法比较灵活，他俩谁先调用，谁后调用无所谓。并且是以线程为单位进行『暂停』和『恢复』，不需要『同步对象』和『运行标记』
+
+###  交替输出
+线程 1 输出 a 5 次，线程 2 输出 b 5 次，线程 3 输出 c 5 次。现在要求输出 abcabcabcabcabc 怎么实现
+####  wait notify 版
+```java
+class SyncWaitNotify {
+ private int flag;
+ private int loopNumber;
+ public SyncWaitNotify(int flag, int loopNumber) {
+ this.flag = flag;
+ this.loopNumber = loopNumber;
+ }
+ public void print(int waitFlag, int nextFlag, String str) {
+ for (int i = 0; i < loopNumber; i++) {
+ synchronized (this) {
+ while (this.flag != waitFlag) {
+ try {
+ this.wait();
+ } catch (InterruptedException e) {
+ e.printStackTrace();
+ }
+ }
+ System.out.print(str);
+ flag = nextFlag;
+ this.notifyAll();
+ }
+ }
+ }
+}
+```
+```java
+SyncWaitNotify syncWaitNotify = new SyncWaitNotify(1, 5);
+new Thread(() -> {
+ syncWaitNotify.print(1, 2, "a");
+}).start();
+new Thread(() -> {
+ syncWaitNotify.print(2, 3, "b");
+}).start();
+new Thread(() -> {
+ syncWaitNotify.print(3, 1, "c");
+}).start();
+
+```
+#### Lock 条件变量版
+```java
+class AwaitSignal extends ReentrantLock {
+ public void start(Condition first) {
+ this.lock();
+ try {
+ log.debug("start");
+ first.signal();
+ } finally {
+ this.unlock();
+ }
+ }
+ public void print(String str, Condition current, Condition next) {
+ for (int i = 0; i < loopNumber; i++) {
+ this.lock();
+ try {
+ current.await();
+ log.debug(str);
+ next.signal();
+ } catch (InterruptedException e) {
+ e.printStackTrace();
+ } finally {
+ this.unlock();
+ }
+ }
+ }
+ // 循环次数
+ private int loopNumber;
+ public AwaitSignal(int loopNumber) {
+ this.loopNumber = loopNumber;
+ }
+}
+```
+```java
+AwaitSignal as = new AwaitSignal(5);
+Condition aWaitSet = as.newCondition();
+Condition bWaitSet = as.newCondition();
+Condition cWaitSet = as.newCondition();
+new Thread(() -> {
+ as.print("a", aWaitSet, bWaitSet);
+}).start();
+new Thread(() -> {
+ as.print("b", bWaitSet, cWaitSet);
+}).start();
+new Thread(() -> {
+ as.print("c", cWaitSet, aWaitSet);
+}).start();
+as.start(aWaitSet);
+
+```
+####  Lock 条件变量版
+```java
+class AwaitSignal extends ReentrantLock {
+ public void start(Condition first) {
+ this.lock();
+  try {
+ log.debug("start");
+ first.signal();
+ } finally {
+ this.unlock();
+ }
+ }
+ public void print(String str, Condition current, Condition next) {
+ for (int i = 0; i < loopNumber; i++) {
+ this.lock();
+ try {
+ current.await();
+ log.debug(str);
+ next.signal();
+ } catch (InterruptedException e) {
+ e.printStackTrace();
+ } finally {
+ this.unlock();
+ }
+ }
+ }
+ // 循环次数
+ private int loopNumber;
+ public AwaitSignal(int loopNumber) {
+ this.loopNumber = loopNumber;
+ }
+}
+```
+```java
+AwaitSignal as = new AwaitSignal(5);
+Condition aWaitSet = as.newCondition();
+Condition bWaitSet = as.newCondition();
+Condition cWaitSet = as.newCondition();
+new Thread(() -> {
+ as.print("a", aWaitSet, bWaitSet);
+}).start();
+new Thread(() -> {
+ as.print("b", bWaitSet, cWaitSet);
+}).start();
+new Thread(() -> {
+ as.print("c", cWaitSet, aWaitSet);
+}).start();
+as.start(aWaitSet);
+```
+####  Park Unpark 版
+```java
+class SyncPark {
+ private int loopNumber;
+ private Thread[] threads;
+ public SyncPark(int loopNumber) {
+ this.loopNumber = loopNumber;
+ }
+ public void setThreads(Thread... threads) {
+ this.threads = threads;
+ }
+ public void print(String str) {
+ for (int i = 0; i < loopNumber; i++) {
+ LockSupport.park();
+ System.out.print(str);
+ LockSupport.unpark(nextThread());
+ }
+ }
+ private Thread nextThread() {
+ Thread current = Thread.currentThread();
+ int index = 0;
+ for (int i = 0; i < threads.length; i++) {
+ if(threads[i] == current) {
+ index = i;
+ break;
+ }
+ }
+ if(index < threads.length - 1) {
+ return threads[index+1];
+ } else {
+ return threads[0];
+ }
+ }
+ public void start() {
+ for (Thread thread : threads) {
+ thread.start();
+ }
+ LockSupport.unpark(threads[0]);
+ }
+}
+
+SyncPark syncPark = new SyncPark(5);
+Thread t1 = new Thread(() -> {
+ syncPark.print("a");
+});
+Thread t2 = new Thread(() -> {
+ syncPark.print("b");
+});
+Thread t3 = new Thread(() -> {
+ syncPark.print("c\n");
+});
+syncPark.setThreads(t1, t2, t3);
+syncPark.start();
+
+```
+## 异步模式之生产者/消费者
+### 定义
+**要点**
+- 与前面的保护性暂停中的 GuardObject 不同，不需要产生结果和消费结果的线程一一对应
+- 消费队列可以用来平衡生产和消费的线程资源
+- 生产者仅负责产生结果数据，不关心数据该如何处理，而消费者专心处理结果数据
+- 消息队列是有容量限制的，满时不会再加入数据，空时不会再消耗数据
+- JDK 中各种阻塞队列，采用的就是这种模式
+![Alt text](image-44.png)
+
+### 实现
+```java
+class Message {
+ private int id;
+ private Object message;
+ public Message(int id, Object message) {
+ this.id = id;
+ this.message = message;
+ }
+ public int getId() {
+ return id;
+ }
+ public Object getMessage() {
+ return message;
+ }
+}
+class MessageQueue {
+ private LinkedList<Message> queue;
+ private int capacity;
+ public MessageQueue(int capacity) {
+ this.capacity = capacity;
+ queue = new LinkedList<>();
+ }
+ public Message take() {
+ synchronized (queue) {
+ while (queue.isEmpty()) {
+ log.debug("没货了, wait");
+ try {
+ queue.wait();
+ } catch (InterruptedException e) {
+ e.printStackTrace();
+ }
+ }
+ Message message = queue.removeFirst();
+ queue.notifyAll();
+ return message;
+ }
+ }
+ public void put(Message message) {
+ synchronized (queue) {
+ while (queue.size() == capacity) {
+ log.debug("库存已达上限, wait");
+ try {
+ queue.wait();
+ } catch (InterruptedException e) {
+ e.printStackTrace();
+ }
+ }
+ queue.addLast(message);
+ queue.notifyAll();
+ }
+ }
+}
+```
+**应用**
+```java
+MessageQueue messageQueue = new MessageQueue(2);
+// 4 个生产者线程, 下载任务
+for (int i = 0; i < 4; i++) {
+ int id = i;
+ new Thread(() -> {
+ try {
+ log.debug("download...");
+ List<String> response = Downloader.download();
+ log.debug("try put message({})", id);
+ messageQueue.put(new Message(id, response));
+ } catch (IOException e) {
+ e.printStackTrace();
+ }
+ }, "生产者" + i).start();
+}
+// 1 个消费者线程, 处理结果
+new Thread(() -> {
+ while (true) {
+ Message message = messageQueue.take();
+ List<String> response = (List<String>) message.getMessage();
+ log.debug("take message({}): [{}] lines", message.getId(), response.size());
+ }
+}, "消费者").start();
+
+```
+**某次运行结果**
+```shell
+10:48:38.070 [生产者3] c.TestProducerConsumer - download...
+10:48:38.070 [生产者0] c.TestProducerConsumer - download...
+10:48:38.070 [消费者] c.MessageQueue - 没货了, wait
+10:48:38.070 [生产者1] c.TestProducerConsumer - download...
+10:48:38.070 [生产者2] c.TestProducerConsumer - download...
+10:48:41.236 [生产者1] c.TestProducerConsumer - try put message(1)
+10:48:41.237 [生产者2] c.TestProducerConsumer - try put message(2)
+10:48:41.236 [生产者0] c.TestProducerConsumer - try put message(0)
+10:48:41.237 [生产者3] c.TestProducerConsumer - try put message(3)
+10:48:41.239 [生产者2] c.MessageQueue - 库存已达上限, wait
+10:48:41.240 [生产者1] c.MessageQueue - 库存已达上限, wait
+10:48:41.240 [消费者] c.TestProducerConsumer - take message(0): [3] lines
+10:48:41.240 [生产者2] c.MessageQueue - 库存已达上限, wait
+10:48:41.240 [消费者] c.TestProducerConsumer - take message(3): [3] lines
+10:48:41.240 [消费者] c.TestProducerConsumer - take message(1): [3] lines
+10:48:41.240 [消费者] c.TestProducerConsumer - take message(2): [3] lines
+10:48:41.240 [消费者] c.MessageQueue - 没货了, wait
+```
+## 异步模式之工作线程
+### 定义
+让有限的工作线程（Worker Thread）来轮流异步处理无限多的任务。也可以将其归类为分工模式，它的典型实现就是线程池，也体现了经典设计模式中的享元模式。
+例如，海底捞的服务员（线程），轮流处理每位客人的点餐（任务），如果为每位客人都配一名专属的服务员，那么成本就太高了（对比另一种多线程设计模式：Thread-Per-Message）
+
+注意，不同任务类型应该使用不同的线程池，这样能够避免饥饿，并能提升效率
+
+例如，如果一个餐馆的工人既要招呼客人（任务类型A），又要到后厨做菜（任务类型B）显然效率不咋地，分成服务员（线程池A）与厨师（线程池B）更为合理，当然你能想到更细致的分工
+### 饥饿
+ 固定大小线程池会有饥饿现象
+- 两个工人是同一个线程池中的两个线程
+- 他们要做的事情是：为客人点餐和到后厨做菜，这是两个阶段的工作
+   - 客人点餐：必须先点完餐，等菜做好，上菜，在此期间处理点餐的工人必须等待
+   - 后厨做菜：没啥说的，做就是了
+- 比如工人A 处理了点餐任务，接下来它要等着 工人B 把菜做好，然后上菜，他俩也配合的蛮好
+- 但现在同时来了两个客人，这个时候工人A 和工人B 都去处理点餐了，这时没人做饭了，饥饿
+```java
+public class TestDeadLock {
+ static final List<String> MENU = Arrays.asList("地三鲜", "宫保鸡丁", "辣子鸡丁", "烤鸡翅");
+ static Random RANDOM = new Random();
+ static String cooking() {
+ return MENU.get(RANDOM.nextInt(MENU.size()));
+ }
+ public static void main(String[] args) {
+ ExecutorService executorService = Executors.newFixedThreadPool(2);
+ executorService.execute(() -> {
+ log.debug("处理点餐...");
+ Future<String> f = executorService.submit(() -> {
+ log.debug("做菜");
+ return cooking();
+ });
+ try {
+ log.debug("上菜: {}", f.get());
+ } catch (InterruptedException | ExecutionException e) {
+ e.printStackTrace();
+ }
+ });
+ /*executorService.execute(() -> {
+ log.debug("处理点餐...");
+ Future<String> f = executorService.submit(() -> {
+ log.debug("做菜");
+ return cooking();
+ });
+ try {
+ log.debug("上菜: {}", f.get());
+ } catch (InterruptedException | ExecutionException e) {
+e.printStackTrace();
+ }
+ });*/
+ }
+}
+
+```
+**输出**
+```shell
+17:21:27.883 c.TestDeadLock [pool-1-thread-1] - 处理点餐...
+17:21:27.891 c.TestDeadLock [pool-1-thread-2] - 做菜
+17:21:27.891 c.TestDeadLock [pool-1-thread-1] - 上菜: 烤鸡翅
+```
+当注释取消后，可能的输出
+```shell
+17:08:41.339 c.TestDeadLock [pool-1-thread-2] - 处理点餐... 
+17:08:41.339 c.TestDeadLock [pool-1-thread-1] - 处理点餐... 
+```
+解决方法可以增加线程池的大小，不过不是根本解决方案，还是前面提到的，不同的任务类型，采用不同的线程池，例如：
+```java
+public class TestDeadLock {
+ static final List<String> MENU = Arrays.asList("地三鲜", "宫保鸡丁", "辣子鸡丁", "烤鸡翅");
+ static Random RANDOM = new Random();
+ static String cooking() {
+ return MENU.get(RANDOM.nextInt(MENU.size()));
+ }
+ public static void main(String[] args) {
+ ExecutorService waiterPool = Executors.newFixedThreadPool(1);
+ ExecutorService cookPool = Executors.newFixedThreadPool(1);
+ waiterPool.execute(() -> {
+ log.debug("处理点餐...");
+ Future<String> f = cookPool.submit(() -> {
+ log.debug("做菜");
+ return cooking();
+ });
+ try {
+ log.debug("上菜: {}", f.get());
+ } catch (InterruptedException | ExecutionException e) {
+ e.printStackTrace();
+ }
+ });
+ waiterPool.execute(() -> {
+ log.debug("处理点餐...");
+ Future<String> f = cookPool.submit(() -> {
+ log.debug("做菜");
+ return cooking();
+ });
+ try {
+   log.debug("上菜: {}", f.get());
+ } catch (InterruptedException | ExecutionException e) {
+ e.printStackTrace();
+ }
+ });
+ }
+}
+```
+**输出**
+```shell
+17:25:14.626 c.TestDeadLock [pool-1-thread-1] - 处理点餐... 
+17:25:14.630 c.TestDeadLock [pool-2-thread-1] - 做菜
+17:25:14.631 c.TestDeadLock [pool-1-thread-1] - 上菜: 地三鲜
+17:25:14.632 c.TestDeadLock [pool-1-thread-1] - 处理点餐... 
+17:25:14.632 c.TestDeadLock [pool-2-thread-1] - 做菜
+17:25:14.632 c.TestDeadLock [pool-1-thread-1] - 上菜: 辣子鸡丁
+```
+### 创建多少线程池合适
+- 过小会导致程序不能充分地利用系统资源、容易导致饥饿
+- 过大会导致更多的线程上下文切换，占用更多内存
+####  CPU 密集型运算
+通常采用 cpu 核数 + 1 能够实现最优的 CPU 利用率，+1 是保证当线程由于页缺失故障（操作系统）或其它原因导致暂停时，额外的这个线程就能顶上去，保证 CPU 时钟周期不被浪费
+####  I/O 密集型运算
+CPU 不总是处于繁忙状态，例如，当你执行业务计算时，这时候会使用 CPU 资源，但当你执行 I/O 操作时、远程RPC 调用时，包括进行数据库操作时，这时候 CPU 就闲下来了，你可以利用多线程提高它的利用率。
+**经验公式如下**
+```shell
+线程数 = 核数 * 期望 CPU 利用率 * 总时间(CPU计算时间+等待时间) / CPU 计算时间
+```
+
+例如 4 核 CPU 计算时间是 50% ，其它等待时间是 50%，期望 cpu 被 100% 利用，套用公式
+```shell
+4 * 100% * 100% / 50% = 8
+```
+例如 4 核 CPU 计算时间是 10% ，其它等待时间是 90%，期望 cpu 被 100% 利用，套用公式
+```shell
+4 * 100% * 100% / 10% = 40
+```
+### 自定义线程池
+![Alt text](image-45.png)
+**步骤1：自定义拒绝策略接口**
+```java
+@FunctionalInterface // 拒绝策略
+interface RejectPolicy<T> {
+ void reject(BlockingQueue<T> queue, T task);
+}
+```
+**步骤2：自定义任务队列**
+```java
+class BlockingQueue<T> {
+ // 1. 任务队列
+ private Deque<T> queue = new ArrayDeque<>();
+ // 2. 锁
+ private ReentrantLock lock = new ReentrantLock();
+ // 3. 生产者条件变量
+ private Condition fullWaitSet = lock.newCondition();
+ // 4. 消费者条件变量
+ private Condition emptyWaitSet = lock.newCondition();
+ // 5. 容量
+ private int capcity;
+ public BlockingQueue(int capcity) {
+ this.capcity = capcity;
+ }
+ // 带超时阻塞获取
+ public T poll(long timeout, TimeUnit unit) {
+ lock.lock();
+ try {
+ // 将 timeout 统一转换为 纳秒
+ long nanos = unit.toNanos(timeout);
+ while (queue.isEmpty()) {
+ try {
+ // 返回值是剩余时间
+ if (nanos <= 0) {
+ return null;
+ }
+ nanos = emptyWaitSet.awaitNanos(nanos);
+ } catch (InterruptedException e) {
+ e.printStackTrace();
+ }
+ }
+ T t = queue.removeFirst();
+ fullWaitSet.signal();
+ return t;
+ } finally {
+ lock.unlock();
+ }
+ }
+ // 阻塞获取
+ public T take() {
+ lock.lock();
+ try {
+ while (queue.isEmpty()) {
+ try {
+ emptyWaitSet.await();
+ } catch (InterruptedException e) {
+ e.printStackTrace();
+ }
+ }
+ T t = queue.removeFirst();
+ fullWaitSet.signal();
+ return t;
+ } finally {
+ lock.unlock();
+ }
+ }
+ // 阻塞添加
+ public void put(T task) {
+ lock.lock();
+ try {
+ while (queue.size() == capcity) {
+ try {
+ log.debug("等待加入任务队列 {} ...", task);
+ fullWaitSet.await();
+} catch (InterruptedException e) {
+ e.printStackTrace();
+ }
+ }
+ log.debug("加入任务队列 {}", task);
+ queue.addLast(task);
+ emptyWaitSet.signal();
+ } finally {
+ lock.unlock();
+ }
+ }
+ // 带超时时间阻塞添加
+ public boolean offer(T task, long timeout, TimeUnit timeUnit) {
+ lock.lock();
+ try {
+ long nanos = timeUnit.toNanos(timeout);
+ while (queue.size() == capcity) {
+ try {
+ if(nanos <= 0) {
+ return false;
+ }
+ log.debug("等待加入任务队列 {} ...", task);
+ nanos = fullWaitSet.awaitNanos(nanos);
+ } catch (InterruptedException e) {
+ e.printStackTrace();
+ }
+ }
+ log.debug("加入任务队列 {}", task);
+ queue.addLast(task);
+ emptyWaitSet.signal();
+ return true;
+ } finally {
+ lock.unlock();
+ }
+ }
+ public int size() {
+ lock.lock();
+ try {
+ return queue.size();
+ } finally {
+ lock.unlock();
+ }
+ }
+ public void tryPut(RejectPolicy<T> rejectPolicy, T task) {
+ lock.lock();
+ try {
+ // 判断队列是否满
+ if(queue.size() == capcity) {
+ rejectPolicy.reject(this, task);
+ } else { // 有空闲
+log.debug("加入任务队列 {}", task);
+ queue.addLast(task);
+ emptyWaitSet.signal();
+ }
+ } finally {
+ lock.unlock();
+ }
+ }
+}
+```
+**步骤3：自定义线程池**
+```java
+class ThreadPool {
+ // 任务队列
+ private BlockingQueue<Runnable> taskQueue;
+ // 线程集合
+ private HashSet<Worker> workers = new HashSet<>();
+ // 核心线程数
+ private int coreSize;
+ // 获取任务时的超时时间
+ private long timeout;
+ private TimeUnit timeUnit;
+ private RejectPolicy<Runnable> rejectPolicy;
+ // 执行任务
+ public void execute(Runnable task) {
+ // 当任务数没有超过 coreSize 时，直接交给 worker 对象执行
+ // 如果任务数超过 coreSize 时，加入任务队列暂存
+ synchronized (workers) {
+ if(workers.size() < coreSize) {
+ Worker worker = new Worker(task);
+ log.debug("新增 worker{}, {}", worker, task);
+ workers.add(worker);
+ worker.start();
+ } else {
+// taskQueue.put(task);
+ // 1) 死等
+ // 2) 带超时等待
+ // 3) 让调用者放弃任务执行
+ // 4) 让调用者抛出异常
+ // 5) 让调用者自己执行任务
+ taskQueue.tryPut(rejectPolicy, task);
+ }
+ }
+ }
+ public ThreadPool(int coreSize, long timeout, TimeUnit timeUnit, int queueCapcity, 
+RejectPolicy<Runnable> rejectPolicy) {
+ this.coreSize = coreSize;
+ this.timeout = timeout;
+ this.timeUnit = timeUnit;
+ this.taskQueue = new BlockingQueue<>(queueCapcity);
+ this.rejectPolicy = rejectPolicy;
+ }
+ class Worker extends Thread{
+ private Runnable task;
+ public Worker(Runnable task) {
+ this.task = task;
+ }
+ @Override
+ public void run() {
+ // 执行任务
+ // 1) 当 task 不为空，执行任务
+ // 2) 当 task 执行完毕，再接着从任务队列获取任务并执行
+// while(task != null || (task = taskQueue.take()) != null) {
+ while(task != null || (task = taskQueue.poll(timeout, timeUnit)) != null) {
+ try {
+ log.debug("正在执行...{}", task);
+ task.run();
+ } catch (Exception e) {
+ e.printStackTrace();
+ } finally {
+ task = null;
+ }
+ }
+ synchronized (workers) {
+ log.debug("worker 被移除{}", this);
+ workers.remove(this);
+ }
+ }
+ }
+}
+```
+步骤4：测试
+```java
+public static void main(String[] args) {
+ ThreadPool threadPool = new ThreadPool(1,
+ 1000, TimeUnit.MILLISECONDS, 1, (queue, task)->{
+ // 1. 死等
+// queue.put(task);
+ // 2) 带超时等待
+// queue.offer(task, 1500, TimeUnit.MILLISECONDS);
+ // 3) 让调用者放弃任务执行
+// log.debug("放弃{}", task);
+ // 4) 让调用者抛出异常
+// throw new RuntimeException("任务执行失败 " + task);
+ // 5) 让调用者自己执行任务
+ task.run();
+ });
+ for (int i = 0; i < 4; i++) {
+ int j = i;
+ threadPool.execute(() -> {
+ try {
+ Thread.sleep(1000L);
+ } catch (InterruptedException e) {
+ e.printStackTrace();
+ }
+ log.debug("{}", j);
+ });
+ }
+ }
+
+```
+## 终止模式之两阶段终止模式
+Two Phase Termination
+在一个线程 T1 中如何“优雅”终止线程 T2？这里的【优雅】指的是给 T2 一个料理后事的机会。
+### 错误思路
+- 使用线程对象的 stop() 方法停止线程
+   - stop 方法会真正杀死线程，如果这时线程锁住了共享资源，那么当它被杀死后就再也没有机会释放锁，其它线程将永远无法获取锁
+- 使用 System.exit(int) 方法停止线程
+   - 目的仅是停止一个线程，但这种做法会让整个程序都停止
+
+### 两阶段终止模式
+![Alt text](image-46.png)
+#### 利用 isInterrupted
+interrupt 可以打断正在执行的线程，无论这个线程是在 sleep，wait，还是正常运行
+```java
+class TPTInterrupt {
+ private Thread thread;
+ public void start(){
+ thread = new Thread(() -> {
+ while(true) {
+ Thread current = Thread.currentThread();
+ if(current.isInterrupted()) {
+ log.debug("料理后事");
+ break;
+ }
+ try {
+ Thread.sleep(1000);
+ log.debug("将结果保存");
+ } catch (InterruptedException e) {
+ current.interrupt();
+ }
+ // 执行监控操作 
+ }
+ },"监控线程");
+ thread.start();
+ }
+ public void stop() {
+ thread.interrupt();
+ }
+}
+
+```
+**调用**
+```java
+TPTInterrupt t = new TPTInterrupt();
+t.start();
+Thread.sleep(3500);
+log.debug("stop");
+t.stop();
+
+```
+**结果**
+```shell
+11:49:42.915 c.TwoPhaseTermination [监控线程] - 将结果保存
+11:49:43.919 c.TwoPhaseTermination [监控线程] - 将结果保存
+11:49:44.919 c.TwoPhaseTermination [监控线程] - 将结果保存
+11:49:45.413 c.TestTwoPhaseTermination [main] - stop 
+11:49:45.413 c.TwoPhaseTermination [监控线程] - 料理后事
+```
+#### 利用停止标记
+```java
+// 停止标记用 volatile 是为了保证该变量在多个线程之间的可见性
+// 我们的例子中，即主线程把它修改为 true 对 t1 线程可见
+class TPTVolatile {
+ private Thread thread;
+ private volatile boolean stop = false;
+ public void start(){
+ thread = new Thread(() -> {
+ while(true) {
+ Thread current = Thread.currentThread();
+ if(stop) {
+ log.debug("料理后事");
+ break;
+ }
+ try {
+ Thread.sleep(1000);
+ log.debug("将结果保存");
+ } catch (InterruptedException e) {
+ }
+ // 执行监控操作
+ }
+ },"监控线程");
+ thread.start();
+ }
+ public void stop() {
+ stop = true;
+ thread.interrupt();
+ }
+}
+```
+**调用**
+```java
+TPTVolatile t = new TPTVolatile();
+t.start();
+Thread.sleep(3500);
+log.debug("stop");
+t.stop();
+
+```
+**结果**
+```shell
+11:54:52.003 c.TPTVolatile [监控线程] - 将结果保存
+11:54:53.006 c.TPTVolatile [监控线程] - 将结果保存
+11:54:54.007 c.TPTVolatile [监控线程] - 将结果保存
+11:54:54.502 c.TestTwoPhaseTermination [main] - stop 
+11:54:54.502 c.TPTVolatile [监控线程] - 料理后事
+```
+### 线程安全单例
+单例模式有很多实现方法，饿汉、懒汉、静态内部类、枚举类，试分析每种实现下获取单例对象（即调用
+getInstance）时的线程安全.
+#### 饿汉单例
+```java
+// 问题1：为什么加 final
+// 问题2：如果实现了序列化接口, 还要做什么来防止反序列化破坏单例
+public final class Singleton implements Serializable {
+ // 问题3：为什么设置为私有? 是否能防止反射创建新的实例?
+ private Singleton() {}
+ // 问题4：这样初始化是否能保证单例对象创建时的线程安全?
+ private static final Singleton INSTANCE = new Singleton();
+ // 问题5：为什么提供静态方法而不是直接将 INSTANCE 设置为 public, 说出你知道的理由
+ public static Singleton getInstance() {
+ return INSTANCE;
+ }
+ public Object readResolve() {
+ return INSTANCE;
+ }
+}
+
+```
+####  枚举单例
+```java
+/ 问题1：枚举单例是如何限制实例个数的
+// 问题2：枚举单例在创建时是否有并发问题
+// 问题3：枚举单例能否被反射破坏单例
+// 问题4：枚举单例能否被反序列化破坏单例
+// 问题5：枚举单例属于懒汉式还是饿汉式
+// 问题6：枚举单例如果希望加入一些单例创建时的初始化逻辑该如何做
+enum Singleton { 
+ INSTANCE; 
+}
+```
+#### 懒汉单例
+```java
+public final class Singleton {
+ private Singleton() { }
+ private static Singleton INSTANCE = null;
+ // 分析这里的线程安全, 并说明有什么缺点
+ public static synchronized Singleton getInstance() {
+ if( INSTANCE != null ){
+ return INSTANCE;
+ } 
+ INSTANCE = new Singleton();
+ return INSTANCE;
+ }
+}
+```
+#### DCL 懒汉单例
+```java
+public final class Singleton {
+ private Singleton() { }
+ // 问题1：解释为什么要加 volatile ?
+ private static volatile Singleton INSTANCE = null;
+ 
+ // 问题2：对比实现3, 说出这样做的意义 
+ public static Singleton getInstance() {
+ if (INSTANCE != null) { 
+    return INSTANCE;
+ }
+ synchronized (Singleton.class) { 
+ // 问题3：为什么还要在这里加为空判断, 之前不是判断过了吗
+ if (INSTANCE != null) { // t2 
+ return INSTANCE;
+ }
+ INSTANCE = new Singleton(); 
+ return INSTANCE;
+ } 
+ }
+}
+```
+#### 静态内部类懒汉单例
+```java
+public final class Singleton {
+ private Singleton() { }
+ // 问题1：属于懒汉式还是饿汉式
+ private static class LazyHolder {
+ static final Singleton INSTANCE = new Singleton();
+ }
+ // 问题2：在创建时是否有并发问题
+ public static Singleton getInstance() {
+ return LazyHolder.INSTANCE;
+ }
+}
+
+```
+## 享元模式
+### 简介
+定义 英文名称：Flyweight pattern. 当需要重用数量有限的同一类对象时
+wikipedia： A flyweight is an object that minimizes memory usage by sharing as much data as
+possible with other similar objects
+出自 "Gang of Four" design patterns
+归类 Structual patterns
+### 体现
+####  包装类
+在JDK中 Boolean，Byte，Short，Integer，Long，Character 等包装类提供了 valueOf 方法，例如 Long 的valueOf 会缓存 -128~127 之间的 Long 对象，在这个范围之间会重用对象，大于这个范围，才会新建 Long 对象：
+
+```java
+public static Long valueOf(long l) {
+ final int offset = 128;
+ if (l >= -128 && l <= 127) { // will cache
+ return LongCache.cache[(int)l + offset];
+ }
+ return new Long(l);
+}
+```
+### DIY
+例如：一个线上商城应用，QPS 达到数千，如果每次都重新创建和关闭数据库连接，性能会受到极大影响。 这时预先创建好一批连接，放入连接池。一次请求到达后，从连接池获取连接，使用完毕后再还回连接池，这样既节约了连接的创建和关闭时间，也实现了连接的重用，不至于让庞大的连接数压垮数据库。
+```java
+class Pool {
+ // 1. 连接池大小
+ private final int poolSize;
+ // 2. 连接对象数组
+ private Connection[] connections;
+ // 3. 连接状态数组 0 表示空闲， 1 表示繁忙
+ private AtomicIntegerArray states;
+ // 4. 构造方法初始化
+ public Pool(int poolSize) {
+ this.poolSize = poolSize;
+ this.connections = new Connection[poolSize];
+ this.states = new AtomicIntegerArray(new int[poolSize]);
+ for (int i = 0; i < poolSize; i++) {
+ connections[i] = new MockConnection("连接" + (i+1));
+ }
+ }
+ // 5. 借连接
+ public Connection borrow() {
+   while(true) {
+ for (int i = 0; i < poolSize; i++) {
+ // 获取空闲连接
+ if(states.get(i) == 0) {
+ if (states.compareAndSet(i, 0, 1)) {
+ log.debug("borrow {}", connections[i]);
+ return connections[i];
+ }
+ }
+ }
+ // 如果没有空闲连接，当前线程进入等待
+ synchronized (this) {
+ try {
+ log.debug("wait...");
+ this.wait();
+ } catch (InterruptedException e) {
+ e.printStackTrace();
+ }
+ }
+ }
+ }
+ // 6. 归还连接
+ public void free(Connection conn) {
+ for (int i = 0; i < poolSize; i++) {
+ if (connections[i] == conn) {
+ states.set(i, 0);
+ synchronized (this) {
+ log.debug("free {}", conn);
+ this.notifyAll();
+ }
+ break;
+ }
+ }
+ }
+}
+class MockConnection implements Connection {
+ // 实现略
+}
+
+```
+使用连接池：
+```java
+Pool pool = new Pool(2);
+for (int i = 0; i < 5; i++) {
+ new Thread(() -> {
+ Connection conn = pool.borrow();
+ try {
+ Thread.sleep(new Random().nextInt(1000));
+ } catch (InterruptedException e) {
+ e.printStackTrace();
+ }
+ pool.free(conn);
+ }).start();
+}
+
+```
+以上实现没有考虑：
+- 连接的动态增长与收缩
+- 连接保活（可用性检测）
+- 等待超时处理
+- 分布式 hash
+对于关系型数据库，有比较成熟的连接池实现，例如c3p0, druid等 对于更通用的对象池，可以考虑使用apache commons pool，例如redis连接池可以参考jedis中关于连接池的实现
