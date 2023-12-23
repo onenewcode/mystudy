@@ -1,3 +1,33 @@
+# UML类图
+## UML 类图
+浅谈UML中常用的几种图
+UML——Unified modeling language UML(统一建模语言)构建和记录软件系统的产出。UML代表了一系列在大型而复杂系统建模中被证明是成功的做法，是开发面向对象软件和软件开发过程中非常重要的一部分。UML主要使用图形符号来表示软件项目的设计，使用UML可以帮助项目团队沟通、探索潜在的设计和验证软件的架构设计。
+## UML 模型：
+UML的模型主要有三部分构成：
+- 事物(Things)：UML模型中最基本的构成元素，是具有代表性的成分的抽象
+- 关系(Relationships)：关系把事物紧密联系在一起
+- 图(Diagrams )：图是事物和关系的可视化表示
+
+统中具意义的概念，可能包括抽象的、现实的和實作的概念。结构性图表有七种类型：
+
+类图 (Class Diagram)
+组件图 (Component Diagram)
+部署图 (Deployment Diagram)
+对象图 (Object Diagram)
+包图 (Package Diagram)
+复合结构图 (Composite Structure Diagram)
+轮廓图 (Profile Diagram)
+
+行为性图表显示了系统中对象的动态行为 ，可用以表达系统随时间的变化。行为性图表有七种类型：
+
+用例图 (Use Case Diagram)
+活动图 (Activity Diagram)
+状态机图 (State Machine Diagram)
+序列图 (Sequence Diagram)
+通訊圖 (Communication Diagram)
+交互概述图 (Interaction Overview Diagram)
+时序图 (Timing Diagram)
+
 # 总结
 ## 创建型模式
 这类模式提供创建对象的机制， 能够提升已有代码的灵活性和可复⽤性
@@ -4532,3 +4562,4 @@ VisitorPatternDemo，我们的演示类使用 Computer、ComputerPartVisitor 类
 **访问者模式**:表示一个作用于某对象结构中的各元素的操作。它使你可以在不改变各元素的类的前提下定义作用于这些元素的新操作。
 
 ![Alt text](image-10.png)
+
