@@ -10,10 +10,6 @@
 - Java 中，线程作为最小调度单位，进程作为资源分配的最小单位。 在 windows 中进程是不活动的，只是作为线程的容器
  
  
- 
- 
- 
- 
 ### 二者对比 
 - 进程基本上相互独立的，而线程存在于进程内，是进程的一个子集
 - 进程拥有共享的资源，如内存空间等，供其内部的线程共享
@@ -151,6 +147,7 @@ Java Virtual Machine Stacks （Java 虚拟机栈）
 我们都知道 JVM 中由堆、栈、方法区所组成，其中栈内存是给谁用的呢？其实就是线程，每个线程启动后，虚拟机就会为其分配一块栈内存。
 - 每个栈由多个栈帧（Frame）组成，对应着每次方法调用时所占用的内存
 - 每个线程只能有一个活动栈帧，对应着当前正在执行的那个方法
+
 **线程上下文切换（Thread Context Switch）** 
 因为以下一些原因导致 cpu 不再执行当前的线程，转而执行另一个线程的代码
 - 线程的 cpu 时间片用完
@@ -2881,7 +2878,7 @@ public String(char value[], int offset, int count) {
  }
 ```
 
-结果发现也没有，构造新字符串对象时，会生成新的 char[] value，对内容进行复制 。这种通过创建副本对象来避免共享的手段称之为【保护性拷贝（defensive copy）
+结果发现也没有，构造新字符串对象时，会生成新的 char[] value，对内容进行复制 。这种通过创建副本对象来避免共享的手段称之为【保护性拷贝（defensive copy）】
 
 ##  无状态
 
@@ -2892,247 +2889,240 @@ public String(char value[], int offset, int count) {
 步骤1：自定义拒绝策略接口
 ```java
 @FunctionalInterface // 拒绝策略
-interface RejectPolicy<T> {
- void reject(BlockingQueue<T> queue, T task);
- }
+public  interface RejectPolicy<T> {
+    void reject(BlockingQueue<T> queue, T task);
+}
 ```
 步骤2：自定义任务队列
 ```java
-class BlockingQueue<T> {
- // 1. 任务队列
-private Deque<T> queue = new ArrayDeque<>();
- // 2. 锁
-private ReentrantLock lock = new ReentrantLock();
- // 3. 生产者条件变量
-private Condition fullWaitSet = lock.newCondition();
- // 4. 消费者条件变量
-private Condition emptyWaitSet = lock.newCondition();
- // 5. 容量
-private int capcity;
- public BlockingQueue(int capcity) {
- this.capcity = capcity;
+@Slf4j
+public class BlockingQueue<T> {
+    // 1. 任务队列
+    private Deque<T> queue = new ArrayDeque<>();
+    // 2. 锁
+    private ReentrantLock lock = new ReentrantLock();
+    // 3. 生产者条件变量
+    private Condition fullWaitSet = lock.newCondition();
+    // 4. 消费者条件变量
+    private Condition emptyWaitSet = lock.newCondition();
+    // 5. 容量
+    private int capcity;
+    public BlockingQueue(int capcity) {
+        this.capcity = capcity;
     }
- // 带超时阻塞获取
-public T poll(long timeout, TimeUnit unit) {
- lock.lock();
- try {
- // 将 timeout 统一转换为 纳秒
-long nanos = unit.toNanos(timeout);
- while (queue.isEmpty()) {
- try {
- // 返回值是剩余时间
-if (nanos <= 0) {
- return null;
+    // 带超时阻塞获取
+    public T poll(long timeout, TimeUnit unit) {
+        lock.lock();
+        try {
+            // 将 timeout 统一转换为 纳秒
+            long nanos = unit.toNanos(timeout);
+            while (queue.isEmpty()) {
+                try {
+                    // 返回值是剩余时间
+                    if (nanos <= 0) {
+                        return null;
                     }
- nanos = emptyWaitSet.awaitNanos(nanos);
-                } 
-catch (InterruptedException e) {
- e.printStackTrace();
+                    nanos = emptyWaitSet.awaitNanos(nanos);
+                } catch (InterruptedException e) {
+                    e.printStackTrace();
                 }
             }
- T t = queue.removeFirst();
- fullWaitSet.signal();
- return t;
+            T t = queue.removeFirst();
+            fullWaitSet.signal();
+            return t;
         } finally {
- lock.unlock();
-        }
-     }
- // 阻塞获取
-public T take() {
- lock.lock();
- try {
- while (queue.isEmpty()) {
- try {
- emptyWaitSet.await();
-                } 
-catch (InterruptedException e) {
- e.printStackTrace();
-                }
-            }
- T t = queue.removeFirst();
- fullWaitSet.signal();
- return t;
-        } 
+            lock.unlock();
         }
     }
- finally {
- lock.unlock();
- // 阻塞添加
-public void put(T task) {
- lock.lock();
- try {
- while (queue.size() == capcity) {
- try {
- log.debug("等待加入任务队列 {} ...", task);
- fullWaitSet.await();
-                } 
-catch (InterruptedException e) {
- e.printStackTrace();
+    // 阻塞获取
+    public T take() {
+        lock.lock();
+        try {
+            while (queue.isEmpty()) {
+                try {
+                    emptyWaitSet.await();
+                } catch (InterruptedException e) {
+                    e.printStackTrace();
                 }
             }
- log.debug("加入任务队列 {}", task);
- queue.addLast(task);
- emptyWaitSet.signal();
-        } 
+            T t = queue.removeFirst();
+            fullWaitSet.signal();
+            return t;
+        } finally {
+            lock.unlock();
         }
     }
- finally {
- lock.unlock();
- // 带超时时间阻塞添加
-public boolean offer(T task, long timeout, TimeUnit timeUnit) {
- lock.lock();
- try {
- long nanos = timeUnit.toNanos(timeout);
- while (queue.size() == capcity) {
- try {
- if(nanos <= 0) {
- return false;
+    // 阻塞添加
+    public void put(T task) {
+        lock.lock();
+        try {
+            while (queue.size() == capcity) {
+                try {
+                    log.debug("等待加入任务队列 {} ...", task);
+                    fullWaitSet.await();
+                } catch (InterruptedException e) {
+                    e.printStackTrace();
+                }
+            }
+            log.debug("加入任务队列 {}", task);
+            queue.addLast(task);
+            emptyWaitSet.signal();
+        } finally {
+            lock.unlock();
+        }
+    }
+    // 带超时时间阻塞添加
+    public boolean offer(T task, long timeout, TimeUnit timeUnit) {
+        lock.lock();
+        try {
+            long nanos = timeUnit.toNanos(timeout);
+            while (queue.size() == capcity) {
+                try {
+                    if(nanos <= 0) {
+                        return false;
                     }
- log.debug("等待加入任务队列 {} ...", task);
- nanos = fullWaitSet.awaitNanos(nanos);
-  } 
+                    log.debug("等待加入任务队列 {} ...", task);
+                    nanos = fullWaitSet.awaitNanos(nanos);
+                } catch (InterruptedException e) {
+                    e.printStackTrace();
                 }
- catch (InterruptedException e) {
- e.printStackTrace();
             }
- log.debug("加入任务队列 {}", task);
- queue.addLast(task);
- emptyWaitSet.signal();
- return true;
-        } 
+            log.debug("加入任务队列 {}", task);
+            queue.addLast(task);
+            emptyWaitSet.signal();
+            return true;
+        } finally {
+            lock.unlock();
         }
     }
- finally {
- lock.unlock();
- public int size() {
- lock.lock();
- try {
- return queue.size();
-        } 
-finally {
- lock.unlock();
+
+    public int size() {
+        lock.lock();
+        try {
+            return queue.size();
+        } finally {
+            lock.unlock();
+        }
     }
+    public void tryPut(RejectPolicy<T> rejectPolicy, T task) {
+        lock.lock();
+        try {
+            // 判断队列是否满
+            if(queue.size() == capcity) {
+                rejectPolicy.reject(this, task);
+            } else { // 有空闲
+                log.debug("加入任务队列 {}", task);
+                queue.addLast(task);
+                emptyWaitSet.signal();
+            }
+        } finally {
+            lock.unlock();
+        }
     }
- public void tryPut(RejectPolicy<T> rejectPolicy, T task) {
- lock.lock();
- try {
- // 判断队列是否满
-if(queue.size() == capcity) {
- rejectPolicy.reject(this, task);
-            } 
-else {  // 有空闲
-log.debug("加入任务队列 {}", task);
- queue.addLast(task);
- emptyWaitSet.signal();
-}finally  {
- lock.unlock();
 }
- }
- }
 
 ```
 步骤3：自定义线程池
 ```java
-class ThreadPool {
- // 任务队列
-private BlockingQueue<Runnable> taskQueue;
- // 线程集合
-private HashSet<Worker> workers = new HashSet<>();
- // 核心线程数
-private int coreSize;
- // 获取任务时的超时时间
- private long timeout;
- private TimeUnit timeUnit;
- private RejectPolicy<Runnable> rejectPolicy;
- // 执行任务
-public void execute(Runnable task) {
- // 当任务数没有超过 coreSize 时，直接交给 worker 对象执行
-// 如果任务数超过 coreSize 时，加入任务队列暂存
-synchronized (workers) {
- if(workers.size() < coreSize) {
- Worker worker = new Worker(task);
- log.debug("新增 worker{}, {}", worker, task);
- workers.add(worker);
- worker.start();
-            } 
-else {
- //                taskQueue.put(task);
- // 1) 死等
-// 2) 带超时等待
-// 3) 让调用者放弃任务执行
-// 4) 让调用者抛出异常
-// 5) 让调用者自己执行任务
-taskQueue.tryPut(rejectPolicy, task);
+@Slf4j
+public class ThreadPool { // 任务队列
+    private BlockingQueue<Runnable> taskQueue;
+    // 线程集合
+    private HashSet<Worker> workers = new HashSet<>();
+    // 核心线程数
+    private int coreSize;
+    // 获取任务时的超时时间
+    private long timeout;
+    private TimeUnit timeUnit;
+    private RejectPolicy<Runnable> rejectPolicy;
+    // 执行任务
+    public void execute(Runnable task) {
+        // 当任务数没有超过 coreSize 时，直接交给 worker 对象执行
+        // 如果任务数超过 coreSize 时，加入任务队列暂存
+        synchronized (workers) {
+            if(workers.size() < coreSize) {
+                Worker worker = new Worker(task);
+                log.debug("新增 worker{}, {}", worker, task);
+                workers.add(worker);
+                worker.start();
+            } else {
+// taskQueue.put(task);
+                // 1) 死等
+                // 2) 带超时等待
+                // 3) 让调用者放弃任务执行
+                // 4) 让调用者抛出异常
+                // 5) 让调用者自己执行任务
+                taskQueue.tryPut(rejectPolicy, task);
             }
-             }
-    }
-     public ThreadPool(int coreSize, long timeout, TimeUnit timeUnit, int queueCapcity, 
-RejectPolicy<Runnable> rejectPolicy) {
- this.coreSize = coreSize;
- this.timeout = timeout;
- this.timeUnit = timeUnit;
- this.taskQueue = new BlockingQueue<>(queueCapcity);
- this.rejectPolicy = rejectPolicy;
-    }
- class Worker extends Thread{
- private Runnable task;
- public Worker(Runnable task) {
- this.task = task;
         }
- @Override
- public void run() {
- // 执行任务
-// 1) 当 task 不为空，执行任务
-// 2) 当 task 执行完毕，再接着从任务队列获取任务并执行
-//            while(task != null || (task = taskQueue.take()) != null) {
- while(task != null || (task = taskQueue.poll(timeout, timeUnit)) != null) {
- try {
- log.debug("正在执行...{}", task);
- task.run();
-                } 
-                } 
+    }
+    public ThreadPool(int coreSize, long timeout, TimeUnit timeUnit, int queueCapcity,
+                      RejectPolicy<Runnable> rejectPolicy) {
+        this.coreSize = coreSize;
+        this.timeout = timeout;
+        this.timeUnit = timeUnit;
+        this.taskQueue = new BlockingQueue<>(queueCapcity);
+        this.rejectPolicy = rejectPolicy;
+    }
+    class Worker extends Thread{
+        private Runnable task;
+        public Worker(Runnable task) {
+            this.task = task;
+        }
+        @Override
+        public void run() {
+            // 执行任务
+            // 1) 当 task 不为空，执行任务
+            // 2) 当 task 执行完毕，再接着从任务队列获取任务并执行
+// while(task != null || (task = taskQueue.take()) != null) {
+            while(task != null || (task = taskQueue.poll(timeout, timeUnit)) != null) {
+                try {
+                    log.debug("正在执行...{}", task);
+                    task.run();
+                } catch (Exception e) {
+                    e.printStackTrace();
+                } finally {
+                    task = null;
                 }
- catch (Exception e) {
- e.printStackTrace();
- finally {
- task = null;
             }
- synchronized (workers) {
- log.debug("worker 被移除{}", this);
- workers.remove(this);
+            synchronized (workers) {
+                log.debug("worker 被移除{}", this);
+                workers.remove(this);
             }
         }
     }
- }
+
+}
+
 ```
 步骤4：测试
 ```java
-public static void main(String[] args) {
- ThreadPool threadPool = new ThreadPool(1,
- 1000, TimeUnit.MILLISECONDS, 1, (queue, task)->{
- // 1. 死等
-//            queue.put(task);
- // 2) 带超时等待
-//            queue.offer(task, 1500, TimeUnit.MILLISECONDS);
- // 3) 让调用者放弃任务执行
-//            log.debug("放弃{}", task);
- // 4) 让调用者抛出异常
-//            throw new RuntimeException("任务执行失败 " + task);
- // 5) 让调用者自己执行任务
-task.run();
+ public static void main(String[] args) {
+    ThreadPool threadPool = new ThreadPool(1,
+            1000, TimeUnit.MILLISECONDS, 1, (queue, task)->{
+        // 1. 死等
+// queue.put(task);
+        // 2) 带超时等待
+// queue.offer(task, 1500, TimeUnit.MILLISECONDS);
+        // 3) 让调用者放弃任务执行
+// log.debug("放弃{}", task);
+        // 4) 让调用者抛出异常
+// throw new RuntimeException("任务执行失败 " + task);
+        // 5) 让调用者自己执行任务
+        task.run();
+    });
+    for (int i = 0; i < 4; i++) {
+        int j = i;
+        threadPool.execute(() -> {
+            try {
+                Thread.sleep(1000L);
+            } catch (InterruptedException e) {
+                e.printStackTrace();
+            }
+            log.debug("{}", j);
         });
- for (int i = 0; i < 4; i++) {
- int j = i;
- threadPool.execute(() -> {
-   try {
- Thread.sleep(1000L);
-   }catch (InterruptedException e) {
- e.printStackTrace();
-                }
- log.debug("{}", j);
- });
-        }
     }
+ }
 ```
 ### ThreadPoolExecutor
 ![Alt text](image-34.png)
@@ -3216,40 +3206,37 @@ public static ExecutorService newCachedThreadPool() {
    - 救急线程可以无限创建
 - 队列采用了 SynchronousQueue 实现特点是，它没有容量，没有线程来取是放不进去的（一手交钱、一手交货）
 ```java
-SynchronousQueue<Integer> integers = new SynchronousQueue<>();
- new Thread(() -> {
- try {
- log.debug("putting {} ", 1);
- integers.put(1);
- log.debug("{} putted...", 1);
- log.debug("putting...{} ", 2);
- integers.put(2);
- log.debug("{} putted...", 2);
-    } 
-catch (InterruptedException e) {
- e.printStackTrace();
-    }
- },"t1").start();
- sleep(1);
- new Thread(() -> {
- try {
- log.debug("taking {}", 1);
- integers.take();
-    } 
-catch (InterruptedException e) {
- e.printStackTrace();
-    }
- },"t2").start();
- sleep(1);
- new Thread(() -> {
- try {
- log.debug("taking {}", 2);
- integers.take();
-    } 
-catch (InterruptedException e) {
- e.printStackTrace();
-    }
- },"t3").start();
+    SynchronousQueue<Integer> integers = new SynchronousQueue<>();
+new Thread(() -> {
+        try {
+            log.debug("putting {} ", 1);
+            integers.put(1);
+            log.debug("{} putted...", 1);
+            log.debug("putting...{} ", 2);
+            integers.put(2);
+            log.debug("{} putted...", 2);
+        } catch (InterruptedException e) {
+            e.printStackTrace();
+        }
+    },"t1").start();
+    sleep(1);
+new Thread(() -> {
+        try {
+            log.debug("taking {}", 1);
+            integers.take();
+        } catch (InterruptedException e) {
+            e.printStackTrace();
+        }
+    },"t2").start();
+    sleep(1);
+new Thread(() -> {
+        try {
+            log.debug("taking {}", 2);
+            integers.take();
+        } catch (InterruptedException e) {
+            e.printStackTrace();
+        }
+    },"t3").start();
 ```
 输出
 ```java
@@ -3264,8 +3251,7 @@ catch (InterruptedException e) {
 ```java
 public static ExecutorService newSingleThreadExecutor() {
  return new FinalizableDelegatedExecutorService
-        (new  ThreadPoolExecutor(1, 1,
- 0L, TimeUnit.MILLISECONDS,
+        (new  ThreadPoolExecutor(1, 1, 0L, TimeUnit.MILLISECONDS,
  new LinkedBlockingQueue<Runnable>()));
 }
 
@@ -3310,22 +3296,21 @@ void execute(Runnable command);
 ```
 
 ```java
- public void shutdown() {
- final ReentrantLock mainLock = this.mainLock;
- mainLock.lock();
- try {
- checkShutdownAccess();
- // 修改线程池状态
-advanceRunState(SHUTDOWN);
- // 仅会打断空闲线程
-interruptIdleWorkers();
- onShutdown(); // 扩展点 ScheduledThreadPoolExecutor
-    } 
-finally {
- mainLock.unlock();
- }
-  // 尝试终结(没有运行的线程可以立刻终结，如果还有运行的线程也不会等)
- tryTerminate();
+    public void shutdown() {
+        final ReentrantLock mainLock = this.mainLock;
+        mainLock.lock();
+        try {
+            checkShutdownAccess();
+            // 修改线程池状态
+            advanceRunState(SHUTDOWN);
+            // 仅会打断空闲线程
+            interruptIdleWorkers();
+            onShutdown(); // 扩展点 ScheduledThreadPoolExecutor
+        } finally {
+            mainLock.unlock();
+        }
+        // 尝试终结(没有运行的线程可以立刻终结，如果还有运行的线程也不会等)
+        tryTerminate();
     }
 
 ```
@@ -3338,25 +3323,24 @@ finally {
 ```
 ```java
 public List<Runnable> shutdownNow() {
-   List<Runnable> tasks;
- final ReentrantLock mainLock = this.mainLock;
- mainLock.lock();
- try {
- checkShutdownAccess();
- // 修改线程池状态
-advanceRunState(STOP);
- // 打断所有线程
-interruptWorkers();
- // 获取队列中剩余任务
-tasks = drainQueue();
-    } 
-finally {
- mainLock.unlock();
+        List<Runnable> tasks;
+        final ReentrantLock mainLock = this.mainLock;
+        mainLock.lock();
+        try {
+            checkShutdownAccess();
+            // 修改线程池状态
+            advanceRunState(STOP);
+            // 打断所有线程
+            interruptWorkers();
+            // 获取队列中剩余任务
+            tasks = drainQueue();
+        } finally {
+            mainLock.unlock();
+        }
+        // 尝试终结
+        tryTerminate();
+        return tasks;
     }
- // 尝试终结
-tryTerminate();
- return tasks;
- }
 ```
 **其它方法**
 ```java
@@ -3539,40 +3523,39 @@ throw new RejectedExecutionException(
 ## Fork/Join
 
 1) **概念**
-Fork/Join 是 JDK 1.7 加入的新的线程池实现，它体现的是一种分治思想，适用于能够进行任务拆分的 cpu 密集型运算.所谓的任务拆分，是将一个大任务拆分为算法上相同的小任务，直至不能拆分可以直接求解。跟递归相关的一些计算，如归并排序、斐波那契数列、都可以用分治思想进行求解.Fork/Join 在分治的基础上加入了多线程，可以把每个任务的分解和合并交给不同的线程来完成，进一步提升了运算效率
-Fork/Join 默认会创建与 cpu 核心数大小相同的线程池
+Fork/Join 是 JDK 1.7 加入的新的线程池实现，它体现的是一种分治思想，适用于能够进行任务拆分的 cpu 密集型运算.所谓的任务拆分，是将一个大任务拆分为算法上相同的小任务，直至不能拆分可以直接求解。跟递归相关的一些计算，如归并排序、斐波那契数列、都可以用分治思想进行求解.Fork/Join 在分治的基础上加入了多线程，可以把每个任务的分解和合并交给不同的线程来完成，进一步提升了运算效率Fork/Join 默认会创建与 cpu 核心数大小相同的线程池
 2) **使用**
 提交给 Fork/Join 线程池的任务需要继承 RecursiveTask（有返回值）或 RecursiveAction（没有返回值），例如下面定义了一个对 1~n 之间的整数求和的任务
 ```java
 @Slf4j(topic = "c.AddTask")
 class AddTask1 extends RecursiveTask<Integer> {
- int n;
- public AddTask1(int n) {
- this.n = n;
- }
- @Override
- public String toString() {
- return "{" + n + '}';
- }
- @Override
- protected Integer compute() {
- // 如果 n 已经为 1，可以求得结果了
- if (n == 1) {
- log.debug("join() {}", n);
- return n;
- }
- 
- // 将任务进行拆分(fork)
- AddTask1 t1 = new AddTask1(n - 1);
- t1.fork();
- log.debug("fork() {} + {}", n, t1);
- 
- // 合并(join)结果
- int result = n + t1.join();
- log.debug("join() {} + {} = {}", n, t1, result);
- return result;
- }
-}
+        int n;
+        public AddTask1(int n) {
+            this.n = n;
+        }
+        @Override
+        public String toString() {
+            return "{" + n + '}';
+        }
+        @Override
+        protected Integer compute() {
+            // 如果 n 已经为 1，可以求得结果了
+            if (n == 1) {
+                log.debug("join() {}", n);
+                return n;
+            }
+
+            // 将任务进行拆分(fork)
+            AddTask1 t1 = new AddTask1(n - 1);
+            t1.fork();
+            log.debug("fork() {} + {}", n, t1);
+
+            // 合并(join)结果
+            int result = n + t1.join();
+            log.debug("join() {} + {} = {}", n, t1, result);
+            return result;
+        }
+    }
 ```
 然后提交给 ForkJoinPool 来执行
 ```java
@@ -3601,41 +3584,41 @@ public static void main(String[] args) {
 **改进**
 ```java
 class AddTask3 extends RecursiveTask<Integer> {
- 
- int begin;
- int end;
- public AddTask3(int begin, int end) {
- this.begin = begin;
- this.end = end;
- }
- @Override
- public String toString() {
- return "{" + begin + "," + end + '}';
- }
- @Override
- protected Integer compute() {
- // 5, 5
- if (begin == end) {
- log.debug("join() {}", begin);
- return begin;
- }
- // 4, 5
-if (end - begin == 1) {
- log.debug("join() {} + {} = {}", begin, end, end + begin);
- return end + begin;
- }
- 
- // 1 5
- int mid = (end + begin) / 2; // 3
- AddTask3 t1 = new AddTask3(begin, mid); // 1,3
- t1.fork();
- AddTask3 t2 = new AddTask3(mid + 1, end); // 4,5
- t2.fork();
- log.debug("fork() {} + {} = ?", t1, t2);
- int result = t1.join() + t2.join();
- log.debug("join() {} + {} = {}", t1, t2, result);
- return result;
- }
+
+    int begin;
+    int end;
+    public AddTask3(int begin, int end) {
+        this.begin = begin;
+        this.end = end;
+    }
+    @Override
+    public String toString() {
+        return "{" + begin + "," + end + '}';
+    }
+    @Override
+    protected Integer compute() {
+        // 5, 5
+        if (begin == end) {
+            log.debug("join() {}", begin);
+            return begin;
+        }
+        // 4, 5
+        if (end - begin == 1) {
+            log.debug("join() {} + {} = {}", begin, end, end + begin);
+            return end + begin;
+        }
+
+        // 1 5
+        int mid = (end + begin) / 2; // 3
+        AddTask3 t1 = new AddTask3(begin, mid); // 1,3
+        t1.fork();
+        AddTask3 t2 = new AddTask3(mid + 1, end); // 4,5
+        t2.fork();
+        log.debug("fork() {} + {} = ?", t1, t2);
+        int result = t1.join() + t2.join();
+        log.debug("join() {} + {} = {}", t1, t2, result);
+        return result;
+    }
 }
 ```
 **然后提交给 ForkJoinPool 来执行**
@@ -3663,33 +3646,33 @@ public static void main(String[] args) {
 当读操作远远高于写操作时，这时候使用 读写锁 让 读-读 可以并发，提高性能。 类似于数据库中的 select ...from ... lock in share mode 提供一个 数据容器类 内部分别使用读锁保护数据的 read() 方法，写锁保护数据的 write() 方法
 ```java
 class DataContainer {
- private Object data;
- private ReentrantReadWriteLock rw = new ReentrantReadWriteLock();
- private ReentrantReadWriteLock.ReadLock r = rw.readLock();
- private ReentrantReadWriteLock.WriteLock w = rw.writeLock();
- public Object read() {
- log.debug("获取读锁...");
- r.lock();
- try {
- log.debug("读取");
- sleep(1);
- return data;
- } finally {
- log.debug("释放读锁...");
- r.unlock();
- }
- }
- public void write() {
- log.debug("获取写锁...");
- w.lock();
- try {
- log.debug("写入");
- sleep(1);
- } finally {
- log.debug("释放写锁...");
- w.unlock();
- }
- }
+    private Object data;
+    private ReentrantReadWriteLock rw = new ReentrantReadWriteLock();
+    private ReentrantReadWriteLock.ReadLock r = rw.readLock();
+    private ReentrantReadWriteLock.WriteLock w = rw.writeLock();
+    public Object read() {
+        log.debug("获取读锁...");
+        r.lock();
+        try {
+            log.debug("读取");
+            sleep(1);
+            return data;
+        } finally {
+            log.debug("释放读锁...");
+            r.unlock();
+        }
+    }
+    public void write() {
+        log.debug("获取写锁...");
+        w.lock();
+        try {
+            log.debug("写入");
+            sleep(1);
+        } finally {
+            log.debug("释放写锁...");
+            w.unlock();
+        }
+    }
 }
 ```
 测试 读锁-读锁 可以并发
@@ -3753,37 +3736,36 @@ try {
 - 重入时降级支持：即持有写锁的情况下去获取读锁
 ```java
 class CachedData {
- Object data;
- // 是否有效，如果失效，需要重新计算 data
- volatile boolean cacheValid;
- final ReentrantReadWriteLock rwl = new ReentrantReadWriteLock();
- void processCachedData() {
- rwl.readLock().lock();
- if (!cacheValid) {
- // 获取写锁前必须释放读锁
- rwl.readLock().unlock();
- rwl.writeLock().lock();
- try {
- // 判断是否有其它线程已经获取了写锁、更新了缓存, 避免重复更新
- if (!cacheValid) {
- data = ...
- cacheValid = true;
- }
- // 降级为读锁, 释放写锁, 这样能够让其它线程读取缓存
- rwl.readLock().lock();
- } finally {
-   rwl.writeLock().unlock();
- }
- }
- // 自己用完数据, 释放读锁 
- try {
- use(data);
- } finally {
- rwl.readLock().unlock();
- }
- }
+    Object data;
+    // 是否有效，如果失效，需要重新计算 data
+    volatile boolean cacheValid;
+    final ReentrantReadWriteLock rwl = new ReentrantReadWriteLock();
+    void processCachedData() {
+        rwl.readLock().lock();
+        if (!cacheValid) {
+            // 获取写锁前必须释放读锁
+            rwl.readLock().unlock();
+            rwl.writeLock().lock();
+            try {
+                // 判断是否有其它线程已经获取了写锁、更新了缓存, 避免重复更新
+                if (!cacheValid) {
+                    data = ...
+                    cacheValid = true;
+                }
+                // 降级为读锁, 释放写锁, 这样能够让其它线程读取缓存
+                rwl.readLock().lock();
+            } finally {
+                rwl.writeLock().unlock();
+            }
+        }
+        // 自己用完数据, 释放读锁 
+        try {
+            use(data);
+        } finally {
+            rwl.readLock().unlock();
+        }
+    }
 }
-
 ```
 ###  StampedLock
 该类自 JDK 8 加入，是为了进一步优化读性能，它的特点是在使用读锁、写锁时都必须配合【戳】使用
@@ -3808,56 +3790,56 @@ if(!lock.validate(stamp)){
 提供一个 数据容器类 内部分别使用读锁保护数据的 read() 方法，写锁保护数据的 write() 方法
 ```java
 class DataContainerStamped {
- private int data;
-private final StampedLock lock = new StampedLock();
- public DataContainerStamped(int data) {
- this.data = data;
- }
- public int read(int readTime) {
- long stamp = lock.tryOptimisticRead();
- log.debug("optimistic read locking...{}", stamp);
- sleep(readTime);
- if (lock.validate(stamp)) {
- log.debug("read finish...{}, data:{}", stamp, data);
- return data;
- }
- // 锁升级 - 读锁
- log.debug("updating to read lock... {}", stamp);
- try {
- stamp = lock.readLock();
- log.debug("read lock {}", stamp);
- sleep(readTime);
- log.debug("read finish...{}, data:{}", stamp, data);
- return data;
- } finally {
- log.debug("read unlock {}", stamp);
- lock.unlockRead(stamp);
- }
- }
- public void write(int newData) {
- long stamp = lock.writeLock();
- log.debug("write lock {}", stamp);
- try {
- sleep(2);
- this.data = newData;
- } finally {
- log.debug("write unlock {}", stamp);
- lock.unlockWrite(stamp);
- }
- }
+    private int data;
+    private final StampedLock lock = new StampedLock();
+    public DataContainerStamped(int data) {
+        this.data = data;
+    }
+    public int read(int readTime) {
+        long stamp = lock.tryOptimisticRead();
+        log.debug("optimistic read locking...{}", stamp);
+        sleep(readTime);
+        if (lock.validate(stamp)) {
+            log.debug("read finish...{}, data:{}", stamp, data);
+            return data;
+        }
+        // 锁升级 - 读锁
+        log.debug("updating to read lock... {}", stamp);
+        try {
+            stamp = lock.readLock();
+            log.debug("read lock {}", stamp);
+            sleep(readTime);
+            log.debug("read finish...{}, data:{}", stamp, data);
+            return data;
+        } finally {
+            log.debug("read unlock {}", stamp);
+            lock.unlockRead(stamp);
+        }
+    }
+    public void write(int newData) {
+        long stamp = lock.writeLock();
+        log.debug("write lock {}", stamp);
+        try {
+            sleep(2);
+            this.data = newData;
+        } finally {
+            log.debug("write unlock {}", stamp);
+            lock.unlockWrite(stamp);
+        }
+    }
 }
 ```
 测试 读-读 可以优化
 ```java
 public static void main(String[] args) {
- DataContainerStamped dataContainer = new DataContainerStamped(1);
- new Thread(() -> {
- dataContainer.read(1);
- }, "t1").start();
- sleep(0.5);
- new Thread(() -> {
- dataContainer.read(0);
- }, "t2").start();
+    DataContainerStamped dataContainer = new DataContainerStamped(1);
+    new Thread(() -> {
+        dataContainer.read(1);
+    }, "t1").start();
+    sleep(0.5);
+    new Thread(() -> {
+        dataContainer.read(0);
+    }, "t2").start();
 }
 ```
 输出结果，可以看到实际没有加读锁
@@ -3894,31 +3876,32 @@ public static void main(String[] args) {
 ```
 ### Semaphore
 **基本使用**
-[ˈsɛməˌfɔr] 信号量，用来限制能同时访问共享资源的线程上限。
+ 信号量，用来限制能同时访问共享资源的线程上限。
 ```java
+
 public static void main(String[] args) {
- // 1. 创建 semaphore 对象
- Semaphore semaphore = new Semaphore(3);
- // 2. 10个线程同时运行
- for (int i = 0; i < 10; i++) {
- new Thread(() -> {
- // 3. 获取许可
- try {
- semaphore.acquire();
- } catch (InterruptedException e) {
- e.printStackTrace();
- }
- try {
- log.debug("running...");
- sleep(1);
- log.debug("end...");
- } finally {
- // 4. 释放许可
- semaphore.release();
- }
- }).start();
- }
- }
+    // 1. 创建 semaphore 对象
+    Semaphore semaphore = new Semaphore(3);
+    // 2. 10个线程同时运行
+    for (int i = 0; i < 10; i++) {
+        new Thread(() -> {
+            // 3. 获取许可
+            try {
+                semaphore.acquire();
+            } catch (InterruptedException e) {
+                e.printStackTrace();
+            }
+            try {
+                log.debug("running...");
+                sleep(1);
+                log.debug("end...");
+            } finally {
+                // 4. 释放许可
+                semaphore.release();
+            }
+        }).start();
+    }
+}
 ```
 输出
 ```shell
@@ -3949,28 +3932,28 @@ public static void main(String[] args) {
 其中构造参数用来初始化等待计数值，await() 用来等待计数归零，countDown() 用来让计数减一
 ```java
 public static void main(String[] args) throws InterruptedException {
- CountDownLatch latch = new CountDownLatch(3);
- new Thread(() -> {
- log.debug("begin...");
- sleep(1);
- latch.countDown();
- log.debug("end...{}", latch.getCount());
- }).start();
- new Thread(() -> {
- log.debug("begin...");
- sleep(2);
- latch.countDown();
- log.debug("end...{}", latch.getCount());
- }).start();
- new Thread(() -> {
- log.debug("begin...");
- sleep(1.5);
- latch.countDown();
- log.debug("end...{}", latch.getCount());
- }).start();
- log.debug("waiting...");
- latch.await();
- log.debug("wait end...");
+    CountDownLatch latch = new CountDownLatch(3);
+    new Thread(() -> {
+        log.debug("begin...");
+        sleep(1);
+        latch.countDown();
+        log.debug("end...{}", latch.getCount());
+    }).start();
+    new Thread(() -> {
+        log.debug("begin...");
+        sleep(2);
+        latch.countDown();
+        log.debug("end...{}", latch.getCount());
+    }).start();
+    new Thread(() -> {
+        log.debug("begin...");
+        sleep(1.5);
+        latch.countDown();
+        log.debug("end...{}", latch.getCount());
+    }).start();
+    log.debug("waiting...");
+    latch.await();
+    log.debug("wait end...");
 }
 ```
 **输出**
@@ -3987,35 +3970,35 @@ public static void main(String[] args) throws InterruptedException {
 可以配合线程池使用，改进如下
 ```java
 public static void main(String[] args) throws InterruptedException {
- CountDownLatch latch = new CountDownLatch(3);
- ExecutorService service = Executors.newFixedThreadPool(4);
- service.submit(() -> {
- log.debug("begin...");
- sleep(1);
- latch.countDown();
- log.debug("end...{}", latch.getCount());
- });
- service.submit(() -> {
- log.debug("begin...");
- sleep(1.5);
- latch.countDown();
- log.debug("end...{}", latch.getCount());
- });
- service.submit(() -> {
- log.debug("begin...");
- sleep(2);
- latch.countDown();
- log.debug("end...{}", latch.getCount());
- });
- service.submit(()->{
- try {
- log.debug("waiting...");
- latch.await();
- log.debug("wait end...");
- } catch (InterruptedException e) {
- e.printStackTrace();
- }
- });
+    CountDownLatch latch = new CountDownLatch(3);
+    ExecutorService service = Executors.newFixedThreadPool(4);
+    service.submit(() -> {
+        log.debug("begin...");
+        sleep(1);
+        latch.countDown();
+        log.debug("end...{}", latch.getCount());
+    });
+    service.submit(() -> {
+        log.debug("begin...");
+        sleep(1.5);
+        latch.countDown();
+        log.debug("end...{}", latch.getCount());
+    });
+    service.submit(() -> {
+        log.debug("begin...");
+        sleep(2);
+        latch.countDown();
+        log.debug("end...{}", latch.getCount());
+    });
+    service.submit(()->{
+        try {
+            log.debug("waiting...");
+            latch.await();
+            log.debug("wait end...");
+        } catch (InterruptedException e) {
+            e.printStackTrace();
+        }
+    });
 }
 ```
 **输出**
