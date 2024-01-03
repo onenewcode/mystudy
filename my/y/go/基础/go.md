@@ -611,23 +611,23 @@ import (
 "log"
 )
 func sayhelloName(w http.ResponseWriter, r *http.Request) {
-r.ParseForm() //解析参数，默认是不会解析的
-fmt.Println(r.Form) //这些信息是输出到服务器端的打印信息
-fmt.Println("path", r.URL.Path)
-fmt.Println("scheme", r.URL.Scheme)
-fmt.Println(r.Form["url_long"])
-for k, v := range r.Form {
-fmt.Println("key:", k)
-fmt.Println("val:", strings.Join(v, ""))
-}
-fmt.Fprintf(w, "Hello astaxie!") //这个写入到w的是输出到客户端的
+	r.ParseForm() //解析参数，默认是不会解析的
+	fmt.Println(r.Form) //这些信息是输出到服务器端的打印信息
+	fmt.Println("path", r.URL.Path)
+	fmt.Println("scheme", r.URL.Scheme)
+	fmt.Println(r.Form["url_long"])
+	for k, v := range r.Form {
+		fmt.Println("key:", k)
+		fmt.Println("val:", strings.Join(v, ""))
+	}
+	fmt.Fprintf(w, "Hello astaxie!") //这个写入到w的是输出到客户端的
 }
 func main() {
-http.HandleFunc("/", sayhelloName) //设置访问的路由
-err := http.ListenAndServe(":9090", nil) //设置监听的端口
-if err != nil {
-log.Fatal("ListenAndServe: ", err)
-}
+	http.HandleFunc("/", sayhelloName) //设置访问的路由
+	err := http.ListenAndServe(":9090", nil) //设置监听的端口
+	if err != nil {
+		log.Fatal("ListenAndServe: ", err)
+	}
 }
 ```
 ## Socket 编程
@@ -638,25 +638,23 @@ log.Fatal("ListenAndServe: ", err)
 (3) 监听：使用listen()函数。或者连接：使用connect()函数。
 (4) 接受连接：使用accept()函数。
 (5) 接收：使用receive()函数。或者发送：使用send()函数。
-Go语言标准库对此过程进行了抽象和封装。无论我们期望使用什么协议建立什么形式的连
-接，都只需要调用net.Dial()即可
+Go语言标准库对此过程进行了抽象和封装。无论我们期望使用什么协议建立什么形式的连接，都只需要调用net.Dial()即可
 ### Dial()函数
 Dial()函数的原型如下：
-func Dial(net, addr string) (Conn, error) 
+`func Dial(net, addr string) (Conn, error) `
 其中net参数是网络协议的名字，addr参数是IP地址或域名，而端口号以“:”的形式跟随在地址
 我们来看一下几种常见协议的调用方式。
 TCP链接：
-conn, err := net.Dial("tcp", "192.168.0.10:2100") 
+`conn, err := net.Dial("tcp", "192.168.0.10:2100") `
 UDP链接：
-conn, err := net.Dial("udp", "192.168.0.12:975") 
+`conn, err := net.Dial("udp", "192.168.0.12:975") `
 ICMP链接（使用协议名称）：
-conn, err := net.Dial("ip4:icmp", "www.baidu.com") 
+`conn, err := net.Dial("ip4:icmp", "www.baidu.com") `
 ICMP链接（使用协议编号）：
-conn, err := net.Dial("ip4:1", "10.0.0.3") 
-目前，Dial()函数支持如下几种网络协议："tcp"、"tcp4"（仅限IPv4）、"tcp6"（仅限
-IPv6）、"udp"、"udp4"（仅限IPv4）、"udp6"（仅限IPv6）、"ip"、"ip4"（仅限IPv4）和"ip6" 
-（仅限IPv6）。
+`conn, err := net.Dial("ip4:1", "10.0.0.3") `
+目前，Dial()函数支持如下几种网络协议："tcp"、"tcp4"（仅限IPv4）、"tcp6"（仅限IPv6）、"udp"、"udp4"（仅限IPv4）、"udp6"（仅限IPv6）、"ip"、"ip4"（仅限IPv4）和"ip6" （仅限IPv6）。
 在成功建立连接后，我们就可以进行数据的发送和接收。发送数据时，使用conn的Write()成员方法，接收数据时使用Read()方法。
+
 
 # 工 程 管 理 
 ##  Go 命令行工具

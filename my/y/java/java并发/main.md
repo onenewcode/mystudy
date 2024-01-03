@@ -4015,36 +4015,30 @@ public static void main(String[] args) throws InterruptedException {
 可以配合线程池使用，改进如下
 ```java
 public static void main(String[] args) throws InterruptedException {
- CountDownLatch latch = new CountDownLatch(3);
- ExecutorService service = Executors.newFixedThreadPool(4);
- service.submit(() -> {
- log.debug("begin...");
- sleep(1);
- latch.countDown();
- log.debug("end...{}", latch.getCount());
- });
- service.submit(() -> {
- log.debug("begin...");
- sleep(1.5);
- latch.countDown();
- log.debug("end...{}", latch.getCount());
- });
- service.submit(() -> {
- log.debug("begin...");
- sleep(2);
- latch.countDown();
- log.debug("end...{}", latch.getCount());
- });
- service.submit(()->{
- try {
- log.debug("waiting...");
- latch.await();
- log.debug("wait end...");
- } catch (InterruptedException e) {
- e.printStackTrace();
- }
- });
+    CountDownLatch latch = new CountDownLatch(3);
+    new Thread(() -> {
+        log.debug("begin...");
+        sleep(1);
+        latch.countDown();
+        log.debug("end...{}", latch.getCount());
+    }).start();
+    new Thread(() -> {
+        log.debug("begin...");
+        sleep(2);
+        latch.countDown();
+        log.debug("end...{}", latch.getCount());
+    }).start();
+    new Thread(() -> {
+        log.debug("begin...");
+        sleep(1.5);
+        latch.countDown();
+        log.debug("end...{}", latch.getCount());
+    }).start();
+    log.debug("waiting...");
+    latch.await();
+    log.debug("wait end...");
 }
+
 ```
 **输出**
 ```shell
@@ -4059,30 +4053,30 @@ public static void main(String[] args) throws InterruptedException {
 ```
 ####  应用之同步等待多线程准备完毕
 ```java
-AtomicInteger num = new AtomicInteger(0);
-ExecutorService service = Executors.newFixedThreadPool(10, (r) -> {
-    return new Thread(r, "t" + num.getAndIncrement());
-});
-CountDownLatch latch = new CountDownLatch(10);
-String[] all = new String[10];
-Random r = new Random();
-for (int j = 0; j < 10; j++) {
- int x = j;
- service.submit(() -> {
- for (int i = 0; i <= 100; i++) {
- try {
- Thread.sleep(r.nextInt(100));
- } catch (InterruptedException e) {
- }
- all[x] = Thread.currentThread().getName() + "(" + (i + "%") + ")";
- System.out.print("\r" + Arrays.toString(all));
- }
- latch.countDown();
- });
-}
-latch.await();
-System.out.println("\n游戏开始...");
-service.shutdown();
+    AtomicInteger num = new AtomicInteger(0);
+    ExecutorService service = Executors.newFixedThreadPool(10, (r) -> {
+        return new Thread(r, "t" + num.getAndIncrement());
+    });
+    CountDownLatch latch = new CountDownLatch(10);
+    String[] all = new String[10];
+    Random r = new Random();
+    for (int j = 0; j < 10; j++) {
+        int x = j;
+        service.submit(() -> {
+            for (int i = 0; i <= 100; i++) {
+                try {
+                    Thread.sleep(r.nextInt(100));
+                } catch (InterruptedException e) {
+                }
+                all[x] = Thread.currentThread().getName() + "(" + (i + "%") + ")";
+                System.out.print("\r" + Arrays.toString(all));
+            }
+            latch.countDown();
+        });
+    }
+    latch.await();
+    System.out.println("\n游戏开始...");
+    service.shutdown();
 ```
 **中间输出**
 ```shell
@@ -4093,119 +4087,30 @@ service.shutdown();
 [t0(100%), t1(100%), t2(100%), t3(100%), t4(100%), t5(100%), t6(100%), t7(100%), t8(100%), 
 t9(100%)] 
 游戏开始... 
-
-```
-#### 应用之同步等待多个远程调用结束
-```java
-@RestController
-public class TestCountDownlatchController {
- @GetMapping("/order/{id}")
- public Map<String, Object> order(@PathVariable int id) {
- HashMap<String, Object> map = new HashMap<>();
- map.put("id", id);
- map.put("total", "2300.00");
- sleep(2000);
- return map;
- }
- @GetMapping("/product/{id}")
- public Map<String, Object> product(@PathVariable int id) {
-   HashMap<String, Object> map = new HashMap<>();
- if (id == 1) {
- map.put("name", "小爱音箱");
- map.put("price", 300);
- } else if (id == 2) {
- map.put("name", "小米手机");
- map.put("price", 2000);
- }
- map.put("id", id);
- sleep(1000);
- return map;
- }
- @GetMapping("/logistics/{id}")
- public Map<String, Object> logistics(@PathVariable int id) {
- HashMap<String, Object> map = new HashMap<>();
- map.put("id", id);
- map.put("name", "中通快递");
- sleep(2500);
- return map;
- }
- private void sleep(int millis) {
- try {
- Thread.sleep(millis);
- } catch (InterruptedException e) {
- e.printStackTrace();
- }
- }
-}
-```
-**rest 远程调用**
-```java
-RestTemplate restTemplate = new RestTemplate();
-log.debug("begin");
-ExecutorService service = Executors.newCachedThreadPool();
-CountDownLatch latch = new CountDownLatch(4);
-Future<Map<String,Object>> f1 = service.submit(() -> {
- Map<String, Object> r =
- restTemplate.getForObject("http://localhost:8080/order/{1}", Map.class, 1);
- return r;
-});
-Future<Map<String, Object>> f2 = service.submit(() -> {
- Map<String, Object> r =
- restTemplate.getForObject("http://localhost:8080/product/{1}", Map.class, 1);
- return r;
-});
-Future<Map<String, Object>> f3 = service.submit(() -> {
- Map<String, Object> r =
- restTemplate.getForObject("http://localhost:8080/product/{1}", Map.class, 2);
- return r;
-});
-Future<Map<String, Object>> f4 = service.submit(() -> {
- Map<String, Object> r =
- restTemplate.getForObject("http://localhost:8080/logistics/{1}", Map.class, 1);
- return r;
-});
-System.out.println(f1.get());
-System.out.println(f2.get());
-System.out.println(f3.get());
-System.out.println(f4.get());
-log.debug("执行完毕");
-service.shutdown();
-
-```
-**执行结果**
-```shell
-19:51:39.711 c.TestCountDownLatch [main] - begin 
-{total=2300.00, id=1} 
-{price=300, name=小爱音箱, id=1} 
-{price=2000, name=小米手机, id=2} 
-{name=中通快递, id=1} 
-19:51:42.407 c.TestCountDownLatch [main] - 执行完毕
-
 ```
 ### CyclicBarrier
-[ˈsaɪklɪk ˈbæriɚ] 循环栅栏，用来进行线程协作，等待线程满足某个计数。构造时设置『计数个数』，每个线程执行到某个需要“同步”的时刻调用 await() 方法进行等待，当等待的线程数满足『计数个数』时，继续执行
+循环栅栏，用来进行线程协作，等待线程满足某个计数。构造时设置『计数个数』，每个线程执行到某个需要“同步”的时刻调用 await() 方法进行等待，当等待的线程数满足『计数个数』时，继续执行
 ```java
-CyclicBarrier cb = new CyclicBarrier(2); // 个数为2时才会继续执行
-new Thread(()->{
- System.out.println("线程1开始.."+new Date());
- try {
- cb.await(); // 当个数不足时，等待
- } catch (InterruptedException | BrokenBarrierException e) {
- e.printStackTrace();
- }
- System.out.println("线程1继续向下运行..."+new Date());
-}).start();
-new Thread(()->{
- System.out.println("线程2开始.."+new Date());
- try { Thread.sleep(2000); } catch (InterruptedException e) { }
- try {
- cb.await(); // 2 秒后，线程个数够2，继续运行
- } catch (InterruptedException | BrokenBarrierException e) {
- e.printStackTrace();
- }
- System.out.println("线程2继续向下运行..."+new Date());
-}).start();
-
+   CyclicBarrier cb = new CyclicBarrier(2); // 个数为2时才会继续执行
+    new Thread(()->{
+        System.out.println("线程1开始.."+new Date());
+        try {
+            cb.await(); // 当个数不足时，等待
+        } catch (InterruptedException | BrokenBarrierException e) {
+            e.printStackTrace();
+        }
+        System.out.println("线程1继续向下运行..."+new Date());
+    }).start();
+    new Thread(()->{
+        System.out.println("线程2开始.."+new Date());
+        try { Thread.sleep(2000); } catch (InterruptedException e) { }
+        try {
+            cb.await(); // 2 秒后，线程个数够2，继续运行
+        } catch (InterruptedException | BrokenBarrierException e) {
+            e.printStackTrace();
+        }
+        System.out.println("线程2继续向下运行..."+new Date());
+    }).start();
 ```
 ###  线程安全集合类概述
 ![Alt text](image-40.png)

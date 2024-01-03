@@ -1767,7 +1767,7 @@ type Server struct {
 /*
 创建一个服务器句柄
 */
-func NewServer(name string) ainterface.IServer {
+func NewServer() ainterface.IServer {
 	//先初始化全局配置文件
 	utils.GlobalSetting.Reload()
 
@@ -1915,7 +1915,7 @@ func (this *HelloZinxRouter) Handle(request ainterface.IRequest) {
 
 func main() {
 	//创建一个server句柄
-	s := anet.NewServer("")
+	s := anet.NewServer()
 
 	//配置路由
 	s.AddRouter(0, &PingRouter{})
@@ -2001,3 +2001,124 @@ func main() {
 	}
 }
 ```
+# Ainx的读写分离模型
+接下来我们就要对Zinx做一个小小的改变，就是与客户端进修数据交互的Gouroutine由一个变成两个，一个专门负责从客户端读取数据，一个专门负责向客户端写数据。这么设计有什么好处，当然是目的就是高内聚，模块的功能单一，对于我们今后扩展功能更加方便。
+	我们希望Ainx在升级到V0.7版本的时候，架构是下面这样的：
+![Alt text](image-2.png)
+Server依然是处理客户端的响应，主要关键的几个方法是Listen、Accept等。当建立与客户端的套接字后，那么就会开启两个Goroutine分别处理读数据业务和写数据业务，读写数据之间的消息通过一个Channel传递。	
+
+##  Ainx-V0.7代码实现
+**添加读写模块交互数据的管道**
+>ainx/anet/connection.go
+
+```go
+type Connection struct {
+	//当前链接的socket TCP套接字
+	Conn *net.TCPConn
+	// 当前链接的ID也可以称作SessionID，ID全局唯一
+	ConnID uint32
+	// 当前链接的关闭状态
+	isClosed bool
+
+	//消息管理MsgId和对应处理方法的消息管理模块
+	MsgHandler ainterface.IMsgHandle
+
+	// 告知该链接已经退出/停止的channel
+	ExitBuffChan chan bool
+	//无缓冲管道，用于读、写两个goroutine之间的消息通信
+	msgChan chan []byte
+}
+// 创建链接的方法
+func NewConnection(conn *net.TCPConn, connID uint32, msgHandler ainterface.IMsgHandle) *Connection {
+	c := &Connection{
+		Conn:         conn,
+		ConnID:       connID,
+		isClosed:     false,
+		MsgHandler:   msgHandler,
+		ExitBuffChan: make(chan bool),
+		msgChan:      make(chan []byte), //msgChan初始化
+	}
+	return c
+}
+```
+我们给Connection新增一个管道成员msgChan,作用是用于读写两个go的通信。
+
+**创建Writer Goroutine**
+>ainx/anet/connection.go
+```go
+/*
+写消息Goroutine,用户将数据发送给客户端
+*/
+func (c *Connection) StartWriter() {
+
+	fmt.Println("[Writer Goroutine is running]")
+	defer fmt.Println(c.RemoteAddr().String(), "[conn Writer exit!]")
+
+	for {
+		select {
+		case data := <-c.msgChan:
+			//有数据要写给客户端
+			if _, err := c.Conn.Write(data); err != nil {
+				fmt.Println("Send Data error:, ", err, " Conn Writer exit")
+				return
+			}
+		case <-c.ExitBuffChan:
+			//conn已经关闭
+			return
+		}
+	}
+}
+```
+**Reader讲发送客户端的数据改为发送至Channel**
+修改Reader调用的SendMsg()方法
+>ainx/anet/connection.go
+```go
+// 直接将Message数据发送数据给远程的TCP客户端
+func (c *Connection) SendMsg(msgId uint32, data []byte) error {
+	if c.isClosed == true {
+		return errors.New("Connection closed when send msg")
+	}
+	//将data封包，并且发送
+	dp := NewDataPack()
+	msg, err := dp.Pack(NewMsgPackage(msgId, data))
+	if err != nil {
+		fmt.Println("Pack error msg id = ", msgId)
+		return errors.New("Pack error msg ")
+	}
+
+	//写回客户端
+	c.msgChan <- msg //将之前直接回写给conn.Write的方法 改为 发送给Channel 供Writer读取
+	return nil
+}
+```
+**启动Reader和Writer**
+>ainx/anet/connection.go
+```go
+// 启动连接，让当前连接开始工作
+func (c *Connection) Start() {
+
+	//1 开启用户从客户端读取数据流程的Goroutine
+	go c.StartReader()
+	//2 开启用于写回客户端数据流程的Goroutine
+	go c.StartWriter()
+
+	for {
+		select {
+		case <-c.ExitBuffChan:
+			//得到退出消息，不再阻塞
+			return
+		}
+	}
+}
+
+```
+## 使用Ainx-V0.7完成应用程序
+测试代码和V0.6的代码一样。
+
+# Ainx的消息队列及多任务机制
+接下来我们就需要给Ainx添加消息队列和多任务Worker机制了。我们可以通过worker的数量来限定处理业务的固定goroutine数量，而不是无限制的开辟Goroutine，虽然我们知道go的调度算法已经做的很极致了，但是大数量的Goroutine依然会带来一些不必要的环境切换成本，这些本应该是服务器应该节省掉的成本。我们可以用消息队列来缓冲worker工作的数据。
+![Alt text](image-3.png)
+
+## 创建消息队列
+首先，处理消息队列的部分，我们应该集成到MsgHandler模块下，因为属于我们消息模块范畴内的
+>ainx/anet/msghandler.go
