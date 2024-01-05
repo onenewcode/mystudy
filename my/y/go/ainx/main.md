@@ -2116,9 +2116,172 @@ func (c *Connection) Start() {
 测试代码和V0.6的代码一样。
 
 # Ainx的消息队列及多任务机制
-接下来我们就需要给Ainx添加消息队列和多任务Worker机制了。我们可以通过worker的数量来限定处理业务的固定goroutine数量，而不是无限制的开辟Goroutine，虽然我们知道go的调度算法已经做的很极致了，但是大数量的Goroutine依然会带来一些不必要的环境切换成本，这些本应该是服务器应该节省掉的成本。我们可以用消息队列来缓冲worker工作的数据。
+接下来我们就需要给Ainx添加消息队列和多任务Worker机制了。我们可以通过worker的数量来限定处理业务的固定goroutine数量，而不是无限制的开辟Goroutine，虽然我们知道go的调度算法已经做的很极致了，但是大数量的Goroutine依然会带来一些不必要的环境切换成本，这些本应该是服务器应该节省掉的成本。我们可以用消息队列来缓冲worker工作的数据,提高系统的负载能力。
 ![Alt text](image-3.png)
 
 ## 创建消息队列
-首先，处理消息队列的部分，我们应该集成到MsgHandler模块下，因为属于我们消息模块范畴内的
+首先，处理消息队列的部分，我们应该集成到MsgHandler模块下，因为属于消息模块范畴内的。
 >ainx/anet/msghandler.go
+
+```go
+type MsgHandle struct {
+	Apis           map[uint32]ainterface.IRouter //存放每个MsgId 所对应的处理方法的map属性
+	WorkerPoolSize uint32                        //业务工作Worker池的数量
+	TaskQueue      []chan ainterface.IRequest    //Worker负责取任务的消息队列
+}
+
+func NewMsgHandle() *MsgHandle {
+	return &MsgHandle{
+		Apis:           make(map[uint32]ainterface.IRouter),
+		WorkerPoolSize: utils.GlobalSetting.WorkerPoolSize,
+		//一个worker对应一个queue
+		TaskQueue: make([]chan ainterface.IRequest, utils.GlobalSetting.WorkerPoolSize),
+	}
+}
+```
+这里添加两个成员`WokerPoolSize`:作为工作池的数量，因为TaskQueue中的每个队列应该是和一个Worker对应的，所以我们在创建TaskQueue中队列数量要和Worker的数量一致。Worker同时设置的有缓冲通道，缓冲通道的大小为`WorkerPoolSize`
+
+`TaskQueue`真是一个`Request`请求信息的channel集合。用来缓冲提供worker调用的`Request`请求信息，worker会从对应的队列中获取客户端的请求数据并且处理掉。
+
+当然`WorkerPoolSize`最好也可以从`GlobalSetting`获取，并且config.yaml配置文件可以手动配置。
+>ainx/utils/globalload.go
+
+## 创建及启动Worker工作池
+现在添加Worker工作池，先定义一些启动工作池的接口
+>ainx/ainterface/imsghandler.go
+```go
+/*
+	消息管理抽象层
+ */
+type IMsgHandle interface{
+	DoMsgHandler(request IRequest)			//马上以非阻塞方式处理消息
+	AddRouter(msgId uint32, router IRouter)	//为消息添加具体的处理逻辑
+	StartWorkerPool()						//启动worker工作池
+	SendMsgToTaskQueue(request IRequest)    //将消息交给TaskQueue,由worker进行处理
+}
+```
+实现启动工作池的接口
+>ainx/anet/msghandler.go
+```go
+// 启动一个Woeker工作流程
+func (mh *MsgHandle) StartOneWorker(workerID int, taskQueue chan ainterface.IRequest) {
+	fmt.Println("Work ID =", workerID, "is started.")
+	// 不断的等待队列消息
+	for {
+		select {
+		// 从消息取出队列的Request，比执行绑定的业务方法
+		case req := <-taskQueue:
+			mh.DoMsgHandler(req)
+		}
+	}
+}
+
+/*
+启动workpool
+*/
+func (mh *MsgHandle) StartWorkerPool() {
+	for i := 0; i < int(mh.WorkerPoolSize); i++ {
+		////给当前worker对应的任务队列开辟空间
+		mh.TaskQueue[i] = make(chan ainterface.IRequest, utils.GlobalSetting.MaxWorkerTaskLen)
+		//启动当前Worker，阻塞的等待对应的任务队列是否有消息传递进来
+		go mh.StartOneWorker(i, mh.TaskQueue[i])
+	}
+}
+
+```
+StartWorkerPool()方法是启动Worker工作池，这里根据用户配置好的WorkerPoolSize的数量来启动，然后分别给每个Worker分配一个TaskQueue，然后用一个goroutine来承载一个Worker的工作业务。
+
+StartOneWorker()方法就是一个Worker的工作业务，每个worker是不会退出的(目前没有设定worker的停止工作机制)，会永久的从对应的TaskQueue中等待消息，并处理发送给它的消息。
+
+## 发送消息给消息队列
+现在，worker工作池已经准备就绪了，那么就需要有一个给到worker工作池消息的入口，我们再定义一个方法，让这个方法决定协程池工作策略。
+
+```go
+/*
+将消息交给TaskQueue,由worker进行处理
+todo 未来提供更多的方法策略，目前只能采用 轮询的平均分配法则
+*/
+func (mh *MsgHandle) SendMsgToTaskQueue(request ainterface.IRequest) {
+	//根据ConnID来分配当前的连接应该由哪个worker负责处理
+	//得到需要处理此条连接的workerID
+	workerID := request.GetConnection().GetConnID() % mh.WorkerPoolSize
+	fmt.Println("Add ConnID=", request.GetConnection().GetConnID(), " request msgID=", request.GetMsgID(), "to workerID=", workerID)
+	//将请求消息发送给任务队列
+	mh.TaskQueue[workerID] <- request
+}
+```
+SendMsgToTaskQueue()作为工作池的数据入口，这里面采用的是轮询的分配机制，因为不同链接信息都会调用这个入口，那么到底应该由哪个worker处理该链接的请求处理，整理用的是一个简单的求模运算。用余数和workerID的匹配来进行分配,未来有时间可能添加更多的策略方式。
+
+最终将request请求数据发送给对应worker的TaskQueue，那么对应的worker的Goroutine就会处理该链接请求了。
+## Ainx-V0.8代码完善
+首先要完善启动方法。
+>ainx/anet/server.go
+```go
+//开启网络服务
+func (s *Server) Start() {
+    
+	//...
+    
+	//开启一个go去做服务端Linster业务
+	go func() {
+		//0 启动worker工作池机制
+		s.msgHandler.StartWorkerPool()
+
+		//1 获取一个TCP的Addr
+		addr, err := net.ResolveTCPAddr(s.IPVersion, fmt.Sprintf("%s:%d", s.IP, s.Port))
+		if err != nil {
+			fmt.Println("resolve tcp addr err: ", err)
+			return
+		}
+
+		//...
+        //...
+        
+		}
+	}()
+}
+```
+其次，当我们已经得到客户端的连接请求过来数据的时候，我们应该将数据发送给Worker工作池进行处理。
+
+所以应该在Connection的StartReader()方法中修改：
+>ainx/anet/connection.go
+```go
+/*
+	读消息Goroutine，用于从客户端中读取数据
+ */
+func (c *Connection) StartReader() {
+	fmt.Println("Reader Goroutine is  running")
+	defer fmt.Println(c.RemoteAddr().String(), " conn reader exit!")
+	defer c.Stop()
+
+	for  {
+		// 创建拆包解包的对象...
+		
+		//读取客户端的Msg head...
+		
+		//拆包，得到msgid 和 datalen 放在msg中...
+		
+		//根据 dataLen 读取 data，放在msg.Data中...
+
+		//得到当前客户端请求的Request数据
+		req := Request{
+			conn:c,
+			msg:msg,
+		}
+
+		if utils.GlobalObject.WorkerPoolSize > 0 {
+			//已经启动工作池机制，将消息交给Worker处理
+			c.MsgHandler.SendMsgToTaskQueue(&req)
+		} else {
+			//从绑定好的消息和对应的处理方法中执行对应的Handle方法
+			go c.MsgHandler.DoMsgHandler(&req)
+		}
+	}
+}
+```
+这里并没有强制使用多任务Worker机制，而是判断用户配置WorkerPoolSize的个数，如果大于0，那么我就启动多任务机制处理链接请求消息，如果=0或者<0那么，我们依然只是之前的开启一个临时的Goroutine处理客户端请求消息。
+
+## 使用Ainx-V0.8完成应用程序
+因为程序的外部接口没有改变，所以我们可以沿用上一章的测试。
+
+# Ainx的链接管理

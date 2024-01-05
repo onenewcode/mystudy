@@ -569,11 +569,18 @@ if __name__ == '__main__':
         "https://blog.csdn.net/studycodeday/article/details/135328484",
         "https://blog.csdn.net/studycodeday/article/details/135099493",
         "https://blog.csdn.net/studycodeday/article/details/134994658",
-        "https://blog.csdn.net/studycodeday/article/details/135330100"
+        "https://blog.csdn.net/studycodeday/article/details/135330100",
+        "https://blog.csdn.net/studycodeday/article/details/135377945",
+        "https://blog.csdn.net/studycodeday/article/details/135269943",
+        "https://blog.csdn.net/studycodeday/article/details/134992066",
+        "https://blog.csdn.net/studycodeday/article/details/134700170",
+        "https://blog.csdn.net/studycodeday/article/details/135405598",
+        "https://blog.csdn.net/studycodeday/article/details/135405174"
         ]
   for i in range(100000):
       ip = randomIP()
       agent = randomUserAgent()
       openUrl(ip, agent,urls)
+      requests.get
       time.sleep(random.randint(30,100))
 print("一次循环结束")     
