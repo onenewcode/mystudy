@@ -2285,3 +2285,716 @@ func (c *Connection) StartReader() {
 因为程序的外部接口没有改变，所以我们可以沿用上一章的测试。
 
 # Ainx的链接管理
+现在我们要为Ainx框架增加链接个数的限定，如果超过一定量的客户端个数，Ainx为了保证后端的及时响应，而拒绝链接请求。
+## 创建链接管理模块
+这里面我们就需要对链接有一个管理的模块.我们在ainterface和Anet分别建立iconnmanager.go和connmanager.go文件
+>ainx/ainterface/iconmanager.go
+
+```go
+package ainterface
+
+/*
+连接管理抽象层
+*/
+type IConnManager interface {
+	Add(conn IConnection)                   //添加链接
+	Remove(conn IConnection)                //删除连接
+	Get(connID uint32) (IConnection, error) //利用ConnID获取链接
+	Len() int                               //获取当前连接
+	ClearConn()                             //删除并停止所有链接
+
+}
+```
+这里定义了一些接口方法，添加链接、删除链接、根据ID获取链接、链接数量、和清除链接等。
+
+>ainx/anet/connmanager.go
+```go
+package anet
+
+import (
+	"ainx/ainterface"
+	"errors"
+	"fmt"
+	"sync"
+)
+
+/*
+连接管理模块,管理连接的添加，删除，
+*/
+type ConnManager struct {
+	connections map[uint32]ainterface.IConnection //管理的连接信息
+	connLock    sync.RWMutex                      //读写连接的读写锁
+}
+
+/*
+创建一个链接管理
+*/
+func NewConnManager() *ConnManager {
+	return &ConnManager{
+		connections: make(map[uint32]ainterface.IConnection),
+	}
+}
+
+// 添加链接
+func (connMgr *ConnManager) Add(conn ainterface.IConnection) {
+	//保护共享资源Map 加写锁
+	connMgr.connLock.Lock()
+	defer connMgr.connLock.Unlock()
+
+	//将conn连接添加到ConnMananger中
+	connMgr.connections[conn.GetConnID()] = conn
+
+	fmt.Println("connection add to ConnManager successfully: conn num = ", connMgr.Len())
+}
+
+// 删除连接
+func (connMgr *ConnManager) Remove(conn ainterface.IConnection) {
+	//保护共享资源Map 加写锁
+	connMgr.connLock.Lock()
+	defer connMgr.connLock.Unlock()
+
+	//删除连接信息
+	delete(connMgr.connections, conn.GetConnID())
+
+	fmt.Println("connection Remove ConnID=", conn.GetConnID(), " successfully: conn num = ", connMgr.Len())
+}
+
+// 利用ConnID获取链接
+func (connMgr *ConnManager) Get(connID uint32) (ainterface.IConnection, error) {
+	//保护共享资源Map 加读锁
+	connMgr.connLock.RLock()
+	defer connMgr.connLock.RUnlock()
+
+	if conn, ok := connMgr.connections[connID]; ok {
+		return conn, nil
+	} else {
+		return nil, errors.New("connection not found")
+	}
+}
+
+// 获取当前连接
+func (connMgr *ConnManager) Len() int {
+	return len(connMgr.connections)
+}
+
+// 清除并停止所有连接
+func (connMgr *ConnManager) ClearConn() {
+	//保护共享资源Map 加写锁
+	connMgr.connLock.Lock()
+	defer connMgr.connLock.Unlock()
+
+	//停止并删除全部的连接信息
+	for connID, conn := range connMgr.connections {
+		//停止
+		conn.Stop()
+		//删除
+		delete(connMgr.connections, connID)
+	}
+
+	fmt.Println("Clear All Connections successfully: conn num = ", connMgr.Len())
+}
+```
+这里面ConnManager中，其中用一个map来承载全部的连接信息，key是连接ID，value则是连接本身。其中有一个读写锁connLock主要是针对map做多任务修改时的保护作用。Remove()方法只是单纯的将conn从map中摘掉，而ClearConn()方法则会先停止链接业务，然后再从map中摘除。
+
+## 链接管理模块集成到Ainx中
+### ConnManager集成到Server中
+现在需要将ConnManager添加到Server中,让Server管理连接。
+>ainx/anet/server.go
+```go
+//iServer 接口实现，定义一个Server服务类
+type Server struct {
+	//服务器的名称
+	Name string
+	//tcp4 or other
+	IPVersion string
+	//服务绑定的IP地址
+	IP string
+	//服务绑定的端口
+	Port int
+	//当前Server的消息管理模块，用来绑定MsgId和对应的处理方法
+	msgHandler ziface.IMsgHandle
+	//当前Server的链接管理器
+	ConnMgr ziface.IConnManager
+}
+
+/*
+创建一个服务器句柄
+*/
+func NewServer() ainterface.IServer {
+	//先初始化全局配置文件
+	utils.GlobalSetting.Reload()
+
+	s := &Server{
+		Name:       utils.GlobalSetting.Name, //从全局参数获取
+		IPVersion:  "tcp4",
+		IP:         utils.GlobalSetting.Host,    //从全局参数获取
+		Port:       utils.GlobalSetting.TcpPort, //从全局参数获取
+		msgHandler: NewMsgHandle(),
+		ConnMgr:    NewConnManager(), //创建ConnManager
+	}
+	return s
+}
+```
+那么，既然server具备了ConnManager成员，在获取的时候需要给抽象层提供一个获取ConnManager方法
+>ainx/ainterface/iserver.go
+```go
+type IServer interface{
+	//启动服务器方法
+	Start()
+	//停止服务器方法
+	Stop()
+	//开启业务服务方法
+	Serve()
+	//路由功能：给当前服务注册一个路由业务方法，供客户端链接处理使用
+	AddRouter(msgId uint32, router IRouter)
+	//得到链接管理
+	GetConnMgr() IConnManager
+}
+```
+
+完善实体类server，为其添加GetConnMgr()方法。
+>ainx/anet/server.go
+```go
+//得到链接管理
+func (s *Server) GetConnMgr() ziface.IConnManager {
+	return s.ConnMgr
+}
+```
+因为我们现在在server中有链接的管理，有的时候conn也需要得到这个ConnMgr的使用权，那么我们需要将Server和Connection建立能够互相索引的关系，我们在Connection中，添加Server当前conn隶属的server句柄。
+>ainx/anet/connection.go
+```go
+
+type Connection struct {
+	//当前Conn属于哪个Server
+	TcpServer ainterface.IServer
+	//当前链接的socket TCP套接字
+	Conn *net.TCPConn
+	// 当前链接的ID也可以称作SessionID，ID全局唯一
+	ConnID uint32
+	// 当前链接的关闭状态
+	isClosed bool
+
+	//消息管理MsgId和对应处理方法的消息管理模块
+	MsgHandler ainterface.IMsgHandle
+
+	// 告知该链接已经退出/停止的channel
+	ExitBuffChan chan bool
+	//无缓冲管道，用于读、写两个goroutine之间的消息通信
+	msgChan     chan []byte
+	msgBuffChan chan []byte //定义缓冲消息队列大小
+}
+
+```
+
+### 链接的添加
+那么我们什么选择将创建好的连接添加到ConnManager中呢，这里我们选择在初始化一个新链接的时候，加进来就好了
+>ainx/anet/connection.go
+```go
+// 创建链接的方法
+func NewConnection(server ainterface.IServer, conn *net.TCPConn, connID uint32, msgHandler ainterface.IMsgHandle) *Connection {
+	c := &Connection{
+		TcpServer:    server,
+		Conn:         conn,
+		ConnID:       connID,
+		isClosed:     false,
+		MsgHandler:   msgHandler,
+		ExitBuffChan: make(chan bool),
+		msgChan:      make(chan []byte),                                    //msgChan初始化
+		msgBuffChan:  make(chan []byte, utils.GlobalSetting.MaxMsgChanLen), //不要忘记初始化
+	}
+	//将新创建的Conn添加到链接管理中
+	c.TcpServer.GetConnMgr().Add(c) //将当前新创建的连接添加到ConnManager中
+	return c
+}
+```
+### Server中添加链接数量的判断
+在server的Start()方法中，在Accept与客户端链接建立成功后，可以直接对链接的个数做一个判断,来限制服务器的的最大连接数量
+>ainx/anet/server.go
+```go
+func (s *Server) Start() {
+	fmt.Printf("[START] Server name: %s,listenner at IP: %s, Port %d is starting\n", s.Name, s.IP, s.Port)
+	fmt.Printf("[Ainx] Version: %s, MaxConn: %d, MaxPacketSize: %d\n",
+		utils.GlobalSetting.Version,
+		utils.GlobalSetting.MaxConn,
+		utils.GlobalSetting.MaxPacketSize)
+
+	// 开启一个go去做服务端的Listener业务
+	// todo 未来目标是提供更多协议，可以利用if或者switch对IPVersion进行判断而选择采取哪种协议，下面整个方法要重写
+	go func() {
+		// ....
+
+		//3 启动server网络连接业务
+		for {
+			//3.1 阻塞等待客户端建立连接请求
+			conn, err := listener.AcceptTCP()
+			if err != nil {
+				fmt.Println("Accept err ", err)
+				continue
+			}
+			//3.2 设置服务器最大连接控制,如果超过最大连接，那么则关闭此新的连接,从而控制系统的负载能力
+			if s.ConnMgr.Len() >= utils.GlobalSetting.MaxConn {
+				conn.Close()
+				continue
+			}
+			//3.3 处理该新连接请求的 业务 方法， 此时应该有 handler 和 conn是绑定的
+			dealConn := NewConnection(s, conn, cid, s.msgHandler)
+			cid++
+
+			//3.4 启动当前链接的处理业务
+			go dealConn.Start()
+		}
+	}()
+}
+```
+当然，我们应该在配置文件config.yaml或者在GlobalSetting全局配置中，定义好我们期望的连接的最大数目限制MaxConn。
+### 连接的删除
+
+我们应该在连接停止的时候，将该连接从ConnManager中删除，所以在connection的Stop()方法中添加。
+>ainx/anet/connecion.go
+```go
+// 停止链接，结束当前链接状态，并且从ConnManager中删除
+func (c *Connection) Stop() {
+	fmt.Println("Conn Stop()...ConnID = ", c.ConnID)
+	//1.如果当前链接关闭
+	if c.isClosed == true {
+		return
+	}
+	c.isClosed = true
+	//==================
+	//如果用户注册了该链接的关闭回调业务，那么在此刻应该显示调用
+	c.TcpServer.CallOnConnStop(c)
+	//==================
+
+	// 关闭socket链接
+	err := c.Conn.Close()
+	if err != nil {
+		return
+	}
+	//通知从缓冲队列读数据的业务，该链接已经关闭
+	c.ExitBuffChan <- true
+
+	//将链接从连接管理器中删除
+	c.TcpServer.GetConnMgr().Remove(c)
+
+	//关闭该链接全部管道
+	close(c.ExitBuffChan)
+	close(c.msgChan)
+}
+```
+当然，我们也应该在server停止的时候，将全部的连接清空,所以我们应该修改server的Stop函数
+>ainx/anet/server.go
+```go
+func (s *Server) Stop() {
+	fmt.Println("[STOP] Ainx server , name ", s.Name)
+	//将其他需要清理的连接信息或者其他信息 也要一并停止或者清理
+	s.ConnMgr.ClearConn()
+}
+```
+## 链接的带缓冲的发包方法
+我们之前给Connection提供了一个发消息的方法SendMsg()，这个是将数据发送到一个无缓冲的channel中msgChan。但是如果客户端链接比较多的话，如果对方处理不及时，可能会出现短暂的阻塞现象，我们可以做一个提供一定缓冲的发消息方法，做一些非阻塞的发送体验。
+>ainx/ainterface/iconnection.go
+```go
+type IConnection interface {
+	// 启动连接，让当前连接开始工作
+	Start()
+	// 停止链接，结束当前连接状态
+	Stop()
+	//从当前连接获取原始的socket TCPConn GetTCPConnection() *net.TCPConn //获取当前连接ID
+	GetConnID() uint32 //获取远程客户端地址信息 RemoteAddr() net.Addr
+	//获取远程客户端地址信息
+	RemoteAddr() net.Addr
+	GetConnection() net.Conn //  (从当前连接获取原始的socket TCPConn)
+	//直接将Message数据发送数据给远程的TCP客户端
+	SendMsg(msgId uint32, data []byte) error
+	//直接将Message数据发送给远程的TCP客户端(有缓冲)
+	SendBuffMsg(msgId uint32, data []byte) error //添加带缓冲发送消息接口
+}
+```
+
+接下来我们为Connection 添加msgBuffChan属性
+>zinx/znet/connection.go
+```go
+type Connection struct {
+	//当前Conn属于哪个Server
+	TcpServer ainterface.IServer
+	//当前链接的socket TCP套接字
+	Conn *net.TCPConn
+	// 当前链接的ID也可以称作SessionID，ID全局唯一
+	ConnID uint32
+	// 当前链接的关闭状态
+	isClosed bool
+
+	//消息管理MsgId和对应处理方法的消息管理模块
+	MsgHandler ainterface.IMsgHandle
+
+	// 告知该链接已经退出/停止的channel
+	ExitBuffChan chan bool
+	//无缓冲管道，用于读、写两个goroutine之间的消息通信
+	msgChan     chan []byte
+	msgBuffChan chan []byte //定义缓冲消息队列大小
+}
+// 创建链接的方法
+func NewConnection(server ainterface.IServer, conn *net.TCPConn, connID uint32, msgHandler ainterface.IMsgHandle) *Connection {
+	c := &Connection{
+		TcpServer:    server,
+		Conn:         conn,
+		ConnID:       connID,
+		isClosed:     false,
+		MsgHandler:   msgHandler,
+		ExitBuffChan: make(chan bool),
+		msgChan:      make(chan []byte),                                    //msgChan初始化
+		msgBuffChan:  make(chan []byte, utils.GlobalSetting.MaxMsgChanLen), //不要忘记初始化
+	}
+	//将新创建的Conn添加到链接管理中
+	c.TcpServer.GetConnMgr().Add(c) //将当前新创建的连接添加到ConnManager中
+	return c
+}
+```
+然后我们实现SendBuffMsg()方法
+```go
+func (c *Connection) SendBuffMsg(msgId uint32, data []byte) error {
+	if c.isClosed == true {
+		return errors.New("Connection closed when send buff msg")
+	}
+	//将data封包，并且发送
+	dp := NewDataPack()
+	msg, err := dp.Pack(NewMsgPackage(msgId, data))
+	if err != nil {
+		fmt.Println("Pack error msg id = ", msgId)
+		return errors.New("Pack error msg ")
+	}
+
+	//写回客户端
+	c.msgBuffChan <- msg
+
+	return nil
+}
+```
+我们在Writer中也要有对msgBuffChan的数据监控，我们我们只需在select中添加一个新的case就可以
+```go
+/*
+写消息Goroutine,用户将数据发送给客户端
+*/
+func (c *Connection) StartWriter() {
+
+	fmt.Println("[Writer Goroutine is running]")
+	defer fmt.Println(c.RemoteAddr().String(), "[conn Writer exit!]")
+
+	for {
+		select {
+		case data := <-c.msgChan:
+			//有数据要写给客户端
+			if _, err := c.Conn.Write(data); err != nil {
+				fmt.Println("Send Data error:, ", err, " Conn Writer exit")
+				return
+			}
+			//针对有缓冲channel需要些的数据处理
+		case data, ok := <-c.msgBuffChan:
+			if ok {
+				//有数据要写给客户端
+				if _, err := c.Conn.Write(data); err != nil {
+					fmt.Println("Send Buff Data error:, ", err, " Conn Writer exit")
+					return
+				}
+			} else {
+				fmt.Println("msgBuffChan is Closed")
+				break
+
+			}
+		case <-c.ExitBuffChan:
+			return
+		}
+	}
+}
+```
+## 注册链接启动/停止自定义Hook方法功能
+有的时候，在创建链接的时候，希望在创建链接之后、和断开链接之前，执行一些用户自定义的业务。那么我们就需要给Ainx增添两个链接创建后和断开前时机的回调函数，一般也称作Hook(钩子)函数。
+
+我们可以通过Server来注册conn的hook方法
+>ainx/ainterface/iserver.go
+```go
+package ainterface
+
+// 定义服务器接口
+type IServer interface {
+	//启动服务器方法
+	Start()
+	//停止服务器方法
+	Stop()
+	//开启业务服务方法
+	Serve()
+	//路由功能：给当前服务注册一个路由业务方法，供客户端链接处理使用
+	AddRouter(msgId uint32, router IRouter)
+	//得到链接管理
+	GetConnMgr() IConnManager
+	//设置该Server的连接创建时Hook函数
+	SetOnConnStart(func(IConnection))
+	//设置该Server的连接断开时的Hook函数
+	SetOnConnStop(func(IConnection))
+	//调用连接OnConnStart Hook函数
+	CallOnConnStart(conn IConnection)
+	//调用连接OnConnStop Hook函数
+	CallOnConnStop(conn IConnection)
+	// todo 路由分组 未来目标 添加类似hertz Group分组，为每个链接分组
+}
+
+```
+让server实现iserver的接口
+>ainx/anet/server.go
+```go
+type Server struct {
+	// 设置服务器名称
+	Name string
+	// 设置网络协议版本
+	IPVersion string
+	// 设置服务器绑定IP
+	IP string
+	// 设置端口号
+	Port string
+	//当前Server的消息管理模块，用来绑定MsgId和对应的处理方法
+	msgHandler ainterface.IMsgHandle
+	//当前Server的链接管理器
+	ConnMgr ainterface.IConnManager
+	//todo 未来目标提供更多option字段来控制server实例化
+	// =======================
+	//新增两个hook函数原型
+
+	//该Server的连接创建时Hook函数
+	OnConnStart func(conn ainterface.IConnection)
+	//该Server的连接断开时的Hook函数
+	OnConnStop func(conn ainterface.IConnection)
+
+	// =======================
+}
+```
+实现添加hook函数的接口和调用hook函数的接口
+```go
+
+// 得到链接管理
+func (s *Server) GetConnMgr() ainterface.IConnManager {
+	return s.ConnMgr
+}
+
+// 设置该Server的连接创建时Hook函数
+func (s *Server) SetOnConnStart(hookFunc func(ainterface.IConnection)) {
+	s.OnConnStart = hookFunc
+}
+
+// 设置该Server的连接断开时的Hook函数
+func (s *Server) SetOnConnStop(hookFunc func(ainterface.IConnection)) {
+	s.OnConnStop = hookFunc
+}
+
+// 调用连接OnConnStart Hook函数
+func (s *Server) CallOnConnStart(conn ainterface.IConnection) {
+	if s.OnConnStart != nil {
+		fmt.Println("---> CallOnConnStart....")
+		s.OnConnStart(conn)
+	}
+}
+
+// 调用连接OnConnStop Hook函数
+func (s *Server) CallOnConnStop(conn ainterface.IConnection) {
+	if s.OnConnStop != nil {
+		fmt.Println("---> CallOnConnStop....")
+		s.OnConnStop(conn)
+	}
+}
+```
+那么接下来，需要选定两个Hook方法的调用位置。
+
+一个是创建链接之后:
+>ainx/anet/connection.go
+```go
+//启动连接，让当前连接开始工作
+func (c *Connection) Start() {
+	//1 开启用户从客户端读取数据流程的Goroutine
+	go c.StartReader()
+	//2 开启用于写回客户端数据流程的Goroutine
+	go c.StartWriter()
+    
+    //==================
+	//按照用户传递进来的创建连接时需要处理的业务，执行钩子方法
+	c.TcpServer.CallOnConnStart(c)
+    //==================
+}
+```
+一个是停止链接之前：
+>ainx/anet/connection.go
+```go
+//停止连接，结束当前连接状态M
+func (c *Connection) Stop() {
+	fmt.Println("Conn Stop()...ConnID = ", c.ConnID)
+	//如果当前链接已经关闭
+	if c.isClosed == true {
+		return
+	}
+	c.isClosed = true
+
+    //==================
+	//如果用户注册了该链接的关闭回调业务，那么在此刻应该显示调用
+	c.TcpServer.CallOnConnStop(c)
+    //==================
+
+	// 关闭socket链接
+	c.Conn.Close()
+	//关闭Writer
+	c.ExitBuffChan <- true
+
+	//将链接从连接管理器中删除
+	c.TcpServer.GetConnMgr().Remove(c)
+
+	//关闭该链接全部管道
+	close(c.ExitBuffChan)
+	close(c.msgBuffChan)
+}
+```
+## 使用Ainx-V0.9完成应用程序
+好了，现在我们基本上已经将全部的连接管理的功能集成到Zinx中了，接下来就需要测试一下链接管理模块是否可以使用了。
+写一个服务端:
+>Server.go
+```go
+package main
+
+import (
+	"ainx/ainterface"
+	"ainx/anet"
+	"fmt"
+)
+
+// ping test 自定义路由
+type PingRouter struct {
+	anet.BaseRouter
+}
+
+// Ping Handle
+func (this *PingRouter) Handle(request ainterface.IRequest) {
+	fmt.Println("Call PingRouter Handle")
+	//先读取客户端的数据，再回写ping...ping...ping
+	fmt.Println("recv from client : msgId=", request.GetMsgID(), ", data=", string(request.GetData()))
+
+	err := request.GetConnection().SendBuffMsg(0, []byte("ping...ping...ping"))
+	if err != nil {
+		fmt.Println(err)
+	}
+}
+
+type HelloZinxRouter struct {
+	anet.BaseRouter
+}
+
+// HelloZinxRouter Handle
+func (this *HelloZinxRouter) Handle(request ainterface.IRequest) {
+	fmt.Println("Call HelloZinxRouter Handle")
+	//先读取客户端的数据，再回写ping...ping...ping
+	fmt.Println("recv from client : msgId=", request.GetMsgID(), ", data=", string(request.GetData()))
+
+	err := request.GetConnection().SendBuffMsg(1, []byte("Hello Zinx Router V0.8"))
+	if err != nil {
+		fmt.Println(err)
+	}
+}
+
+// 创建连接的时候执行
+func DoConnectionBegin(conn ainterface.IConnection) {
+	fmt.Println("DoConnecionBegin is Called ... ")
+	err := conn.SendMsg(2, []byte("DoConnection BEGIN..."))
+	if err != nil {
+		fmt.Println(err)
+	}
+}
+
+// 连接断开的时候执行
+func DoConnectionLost(conn ainterface.IConnection) {
+	fmt.Println("DoConneciotnLost is Called ... ")
+}
+
+func main() {
+	//创建一个server句柄
+	s := anet.NewServer()
+
+	//注册链接hook回调函数
+	s.SetOnConnStart(DoConnectionBegin)
+	s.SetOnConnStop(DoConnectionLost)
+
+	//配置路由
+	s.AddRouter(0, &PingRouter{})
+	s.AddRouter(1, &HelloZinxRouter{})
+
+	//开启服务
+	s.Serve()
+}
+
+```
+
+>Client.go
+```go
+package main
+
+import (
+	"ainx/anet"
+	"fmt"
+	"io"
+	"net"
+	"time"
+)
+
+/*
+模拟客户端
+*/
+func main() {
+
+	fmt.Println("Client Test ... start")
+	//3秒之后发起测试请求，给服务端开启服务的机会
+	time.Sleep(3 * time.Second)
+
+	conn, err := net.Dial("tcp", "127.0.0.1:8080")
+	if err != nil {
+		fmt.Println("client start err, exit!")
+		return
+	}
+
+	for {
+		//发封包message消息
+		dp := anet.NewDataPack()
+		msg, _ := dp.Pack(anet.NewMsgPackage(0, []byte("Ainx V0.6 Client0 Test Message")))
+		_, err := conn.Write(msg)
+		if err != nil {
+			fmt.Println("write error err ", err)
+			return
+		}
+
+		//先读出流中的head部分
+		headData := make([]byte, dp.GetHeadLen())
+		_, err = io.ReadFull(conn, headData) //ReadFull 会把msg填充满为止
+		if err != nil {
+			fmt.Println("read head error")
+			break
+		}
+		//将headData字节流 拆包到msg中
+		msgHead, err := dp.Unpack(headData)
+		if err != nil {
+			fmt.Println("server unpack err:", err)
+			return
+		}
+
+		if msgHead.GetDataLen() > 0 {
+			//msg 是有data数据的，需要再次读取data数据
+			msg := msgHead.(*anet.Message)
+			msg.Data = make([]byte, msg.GetDataLen())
+
+			//根据dataLen从io中读取字节流
+			_, err := io.ReadFull(conn, msg.Data)
+			if err != nil {
+				fmt.Println("server unpack data err:", err)
+				return
+			}
+
+			fmt.Println("==> Recv Msg: ID=", msg.Id, ", len=", msg.DataLen, ", data=", string(msg.Data))
+		}
+
+		time.Sleep(1 * time.Second)
+	}
+}
+
+```

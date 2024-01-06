@@ -575,7 +575,13 @@ if __name__ == '__main__':
         "https://blog.csdn.net/studycodeday/article/details/134992066",
         "https://blog.csdn.net/studycodeday/article/details/134700170",
         "https://blog.csdn.net/studycodeday/article/details/135405598",
-        "https://blog.csdn.net/studycodeday/article/details/135405174"
+        "https://blog.csdn.net/studycodeday/article/details/135405174",
+        "https://blog.csdn.net/studycodeday/article/details/135405988",
+        "https://blog.csdn.net/studycodeday/article/details/135408051",
+        "https://bbs.huaweicloud.com/blogs/418029",
+        "https://bbs.huaweicloud.com/blogs/418009",
+        "https://bbs.huaweicloud.com/blogs/418008",
+        "https://bbs.huaweicloud.com/blogs/418008"
         ]
   for i in range(100000):
       ip = randomIP()
