@@ -999,3 +999,330 @@ taskcreate(void (*fn)(void*), void *arg, uint stack)
 在命令提示符下
 go env -w GO111MODULE=auto
 Go 1.16 中的新模块更改
+
+#  Context
+## 为什么需要Context
+Go语言需要Context主要是为了在并发环境中有效地管理请求的上下文信息。Context提供了在函数之间传递取消信号、超时、截止时间等元数据的一种标准方式。
+
+**原因**
+- 取消操作： 在并发环境中，当一个请求被取消或者超时时，需要有效地通知相关的协程停止正在进行的工作。使用Context可以通过传递取消信号来实现这一点。
+- 超时控制： 在一些场景下，限制操作执行的时间是很重要的。Context提供了一个统一的方式来处理超时，确保在规定的时间内完成操作，防止程序无限期地等待。
+- 传递上下文信息： Context可以用于传递请求的元数据，例如请求的ID、用户信息等。这在跨多个函数调用的情况下非常有用，避免了在函数参数中传递大量的上下文信息。
+- 协程之间的通信： Go语言中的协程（goroutine）是轻量级的线程，它们之间需要有效地通信。Context提供了一个标准的方式来传递信号和元数据，以便协程之间协同工作。
+- 资源管理： 在一些场景下，需要确保在函数执行完毕后释放相关的资源，不管函数是正常执行还是因为取消或超时而提前退出。Context可以帮助在正确的时机释放资源。
+- 综上所述，Context是Go语言中处理并发、超时和取消等问题的一种优雅而一致的方式，使得代码更加健壮、可维护，并且更容易在不同的并发场景中工作。
+
+## 多任务超时例子
+我们都知道在go语言并发编程中，我们可以采用select来监听协程的的通道控制协程，但是如下面的这种情况仅仅凭借select就显得有些无能为力：
+1. 支持多级嵌套，父任务停止后，子任务自动停止
+2. 控制停止顺序，先停EFG 再停BCD 最后停A
+```mermaid
+    graph LR
+    A[A]---B[B]
+	B---C[C]
+	C---D[D]
+	A---E[E]
+	E---F[F]
+	F---G[G]
+```
+目标1还好说，目标2好像就没那么灵活了，正式讨论context如何解决这些问题前，我们先看下常规context的使用
+## Context结构
+context 包是 Go 语言中用于处理请求的上下文的标准库之一。它提供了一种在函数之间传递取消信号、超时和截止时间的机制。
+```go
+type Context interface {
+	Deadline() (deadline time.Time, ok bool)
+	Done() <-chan struct{}
+	Err() error
+	Value(key interface{}) interface{}
+}
+```
+
+- `Deadline()`返回一个完成工作的截止时间，表示上下文应该被取消的时间。如果 ok==false 表示没有设置截止时间。
+
+- `Done()`返回一个 Channel，这个 Channel 会在当前工作完成时被关闭，表示上下文应该被取消。如果无法取消此上下文，则 Done 可能返回 nil。多次调用 Done 方法会返回同一个 Channel。
+
+- `Err()`返回 Context 结束的原因，它只会在 Done 方法对应的 Channel 关闭时返回非空值。如果 Context 被取消，会返回context.Canceled 错误；如果 Context 超时，会返回context.DeadlineExceeded错误。
+
+- `Value()`从 Context 中获取键对应的值。如果未设置 key 对应的值则返回 nil。以相同 key 多次调用会返回相同的结果。
+
+另外，context 包中提供了两个创建默认上下文的函数：
+```go
+// TODO 返回一个非 nil 但空的上下文。
+// 当不清楚要使用哪种上下文或无可用上下文尚应使用 context.TODO。
+func TODO() Context
+
+// Background 返回一个非 nil 但空的上下文。
+// 它不会被 cancel，没有值，也没有截止时间。它通常由 main 函数、初始化和测试使用，并作为处理请求的顶级上下文。
+func Background() Context
+```
+还有四个基于父级创建不同类型上下文的函数：
+```go
+// WithCancel 基于父级创建一个具有 Done channel 的 context
+func WithCancel(parent Context) (Context, CancelFunc)
+
+// WithDeadline 基于父级创建一个不晚于 d 结束的 context
+func WithDeadline(parent Context, d time.Time) (Context, CancelFunc)
+
+// WithTimeout 等同于 WithDeadline(parent, time.Now().Add(timeout))
+func WithTimeout(parent Context, timeout time.Duration) (Context, CancelFunc)
+
+// WithValue 基于父级创建一个包含指定 key 和 value 的 context
+func WithValue(parent Context, key, val interface{}) Context
+```
+在后面会详细介绍这些不同类型 context 的用法。
+
+# Context各种使用方法
+## 创建context
+context包主要提供了两种方式创建context:
+- context.Backgroud()
+- context.TODO()
+
+这两个函数其实只是互为别名，没有差别，官方给的定义是：
+- context.Background 是上下文的默认值，所有其他的上下文都应该从它衍生（Derived）出来。
+- context.TODO 应该只在不确定应该使用哪种上下文时使用；
+所以在大多数情况下，我们都使用context.Background作为起始的上下文向下传递。
+
+上面的两种方式是创建根context，不具备任何功能，具体实践还是要依靠context包提供的With系列函数来进行派生：
+```go
+func WithCancel(parent Context) (ctx Context, cancel CancelFunc)
+func WithDeadline(parent Context, deadline time.Time) (Context, CancelFunc)
+func WithTimeout(parent Context, timeout time.Duration) (Context, CancelFunc)
+func WithValue(parent Context, key, val interface{}) Context
+```
+
+## valueCtx
+### valueCtx结构体
+```go
+type valueCtx struct {
+    Context
+    key, val interface{}
+}
+
+func (c *valueCtx) Value(key interface{}) interface{} {
+    if c.key == key {
+        return c.val
+    }
+    return c.Context.Value(key)
+}
+```
+valueCtx利用一个Context类型的变量来表示父节点context，所以当前context继承了父context的所有信息；valueCtx类型还携带一组键值对，也就是说这种context可以携带额外的信息。valueCtx实现了Value方法，用以在context链路上获取key对应的值，如果当前context上不存在需要的key,会沿着context链向上寻找key对应的值，直到根节点。
+
+### WithValue
+我们日常在业务开发中都希望能有一个trace_id能串联所有的日志，这就需要我们打印日志时能够获取到这个trace_id，在python中我们可以用gevent.local来传递，在java中我们可以用ThreadLocal来传递，在Go语言中我们就可以使用Context来传递，通过使用WithValue来创建一个携带trace_id的context，然后不断透传下去，打印日志时输出即可，来看使用例子：
+```go
+package main
+
+import (
+	"context"
+	"fmt" // 我们需要使用fmt包中的Println()函数
+	"strings"
+	"time"
+
+	"github.com/google/uuid"
+)
+
+const (
+	KEY = "trace_id"
+)
+
+// 生成随机ID
+func NewRequestID() string {
+	return strings.Replace(uuid.New().String(), "-", "", -1)
+}
+// 生成携带值的context
+func NewContextWithTraceID() context.Context {
+	ctx := context.WithValue(context.Background(), KEY, NewRequestID())
+	return ctx
+}
+//打印数据
+func PrintLog(ctx context.Context, message string) {
+	fmt.Printf("%s|info|trace_id=%s|%s", time.Now().Format("2006-01-02 15:04:05"), GetContextValue(ctx, KEY), message)
+}
+// 获取context中的值
+func GetContextValue(ctx context.Context, k string) string {
+	v, ok := ctx.Value(k).(string)
+	if !ok {
+		return ""
+	}
+	return v
+}
+
+func ProcessEnter(ctx context.Context) {
+	PrintLog(ctx, "Golang梦工厂")
+}
+
+func main() {
+	ProcessEnter(NewContextWithTraceID())
+}
+```
+
+**结果**
+```shell
+2024-01-10 18:55:03|info|trace_id=c4eeb76d427449fda52a4775ccbc0509|Golang梦工厂
+
+```
+
+## cancelCtx
+### cancelCtx结构体
+```go
+type cancelCtx struct {
+    Context
+
+    mu       sync.Mutex            // 同步锁，保护下面的所有字段
+    done     chan struct{}         //惰性创建，由第一次取消调用关闭
+    children map[canceler]struct{} // 在第一次取消调用时，设置为 nil
+    err      error                 // 在第一次取消调用时设置为 non-nil 
+}
+
+type canceler interface {
+    cancel(removeFromParent bool, err error)
+    Done() <-chan struct{}
+}
+```
+跟valueCtx类似，cancelCtx中也有一个context变量作为父节点；变量done表示一个channel，用来表示传递关闭信号；children表示一个map，存储了当前context节点下的子节点；err用于存储错误信息表示任务结束的原因。
+
+### withCancel
+日常业务开发中我们往往为了完成一个复杂的需求会开多个gouroutine去做一些事情，这就导致我们会在一次请求中开了多个goroutine确无法控制他们，这时我们就可以使用withCancel来衍生一个context传递到不同的goroutine中，当我想让这些goroutine停止运行，就可以调用cancel来进行取消。
+```go
+package main
+
+import (
+	"context"
+	"fmt"
+	"time"
+)
+
+func main() {
+	ctx, cancel := context.WithCancel(context.Background())
+	go Speak(ctx)
+	time.Sleep(10 * time.Second)
+	cancel()
+	time.Sleep(1 * time.Second)
+}
+
+func Speak(ctx context.Context) {
+	for range time.Tick(time.Second) {
+		select {
+		case <-ctx.Done():
+			fmt.Println("我要闭嘴了")
+			return
+		default:
+			fmt.Println("balabalabalabala")
+		}
+	}
+}
+
+```
+
+## timerCtx
+timerCtx是一种基于cancelCtx的context类型，从字面上就能看出，这是一种可以定时取消的context。
+```go
+type timerCtx struct {
+    cancelCtx
+    timer *time.Timer // Under cancelCtx.mu.
+
+    deadline time.Time
+}
+
+func (c *timerCtx) Deadline() (deadline time.Time, ok bool) {
+    return c.deadline, true
+}
+
+func (c *timerCtx) cancel(removeFromParent bool, err error) {
+    //将内部的cancelCtx取消
+    c.cancelCtx.cancel(false, err)
+    if removeFromParent {
+        // Remove this timerCtx from its parent cancelCtx's children.
+        removeChild(c.cancelCtx.Context, c)
+    }
+    c.mu.Lock()
+    if c.timer != nil {
+        取消计时器
+        c.timer.Stop()
+        c.timer = nil
+    }
+    c.mu.Unlock()
+}
+```
+timerCtx内部使用cancelCtx实现取消，另外使用定时器timer和过期时间deadline实现定时取消的功能。timerCtx在调用cancel方法，会先将内部的cancelCtx取消，如果需要则将自己从cancelCtx祖先节点上移除，最后取消计时器。
+### WithDeadline
+WithDeadline 用于设置一个绝对时间，表示在某个具体的时间点超时，例如 context.WithDeadline(parentContext, time.Now().Add(10 * time.Second)) 表示在当前时间的 10 秒后超时。
+```go
+package main
+
+import (
+	"context"
+	"fmt"
+	"time"
+)
+
+func main() {
+	HttpHandler()
+}
+
+func NewContextWithTimeout() (context.Context, context.CancelFunc) {
+	return context.WithDeadline(context.Background(), time.Now().Add(10*time.Second))
+}
+
+func HttpHandler() {
+	ctx, cancel := NewContextWithTimeout()
+	defer cancel()
+	deal(ctx)
+}
+
+func deal(ctx context.Context) {
+	for i := 0; i < 10; i++ {
+		time.Sleep(1 * time.Second)
+		select {
+		case <-ctx.Done():
+			fmt.Println(ctx.Err())
+			return
+		default:
+			fmt.Printf("deal time is %d\n", i)
+		}
+	}
+}
+
+```
+### WithTimeout
+WithTimeout 用于设置一个相对时间，表示在多长时间后超时，例如 context.WithTimeout(parentContext, 5 * time.Second) 表示在 5 秒后超时。
+```go
+package main
+
+import (
+	"context"
+	"fmt"
+	"time"
+)
+
+func main() {
+	HttpHandler()
+}
+
+func NewContextWithTimeout() (context.Context, context.CancelFunc) {
+	return context.WithTimeout(context.Background(), 3*time.Second)
+}
+
+func HttpHandler() {
+	ctx, cancel := NewContextWithTimeout()
+	defer cancel()
+	deal(ctx)
+}
+
+func deal(ctx context.Context) {
+	for i := 0; i < 10; i++ {
+		time.Sleep(1 * time.Second)
+		select {
+		case <-ctx.Done():
+			fmt.Println(ctx.Err())
+			return
+		default:
+			fmt.Printf("deal time is %d\n", i)
+		}
+	}
+}
+
+```
+
+# 总结
+context主要用于父子任务之间的同步取消信号，本质上是一种协程调度的方式。另外在使用context时有两点值得注意：上游任务仅仅使用context通知下游任务不再需要，但不会直接干涉和中断下游任务的执行，由下游任务自行决定后续的处理操作，也就是说context的取消操作是无侵入的；context是线程安全的，因为context本身是不可变的（immutable），因此可以放心地在多个协程中传递使用。

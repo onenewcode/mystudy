@@ -2998,3 +2998,225 @@ func main() {
 }
 
 ```
+# Ainx的连接属性设置
+当我们在使用链接处理的时候，有时候希望和链接绑定一些用户的数据，或者参数。那么我们现在可以把当前链接设定一些传递参数的接口或者方法。
+```go
+package ainterface
+
+import "net"
+
+type IConnection interface {
+	// 启动连接，让当前连接开始工作
+	Start()
+	// 停止链接，结束当前连接状态
+	Stop()
+	//从当前连接获取原始的socket TCPConn GetTCPConnection() *net.TCPConn //获取当前连接ID
+	GetConnID() uint32 //获取远程客户端地址信息 RemoteAddr() net.Addr
+	//获取远程客户端地址信息
+	RemoteAddr() net.Addr
+	GetConnection() net.Conn //  (从当前连接获取原始的socket TCPConn)
+	//直接将Message数据发送数据给远程的TCP客户端
+	SendMsg(msgId uint32, data []byte) error
+	//直接将Message数据发送给远程的TCP客户端(有缓冲)
+	SendBuffMsg(msgId uint32, data []byte) error //添加带缓冲发送消息接口
+	//设置链接属性
+	SetProperty(key string, value interface{})
+	//获取链接属性
+	GetProperty(key string) (interface{}, error)
+	//移除链接属性
+	RemoveProperty(key string)
+}
+
+```
+这里增添了3个方法SetProperty(),GetProperty(),RemoveProperty(),用于设置,获取，移除属性，property这里我们采用`map[string]interface{}`以方便存储各种数据。
+
+## 链接属性方法实现
+>ainx/anet/connction.go
+```go
+type Connection struct {
+	//当前Conn属于哪个Server
+	TcpServer ainterface.IServer
+	//当前链接的socket TCP套接字
+	Conn *net.TCPConn
+	// 当前链接的ID也可以称作SessionID，ID全局唯一
+	ConnID uint32
+	// 当前链接的关闭状态
+	isClosed bool
+
+	//消息管理MsgId和对应处理方法的消息管理模块
+	MsgHandler ainterface.IMsgHandle
+
+	// 告知该链接已经退出/停止的channel
+	ExitBuffChan chan bool
+	//无缓冲管道，用于读、写两个goroutine之间的消息通信
+	msgChan     chan []byte
+	msgBuffChan chan []byte //定义缓冲消息队列大小
+	// ================================
+	//链接属性
+	property map[string]interface{}
+	//保护链接属性修改的锁
+	propertyLock sync.RWMutex
+	// ================================
+}
+
+// 创建链接的方法
+func NewConnection(server ainterface.IServer, conn *net.TCPConn, connID uint32, msgHandler ainterface.IMsgHandle) *Connection {
+	c := &Connection{
+		TcpServer:    server,
+		Conn:         conn,
+		ConnID:       connID,
+		isClosed:     false,
+		MsgHandler:   msgHandler,
+		ExitBuffChan: make(chan bool),
+		msgChan:      make(chan []byte),                                    //msgChan初始化
+		msgBuffChan:  make(chan []byte, utils.GlobalSetting.MaxMsgChanLen), //不要忘记初始化
+		property:     make(map[string]interface{}),                         //对链接属性map初始化
+	}
+	//将新创建的Conn添加到链接管理中
+	c.TcpServer.GetConnMgr().Add(c) //将当前新创建的连接添加到ConnManager中
+	return c
+}
+
+// 设置链接属性
+func (c *Connection) SetProperty(key string, value interface{}) {
+	c.propertyLock.Lock()
+	defer c.propertyLock.Unlock()
+
+	c.property[key] = value
+}
+
+// 获取链接属性
+func (c *Connection) GetProperty(key string) (interface{}, error) {
+	c.propertyLock.RLock()
+	defer c.propertyLock.RUnlock()
+
+	if value, ok := c.property[key]; ok {
+		return value, nil
+	} else {
+		return nil, errors.New("no property found")
+	}
+}
+
+// 移除链接属性
+func (c *Connection) RemoveProperty(key string) {
+	c.propertyLock.Lock()
+	defer c.propertyLock.Unlock()
+
+	delete(c.property, key)
+}
+
+```
+
+##  链接属性Ainx-V0.10单元测试
+那么，接下来，我们简单测试一下链接属性的设置与提取是否可用。
+```go
+package main
+
+import (
+	"ainx/ainterface"
+	"ainx/anet"
+	"fmt"
+)
+
+// ping test 自定义路由
+type PingRouter struct {
+	anet.BaseRouter
+}
+
+// Ping Handle
+func (this *PingRouter) Handle(request ainterface.IRequest) {
+	fmt.Println("Call PingRouter Handle")
+	//先读取客户端的数据，再回写ping...ping...ping
+	fmt.Println("recv from client : msgId=", request.GetMsgID(), ", data=", string(request.GetData()))
+
+	err := request.GetConnection().SendBuffMsg(0, []byte("ping...ping...ping"))
+	if err != nil {
+		fmt.Println(err)
+	}
+}
+
+type HelloZinxRouter struct {
+	anet.BaseRouter
+}
+
+// HelloZinxRouter Handle
+func (this *HelloZinxRouter) Handle(request ainterface.IRequest) {
+	fmt.Println("Call HelloZinxRouter Handle")
+	//先读取客户端的数据，再回写ping...ping...ping
+	fmt.Println("recv from client : msgId=", request.GetMsgID(), ", data=", string(request.GetData()))
+
+	err := request.GetConnection().SendBuffMsg(1, []byte("Hello Zinx Router V0.10"))
+	if err != nil {
+		fmt.Println(err)
+	}
+}
+
+// 创建连接的时候执行
+func DoConnectionBegin(conn ainterface.IConnection) {
+	fmt.Println("DoConnecionBegin is Called ... ")
+
+	//=============设置两个链接属性，在连接创建之后===========
+	fmt.Println("Set conn Name, Home done!")
+	conn.SetProperty("Name", "Aceld")
+	conn.SetProperty("Home", "https://www.jianshu.com/u/35261429b7f1")
+	//===================================================
+
+	err := conn.SendMsg(2, []byte("DoConnection BEGIN..."))
+	if err != nil {
+		fmt.Println(err)
+	}
+}
+
+// 连接断开的时候执行
+func DoConnectionLost(conn ainterface.IConnection) {
+	//============在连接销毁之前，查询conn的Name，Home属性=====
+	if name, err := conn.GetProperty("Name"); err == nil {
+		fmt.Println("Conn Property Name = ", name)
+	}
+
+	if home, err := conn.GetProperty("Home"); err == nil {
+		fmt.Println("Conn Property Home = ", home)
+	}
+	//===================================================
+
+	fmt.Println("DoConneciotnLost is Called ... ")
+}
+
+func main() {
+	//创建一个server句柄
+	s := anet.NewServer()
+
+	//注册链接hook回调函数
+	s.SetOnConnStart(DoConnectionBegin)
+	s.SetOnConnStop(DoConnectionLost)
+
+	//配置路由
+	s.AddRouter(0, &PingRouter{})
+	s.AddRouter(1, &HelloZinxRouter{})
+
+	//开启服务
+	s.Serve()
+}
+
+```
+**结果**
+```shell
+Add api msgId =  0
+Add Router succ! 
+Add api msgId =  1
+Add Router succ! 
+[START] Server name: AinxServerApp,listenner at IP: 127.0.0.1, Port %!d(string=8080) is starting
+[Ainx] Version: V0.4, MaxConn: 12000, MaxPacketSize: 4096
+Work ID = 0 is started.
+Work ID = 4 is started.
+Work ID = 1 is started.
+Work ID = 2 is started.
+Work ID = 3 is started.
+Work ID = 6 is started.
+Work ID = 5 is started.
+Work ID = 7 is started.
+Work ID = 8 is started.
+Work ID = 9 is started.
+start Ainx server   AinxServerApp  success, now listenning...
+```
+这里主要看DoConnectionBegin()和DoConnectionLost()两个函数的实现， 利用在两个Hook函数中，设置链接属性和提取链接属性。链接创建之后给当前链接绑定两个属性"Name","Home", 那么我们在随时可以通过conn.GetProperty()方法得到链接已经设置的属性。
