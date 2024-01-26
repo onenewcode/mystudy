@@ -1363,15 +1363,11 @@ jdk7的的数据结构是：数组+链表
 >
 >我们可以采用ConcurrentHashMap进行使用，它是一个线程安全的HashMap
 >
-#### 那你能聊一下ConcurrentHashMap的原理吗？
->
->好的，请参考《多线程相关面试题》中的ConcurrentHashMap部分的讲解
->
+
 
 >
 #### HashSet与HashMap的区别？
 >
->嗯，是这样。
 >
 >HashSet底层其实是用HashMap实现存储的, HashSet封装了一系列HashMap的方法. 依靠HashMap来存储元素值,(利用hashMap的key键进行存储), 而value值默认为Object对象. 所以HashSet也不允许出现重复值, 判断标准和HashMap判断标准相同, 两个元素的hashCode相等并且通过equals()方法返回true.
 >
