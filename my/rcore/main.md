@@ -95,9 +95,11 @@ rustup target add riscv64gc-unknown-none-elf
 在把panic_handler配置在单独的文件os/src/lang_items.rs后，需要在os/src/main.rs文件中添加以下内容才能正常编译整个软件：
 ```rs
 // os/src/main.rs
- #![no_std]
+ #![no_std] 
  mod lang_items;
- // ... other code
+ fn main() {
+
+}
 
 ```
 ### 移除 main 函数
@@ -166,7 +168,7 @@ _start:
 
 mod lang_item;
 
-usecore::arch::global_asm;
+use core::arch::global_asm;
 global_asm!(include_str!("entry.asm"));
 ```
 
@@ -189,51 +191,51 @@ rustflags= [
 ```ld
 OUTPUT_ARCH(riscv)
 ENTRY(_start)
-BASE_ADDRESS =0x80200000;
+BASE_ADDRESS = 0x80200000;
 
 SECTIONS
 {
- . = BASE_ADDRESS;
- skernel = .;
+    . = BASE_ADDRESS;
+    skernel = .;
 
- stext= .;
- .text:{
- *(.text.entry)
- *(.text.text.*)
- }
- 
- . = ALIGN(4K);
- etext= .;
- srodata = .;
- .rodata:{
- *(.rodata .rodata.*)
- *(.srodata .srodata.*)
- }
- 
- . = ALIGN(4K);
- erodata = .;
- sdata= .;
- .data:{
- *(.data.data.*)
- *(.sdata.sdata.*)
- }
- 
- . = ALIGN(4K);
- edata= .;
- .bss:{
- *(.bss.stack)
- sbss=.;
- *(.bss.bss.*)
- *(.sbss.sbss.*)
- }
- 
- . = ALIGN(4K);
- ebss= .;
- ekernel = .;
- 
- /DISCARD/ :{
- *(.eh_frame)
- }
+    stext = .;
+    .text : {
+        *(.text.entry)
+        *(.text .text.*)
+    }
+
+    . = ALIGN(4K);
+    etext = .;
+    srodata = .;
+    .rodata : {
+        *(.rodata .rodata.*)
+        *(.srodata .srodata.*)
+    }
+
+    . = ALIGN(4K);
+    erodata = .;
+    sdata = .;
+    .data : {
+        *(.data .data.*)
+        *(.sdata .sdata.*)
+    }
+
+    . = ALIGN(4K);
+    edata = .;
+    .bss : {
+        *(.bss.stack)
+        sbss = .;
+        *(.bss .bss.*)
+        *(.sbss .sbss.*)
+    }
+
+    . = ALIGN(4K);
+    ebss = .;
+    ekernel = .;
+
+    /DISCARD/ : {
+        *(.eh_frame)
+    }
 }
 ```
 
@@ -296,24 +298,24 @@ rust-objcopy--strip-all target/riscv64gc-unknown-none-elf/release/os-O binary
 • sp( x2 ) 是被调用者保存的。这个是之后就会提到的栈指针(StackPointer)寄存器，它指向下一个将要
 被存储的栈顶位置。
 • fp( s0 )，它既可作为s0临时寄存器，也可作为栈帧指针（FramePointer）寄存器，表示当前栈帧的起
-始位置，是一个被调用者保存寄存器。fp指向的栈帧起始位置和sp指向的栈帧的当前栈顶位置形成了
-所对应函数栈帧的空间范围。
+始位置，是一个被调用者保存寄存器。fp指向的栈帧起始位置和sp指向的栈帧的当前栈顶位置形成了所对应函数栈帧的空间范围。
 • gp( x3 ) 和tp( x4 ) 在一个程序运行期间都不会变化，因此不必放在函数调用上下文中。
 
 ### 分配并使用启动栈
 我们在entry.asm中分配启动栈空间，并在控制权被转交给Rust入口之前将栈指针sp设置为栈顶的位置。
 ```asm
  # os/src/entry.asm
- .section .text.entry
- .globl _start
+     .section .text.entry //声明后面的内容全部放在.text.entry的段中
+     .globl _start //声明_start是一个全局符号
 _start:
- la sp, boot_stack_top
- call rust_main
- .section .bss.stack
- .globl boot_stack_lower_bound
+    la sp, boot_stack_top
+    call rust_main
+
+    .section .bss.stack
+    .globl boot_stack_lower_bound
 boot_stack_lower_bound:
- .space 4096 * 16
- .globl boot_stack_top
+    .space 4096 * 16
+    .globl boot_stack_top
 boot_stack_top:
 
 
@@ -341,19 +343,19 @@ boot_stack_top:
 ```rs
 //os/src/main.rs
 #[no_mangle]
-pubfn rust_main()->! {
-clear_bss();
-loop{}
+pub fn rust_main()-> ! {
+    clear_bss();
+    loop {}
 }
 
-fnbclear_bss(){
-extern "C"{
-fn sbss();
-fn ebss();
-}
-(sbssas usize..ebss asusize).for_each(|a| {
-unsafe{ (aas *mutu8).write_volatile(0)}
-});
+fn clear_bss() {
+    extern "C" {
+        fn sbss();
+        fn ebss();
+    }
+    (sbss as usize..ebss as usize).for_each(|a| {
+        unsafe { (a as *mut u8).write_volatile(0) }
+    });
 }
 ```
 

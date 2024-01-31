@@ -1944,7 +1944,7 @@ fn main() -> Result<(), Box<dyn Error>> {
 
 
 ## 包和模块
-### 包和 Crate
+### 包和 Package
 #### 包 Crate
 
 对于 Rust 而言，包是一个独立的可编译单元，它编译后会生成一个可执行文件或者一个库。
@@ -1958,6 +1958,7 @@ fn main() -> Result<(), Box<dyn Error>> {
 
 
 ### 模块 Module
+使用 cargo new --lib restaurant 创建一个小餐馆，注意，这里创建的是一个库类型的 Package，然后将以下代码放入 src/lib.rs 中：
 ```rs
 // 餐厅前厅，用于吃饭
 mod front_of_house {
@@ -1980,8 +1981,44 @@ mod front_of_house {
 - 模块可以嵌套，这里嵌套的原因是招待客人和服务都发生在前厅，因此我们的代码模拟了真实场景
 - 模块中可以定义各种 Rust 类型，例如函数、结构体、枚举、特征等
 - 所有模块均定义在同一个文件中
-### 使用 use 及受限可见性
 
+### 使用 use 及受限可见性
+#### 基本引入方式
+##### 绝对路径引入模块
+```rs
+mod front_of_house {
+    pub mod hosting {
+        pub fn add_to_waitlist() {}
+    }
+}
+
+use crate::front_of_house::hosting;
+
+pub fn eat_at_restaurant() {
+    hosting::add_to_waitlist();
+    hosting::add_to_waitlist();
+    hosting::add_to_waitlist();
+}
+
+```
+这里，我们使用 use 和绝对路径的方式，将 hosting 模块引入到当前作用域中，然后只需通过 hosting::add_to_waitlist 的方式，即可调用目标模块中的函数
+##### 相对路径引入模块中的函数
+```rs
+mod front_of_house {
+    pub mod hosting {
+        pub fn add_to_waitlist() {}
+    }
+}
+
+use front_of_house::hosting::add_to_waitlist;
+
+pub fn eat_at_restaurant() {
+    add_to_waitlist();
+    add_to_waitlist();
+    add_to_waitlist();
+}
+
+```
 ## 注释和文档
 ### 文档注释
 cargo doc --open
@@ -5475,7 +5512,7 @@ async fn run_loop(
 #### 标识化 (Tokenization)
 Rust程序编译过程的第一阶段是 标记解析。 在这一过程中，源代码将被转换成一系列的标记 (token)。
 
-某些语言的宏系统正扎根于这一阶段。Rust并非如此。 举例来说，从效果来看，C/C++的宏就是在这里得到处理的。3 这也正是下列代码能够运行的原因: 4
+某些语言的宏系统正扎根于这一阶段。Rust并非如此。 举例来说，从效果来看，C/C++的宏就是在这里得到处理的。3 这也正是下列代码能够运行的原因: 
 ```c
 #define SUB void
 #define BEGIN {
