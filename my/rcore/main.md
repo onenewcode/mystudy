@@ -576,7 +576,7 @@ RISC-V 架构中一共定义了 4 种特权级：
 
 - power ：不断在计算操作和打印字符串操作之间进行特权级切换
 
-批处理系统会按照文件名开头的数字编号从小到大的顺序加载并运行它
+批处理系统会按照文件名开头的数字编号从小到大的顺序加载并运行它.
 每个应用程序的实现都在对应的单个文件中。打开其中一个文件，会看到里面只有一个 main 函数和若干相关的函数所形成的整个应用程序逻辑。
 
 
@@ -613,12 +613,9 @@ fn main() -> i32 {
 
 ### 内存布局
 在 user/.cargo/config 中，设置链接时使用链接脚本 user/src/linker.ld 。在其中我们做的重要的事情是：
-
-将程序的起始物理地址调整为 0x80400000 ，三个应用程序都会被加载到这个物理地址上运行；
-
-将 _start 所在的 .text.entry 放在整个程序的开头，也就是说批处理系统只要在加载之后跳转到 0x80400000 就已经进入了 用户库的入口点，并会在初始化之后跳转到应用程序主逻辑；
-
-提供了最终生成可执行文件的 .bss 段的起始和终止地址，方便 clear_bss 函数使用。
+- 将程序的起始物理地址调整为 0x80400000 ，三个应用程序都会被加载到这个物理地址上运行；
+- 将 _start 所在的 .text.entry 放在整个程序的开头，也就是说批处理系统只要在加载之后跳转到 0x80400000 就已经进入了 用户库的入口点，并会在初始化之后跳转到应用程序主逻辑；
+- 提供了最终生成可执行文件的 .bss 段的起始和终止地址，方便 clear_bss 函数使用。
 
 
 
@@ -666,6 +663,7 @@ fn syscall(id: usize, args: [usize; 3]) -> isize {
 }
 ```
 
+
 第 3 行，我们将所有的系统调用都封装成 syscall 函数，可以看到它支持传入 syscall ID 和 3 个参数。
 
 syscall 中使用从第 5 行开始的 asm! 宏嵌入 ecall 指令来触发系统调用。
@@ -674,7 +672,7 @@ syscall 中使用从第 5 行开始的 asm! 宏嵌入 ecall 指令来触发系�
 
 
 有些时候不必将变量绑定到固定的寄存器，此时 asm! 宏可以自动完成寄存器分配。某些汇编代码段还会带来一些编译器无法预知的副作用，这种情况下需要在 asm! 中通过 options 告知编译器这些可能的副作用，这样可以帮助编译器在避免出错更加高效分配寄存器。事实上，
-上面这一段汇编代码的含义和内容与 第一章中的 RustSBI 输出到屏幕的 SBI 调用汇编代码 涉及的汇编指令一样，但传递参数的寄存器的含义是不同的。
+
 
 于是 sys_write 和 sys_exit 只需将 syscall 进行包装：
 ```rs
@@ -779,7 +777,8 @@ Illegal instruction (core dumped)
 
 
 看来RV64的特权级机制确实有用。那对于一般的用户态应用程序，在 qemu-riscv64 模拟器下能正确执行吗？
-
+### 实现操作系统前执行应用程序
+我们还没有实现操作系统，能提前执行或测试应用程序吗？可以！这是因为我们除了一个能模拟一台 RISC-V 64 计算机的全系统模拟器 qemu-system-riscv64 外，还有一个直接支持运行 RISC-V 64 用户程序的半系统模拟器 qemu-riscv64 。不过需要注意的是，如果想让用户态应用程序在 qemu-riscv64 模拟器（实际上是一个 RISC-V 架构下的 Linux 操作系统）上和在我们自己写的 OS 上执行效果一样，需要做到二者的系统调用的接口是一样的（包括系统调用编号，参数约定的具体的寄存器和栈等）。
 ## 实现批处理操作系统
 应用放置采用“静态绑定”的方式，而操作系统加载应用则采用“动态加载”的方式：
 
@@ -790,7 +789,7 @@ Illegal instruction (core dumped)
 ### 将应用程序链接到内核
 我们把应用程序的二进制镜像文件作为内核的数据段链接到内核里面，因此内核需要知道内含的应用程序的数量和它们的位置，这样才能够在运行时对它们进行管理并能够加载到物理内存。
 
-在 os/src/main.rs 中能够找到这样一行：
+在 os/src/main.rs 中添加一行：
 ```rs
 global_asm!(include_str!("link_app.S"));
 ```
@@ -802,7 +801,7 @@ global_asm!(include_str!("link_app.S"));
     .section .data
     .global _num_app
 _num_app:
-    .quad 5
+    .quad 5 # 分配并初始化一个64位的存储单元，其值为5。
     .quad app_0_start
     .quad app_1_start
     .quad app_2_start
@@ -946,7 +945,7 @@ unsafe fn load_app(&self, app_id: usize) {
         panic!("All applications completed!");
     }
     println!("[kernel] Loading app_{}", app_id);
-    // clear app area
+    // 清空app区域
     core::slice::from_raw_parts_mut(
         APP_BASE_ADDRESS as *mut u8,
         APP_SIZE_LIMIT
