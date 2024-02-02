@@ -1113,14 +1113,12 @@ Trap 处理的总体流程如下：首先通过 __alltraps 将 Trap 上下文保
 
 首先是保存 Trap 上下文的 __alltraps 的实现：
 ```S
-# os/src/trap/trap.S
-
 .macro SAVE_GP n
     sd x\n, \n*8(sp)
 .endm
 
 .align 2
-__alltraps:
+__alltraps: 
     csrrw sp, sscratch, sp
     # now sp->kernel stack, sscratch->user stack
     # allocate a TrapContext on kernel stack
@@ -1164,7 +1162,6 @@ __alltraps:
 - 第 33 行令，让寄存器 a0 指向内核栈的栈指针也就是我们刚刚保存的 Trap 上下文的地址，这是由于我们接下来要调用 trap_handler 进行 Trap 处理，它的第一个参数 cx 由调用规范要从 a0 中获取。而 Trap 处理函数 trap_handler 需要 Trap 上下文的原因在于：它需要知道其中某些寄存器的值，比如在系统调用的时候应用程序传过来的 syscall ID 和对应参数。我们不能直接使用这些寄存器现在的值，因为它们可能已经被修改了，因此要去内核栈上找已经被保存下来的值。
 
 **注解**
-
 RISC-V 中读写 CSR 的指令是一类能不会被打断地完成多个读写操作的指令。这种不会被打断地完成多个操作的指令被称为 原子指令 (Atomic Instruction)。这里的 原子 的含义是“不可分割的最小个体”，也就是说指令的多个操作要么都不完成，要么全部完成，而不会处于某种中间状态。
 
 另外，RISC-V 架构中常规的数据处理和访存类指令只能操作通用寄存器而不能操作 CSR 。因此，当想要对 CSR 进行操作时，需要先使用读取 CSR 的指令将 CSR 读到一个通用寄存器中，而后操作该通用寄存器，最后再使用写入 CSR 的指令将该通用寄存器的值写入到 CSR 中。
