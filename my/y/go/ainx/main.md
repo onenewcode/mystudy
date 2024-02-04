@@ -1,29 +1,32 @@
-# 架构图
-![Alt text](image.png)
 #  初识Ainx框架
-为了更好的看到Zinx框架，首先Zinx构建Zinx的最基本的两个模块ziface和znet。
-
-ziface主要是存放一些Zinx框架的全部模块的抽象层接口类，Zinx框架的最基本的是服务类接口iserver，定义在ziface模块中。
-
-znet模块是zinx框架中网络相关功能的实现，所有网络相关模块都会定义在znet模块中。
+![Alt text](image.png)
+上图就显示了所有的ainx框架的模块，我们后来将会一一实现。
 
 ##  Ainx-V0.1 代码实现
-
+为了更好的看到Ainx框架，首先Ainx构建Ainx的最基本的两个模块ainterface和anet。
+ainterface主要是存放一些Ainx框架的全部模块的抽象层接口类，Ainx框架的最基本的是服务类接口iserver，定义在aiface模块中。
+anet模块是ainx框架中网络相关功能的实现，所有网络相关模块都会定义在anet模块中。
 ### 创建ainx框架
 
-创建zinx文件夹
+创建zinx文件夹，然后创建go项目
+```shell
+mkdir ainx
+cd ./ainx
+go mod init ainx
+```
 
 ### 创建ainterface、anet模块
 
-在zinx/下 创建ziface、znet文件夹, 使当前的文件路径如下：
-
+在ainx/下 创建ainterface、znet文件夹, 使当前的文件路径如下：
+**注意**：下图由tree自动生成，要查看自己的目录也可以在命令行输入tree
+```shell
 └── ainx
     ├── ainterface
     │  
     └── anet
-
+```
 ### ainterface下创建服务模块抽象层iserver.go
-
+首先我们给服务器模块抽象一个接口，因为它决定了我们整个框架入口的结构。
 >ainx/ainterface/iserver.go
 
 ```go
@@ -42,6 +45,8 @@ type IServer interface{
 ```
 
 ### 在anet下实现服务模块server.go
+我们接下来实现我们的服务器的实体类，暂时我们给给它添加Name，IPVersion，IP，Port 四个属性，分别代表服务器的名字，服务器连接使用的ip协议，服务器绑定的IP和绑定的端口号。
+>ainx/anet>sever.go
 ```go
 package anet
 
@@ -153,7 +158,7 @@ func NewServer(name string) ainterface.IServer {
 
 理论上我们应该可以现在导入zinx框架，然后写一个服务端程序，再写一个客户端程序进行测试，但是我们可以通过Go的单元Test功能，进行单元测试
 
-创建ainx/znet/server_test.go
+>创建ainx/znet/server_test.go
 ```go
 package anet
 
@@ -218,6 +223,7 @@ Server call back : hello word,cnt =10
  Server call back : hello word,cnt =10 
  Server call back : hello word,cnt =10 
 ```
+
 
 ## Ainx-V0.2-简单的连接封装与业务绑定 
 V0.1版本我们已经实现了了⼀一个基础的Server框架，现在我们需要对客户端链接和不不同的客户端链接所处 理理的不不同业务再做⼀一层接⼝口封装，当然我们先是把架构搭建起来。 					
