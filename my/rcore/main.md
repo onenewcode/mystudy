@@ -1802,7 +1802,7 @@ impl TaskManager {
 }
 ```
 
-run_next_task 使用任务管理器的全局实例 TASK_MANAGER 的 run_next_task 方法。它会调用 find_next_task 方法尝试寻找一个运行状态为 Ready 的应用并返回其 ID 。注意到其返回的类型是 Option<usize> ，也就是说不一定能够找到，当所有的应用都退出并将自身状态修改为 Exited 就会出现这种情况，此时 find_next_task 应该返回 None 。如果能够找到下一个可运行的应用的话，我们就可以分别拿到当前应用 current_task_cx_ptr 和即将被切换到的应用 next_task_cx_ptr 的任务上下文指针，然后调用 __switch 接口进行切换。如果找不到的话，说明所有的应用都运行完毕了，我们可以直接 panic 退出内核。
+run_next_task 使用任务管理器的全局实例 TASK_MANAGER 的 run_next_task 方法。它会调用 find_next_task 方法尝试寻找一个运行状态为 Ready 的应用并返回其 ID 。注意到其返回的类型是 Option&lt;usize> ，也就是说不一定能够找到，当所有的应用都退出并将自身状态修改为 Exited 就会出现这种情况，此时 find_next_task 应该返回 None 。如果能够找到下一个可运行的应用的话，我们就可以分别拿到当前应用 current_task_cx_ptr 和即将被切换到的应用 next_task_cx_ptr 的任务上下文指针，然后调用 __switch 接口进行切换。如果找不到的话，说明所有的应用都运行完毕了，我们可以直接 panic 退出内核。
 
 
 
@@ -1883,6 +1883,7 @@ impl TaskManager {
         }
         panic!("unreachable in run_first_task!");
     }
+}
 
 pub fn run_first_task() {
     TASK_MANAGER.run_first_task();
