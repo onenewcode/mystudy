@@ -1,3 +1,4 @@
+[rustsbi] RustSBI version 0.3.0-alpha.4, adapting to RISC-V SBI v1.0.0
 .______       __    __      _______.___________.  _______..______   __
 |   _  \     |  |  |  |    /       |           | /       ||   _  \ |  |
 |  |_)  |    |  |  |  |   |   (----`---|  |----`|   (----`|  |_)  ||  |
@@ -16,13 +17,50 @@
 [rustsbi] pmp02: 0x80000000..0x80200000 (---)
 [rustsbi] pmp03: 0x80200000..0x88000000 (xwr)
 [rustsbi] pmp04: 0x88000000..0x00000000 (-wr)
-[kernel] Hello, world!
 [kernel] num_app = 5
-[kernel] app_0 [0x8020a038, 0x8020b250)
-[kernel] app_1 [0x8020b250, 0x8020c510)
-[kernel] app_2 [0x8020c510, 0x8020d980)
-[kernel] app_3 [0x8020d980, 0x8020ec28)
-[kernel] app_4 [0x8020ec28, 0x8020fec8)
+[kernel] app_0 [0x80209038, 0x8020a250)
+[kernel] app_1 [0x8020a250, 0x8020b510)
+[kernel] app_2 [0x8020b510, 0x8020c980)
+[kernel] app_3 [0x8020c980, 0x8020dc28)
+[kernel] app_4 [0x8020dc28, 0x8020eec8)
+[kernel] Loading app_0
+[kernel] Application exited with code 0
+[kernel] Loading app_1
+[kernel] PageFault in application, kernel killed it.
+[kernel] Loading app_2
+[kernel] Application exited with code 0
+[kernel] Loading app_3
+[kernel] IllegalInstruction in application, kernel killed it.
+[kernel] Loading app_4
+[kernel] IllegalInstruction in application, kernel killed it.
+Panicked at src/batch.rs:91 All applications completed!
+
+
+[rustsbi] RustSBI version 0.3.0-alpha.4, adapting to RISC-V SBI v1.0.0
+.______       __    __      _______.___________.  _______..______   __
+|   _  \     |  |  |  |    /       |           | /       ||   _  \ |  |
+|  |_)  |    |  |  |  |   |   (----`---|  |----`|   (----`|  |_)  ||  |
+|      /     |  |  |  |    \   \       |  |      \   \    |   _  < |  |
+|  |\  \----.|  `--'  |.----)   |      |  |  .----)   |   |  |_)  ||  |
+| _| `._____| \______/ |_______/       |__|  |_______/    |______/ |__|
+[rustsbi] Implementation     : RustSBI-QEMU Version 0.2.0-alpha.2
+[rustsbi] Platform Name      : riscv-virtio,qemu
+[rustsbi] Platform SMP       : 1
+[rustsbi] Platform Memory    : 0x80000000..0x88000000
+[rustsbi] Boot HART          : 0
+[rustsbi] Device Tree Region : 0x87000000..0x87000ef2
+[rustsbi] Firmware Address   : 0x80000000
+[rustsbi] Supervisor Address : 0x80200000
+[rustsbi] pmp01: 0x00000000..0x80000000 (-wr)
+[rustsbi] pmp02: 0x80000000..0x80200000 (---)
+[rustsbi] pmp03: 0x80200000..0x88000000 (xwr)
+[rustsbi] pmp04: 0x88000000..0x00000000 (-wr)
+[kernel] num_app = 5
+[kernel] app_0 [0x80209038, 0x8020a250)
+[kernel] app_1 [0x8020a250, 0x8020b510)
+[kernel] app_2 [0x8020b510, 0x8020c980)
+[kernel] app_3 [0x8020c980, 0x8020dc28)
+[kernel] app_4 [0x8020dc28, 0x8020eec8)
 [kernel] Loading app_0
 Hello, world!
 [kernel] Application exited with code 0
@@ -51,6 +89,4 @@ Kernel should kill this application!
 Try to access privileged CSR in U Mode
 Kernel should kill this application!
 [kernel] IllegalInstruction in application, kernel killed it.
-Panicked at src/batch.rs:84 All applications completed!
-make: *** [Makefile:54: run-inner] Error 1
-root@hcss-ecs-d61a:~/rcore/os# 
+Panicked at src/batch.rs:91 All applications completed!
