@@ -1,8 +1,8 @@
 # JVM相关面试题
 
-## 1 JVM组成
+##  JVM组成
 
-### 1.1 JVM由那些部分组成，运行流程是什么？
+### JVM由那些部分组成，运行流程是什么？
 
 >难易程度：☆☆☆
 >
@@ -41,7 +41,7 @@ Java Virtual Machine Java程序的运行环境（java二进制字节码的运行
 
 
 
-### 1.2 什么是程序计数器？
+###  什么是程序计数器？
 
 >难易程度：☆☆☆
 >
@@ -61,7 +61,7 @@ Java Virtual Machine Java程序的运行环境（java二进制字节码的运行
 
 ​	程序计数器是JVM规范中唯一一个没有规定出现OOM的区域，所以这个空间也不会进行GC。
 
-### 1.3 你能给我详细的介绍Java堆吗?
+###  你能给我详细的介绍Java堆吗?
 
 >难易程度：☆☆☆
 >
@@ -76,7 +76,6 @@ Java Virtual Machine Java程序的运行环境（java二进制字节码的运行
 - 元空间保存的类信息、静态变量、常量、编译后的代码
 
 ​	
-
 为了避免方法区出现OOM，所以在java8中将堆上的方法区【永久代】给移动到了本地内存上，重新开辟了一块空间，叫做**元空间**。那么现在就可以避免掉OOM的出现了。
 
 ![image-20230506094938843](JVM相关面试题.assets/image-20230506094938843.png)
@@ -105,7 +104,54 @@ This is part of the JRockit and Hotspot convergence effort. JRockit customers do
 
 ​	元空间的本质和永久代类似，都是对 JVM 规范中方法区的实现。不过元空间与永久代之间最大的区别在于：元空间并不在虚拟机中，而是使用本地内存。因此，默认情况下，元空间的大小仅受本地内存限制。
 
-### 1.4 什么是虚拟机栈
+func TestResponseHeaderNoDefaultContentType(t *testing.T) {
+	t.Parallel()
+	var h ResponseHeader
+	assert.DeepEqual(t, h.NoDefaultContentType(), false)
+}
+func TestResponseHeaderPeekArgBytes(t *testing.T) {
+	t.Parallel()
+	var h ResponseHeader
+	h.h = []argsKV{
+		{
+			[]byte("k"),
+			[]byte("v"),
+			true,
+		},
+	}
+	assert.DeepEqual(t, h.PeekArgBytes([]byte("k")), []byte("v"))
+}
+func TestResponseHeaderFullCookie(t *testing.T) {
+	t.Parallel()
+
+	var h ResponseHeader
+	tmp := argsKV{
+		[]byte("k"),
+		[]byte("v"),
+		true,
+	}
+	h.cookies = []argsKV{
+		tmp,
+	}
+	assert.DeepEqual(t, h.FullCookie(), tmp.value)
+}
+
+func TestResponseHeaderGetHeaders(t *testing.T) {
+	var h ResponseHeader
+	assert.DeepEqual(t, h.h, h.GetHeaders())
+	tmp := argsKV{
+		[]byte("k"),
+		[]byte("v"),
+		true,
+	}
+	h.h = []argsKV{
+		tmp,
+	}
+	assert.DeepEqual(t, h.GetHeaders(), []argsKV{tmp})
+}
+
+
+###  什么是虚拟机栈
 
 >难易程度：☆☆☆
 >

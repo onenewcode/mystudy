@@ -220,8 +220,11 @@ docker run --name redis \
 -p 6379:6379 \
 -v /mount/docker/redis/data:/data \
 -v /mount/docker/redis/conf/redis.conf:/etc/redis/redis.conf \
--d redis redis-server /etc/redis/redis.conf
+-d redis redis-server 
 ```
+docker run --name redis \
+-p 6379:6379 \
+-d redis redis-server 
 **闪退解决**
 1. 赋予挂载目录（权限 chmod -R 777 文件名）
 2. aemonize no
@@ -815,10 +818,10 @@ docker run -p 9000:9000 -p 9090:9090 \
      -v /mount/docker/minio/config:/root/.minio \
      minio/minio server \
      /data --console-address ":9090" -address ":9000"
-
 ```     
 
- 注意： docker最新版安装会报错 ，提示port问题，因为最新版提供了api和console两个端口，所以需要--console-address ":9000" --address ":9090" 进行指定启动，前期版本不需要，直接运行即可
+注意： docker最新版安装会报错 ，提示port问题，因为最新版提供了api和console两个端口，所以需要--console-address ":9000" --address ":9090" 进行指定启动，前期版本不需要，直接运行即可
+
 
 ## .安装docker-compose
 
