@@ -104,51 +104,6 @@ This is part of the JRockit and Hotspot convergence effort. JRockit customers do
 
 ​	元空间的本质和永久代类似，都是对 JVM 规范中方法区的实现。不过元空间与永久代之间最大的区别在于：元空间并不在虚拟机中，而是使用本地内存。因此，默认情况下，元空间的大小仅受本地内存限制。
 
-func TestResponseHeaderNoDefaultContentType(t *testing.T) {
-	t.Parallel()
-	var h ResponseHeader
-	assert.DeepEqual(t, h.NoDefaultContentType(), false)
-}
-func TestResponseHeaderPeekArgBytes(t *testing.T) {
-	t.Parallel()
-	var h ResponseHeader
-	h.h = []argsKV{
-		{
-			[]byte("k"),
-			[]byte("v"),
-			true,
-		},
-	}
-	assert.DeepEqual(t, h.PeekArgBytes([]byte("k")), []byte("v"))
-}
-func TestResponseHeaderFullCookie(t *testing.T) {
-	t.Parallel()
-
-	var h ResponseHeader
-	tmp := argsKV{
-		[]byte("k"),
-		[]byte("v"),
-		true,
-	}
-	h.cookies = []argsKV{
-		tmp,
-	}
-	assert.DeepEqual(t, h.FullCookie(), tmp.value)
-}
-
-func TestResponseHeaderGetHeaders(t *testing.T) {
-	var h ResponseHeader
-	assert.DeepEqual(t, h.h, h.GetHeaders())
-	tmp := argsKV{
-		[]byte("k"),
-		[]byte("v"),
-		true,
-	}
-	h.h = []argsKV{
-		tmp,
-	}
-	assert.DeepEqual(t, h.GetHeaders(), []argsKV{tmp})
-}
 
 
 ###  什么是虚拟机栈
