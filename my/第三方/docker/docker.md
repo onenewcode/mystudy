@@ -521,7 +521,19 @@ docker run -itd -p 3306:3306 \
 ## nacos
 ```shell
 docker run -itd --name nacos -e MODE=standalone -p 8848:8848 -p 9848:9848 nacos/nacos-server
+
+docker run --name nacos -e MODE=standalone  -e JJVM_XMX=256m -p 8848:8848 -d nacos/nacos-server
+
 ```
+```shell
+JVM_XMS=512m // -Xms;为jvm启动时分配的内存;512m
+JVM_XMX=512m // -Xmx;为jvm运行过程中分配的最大内存;512m
+JVM_XMN=256m // -Xmn;JVM堆内存中新生代的大小;256m
+```
+
+### windos
+> https://github.com/alibaba/nacos/releases
+单点启动
 
 ### 自定义数据库
 默认情况下，Nacos 使用内置的 Derby 数据库进行数据存储。虽然 Derby 是一个轻量级的数据库，但当数据量较大时，它可能会导致性能瓶颈和数据丢失的问题。因此，建议将 Nacos 数据库存储改为 MySQL 或 PostgreSQL 等外部数据库。
@@ -1027,6 +1039,26 @@ use admin
 
 dbAdmin：允许用户在指定数据库中执行管理函数，如索引创建、删除，查看统计或访问system.profile
 
+## Zookeeper
+```shell
+docker run -itd \
+  --name ookeeper \
+  --privileged=true \
+  -p 2181:2181 \
+  -e TZ="Asia/Shanghai" \
+  zookeeper
+```
+## etcd
+```shell
+docker run -itd \
+  --name etcd \
+  --privileged=true \
+  -p 2379:2379 \
+  -p 2380:2380 \
+  -e TZ="Asia/Shanghai" \
+  -e ALLOW_NONE_AUTHENTICATION=yes \
+  bitnami/etcd
+```
 
 
 # docker compose

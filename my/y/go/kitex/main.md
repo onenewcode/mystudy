@@ -404,3 +404,282 @@ func Handler(ctx context.Context, c *app.RequestContext) {
 ### 测试接口
 打开游览器访问 localhost:8889/api/item，看到如下信息，代表请求成功。
 >item:{id:1024 title:"Kitex" description:"Kitex is an excellent framework!"}
+
+# Nacos
+Kitex 提供的服务注册与发现 nacos 拓展。
+nacos-sdk-go v2 版本
+>go get github.com/kitex-contrib/registry-nacos/v2
+## 服务注册
+### 创建 Registry
+提供了两个创建 Registry 的函数
+
+### NewDefaultNacosRegistry
+NewDefaultNacosRegistry 使用 nacos 创建一个新的服务注册中心，从环境变量中读取信息用于创建 Nacos Client。可自定义服务注册中心配置，配置详情见 Option。
+
+|环境变量名|	环境变量默认值|	描述|
+|-------|-------|-------|
+|serverAddr|	127.0.0.1|	nacos 服务器地址|
+|serverPort	|8848	|nacos 服务器端口|
+|namespace|		|nacos 中的 namespace Id|
+
+函数签名：
+>func NewDefaultNacosRegistry(opts ...Option) (registry.Registry, error)
+
+### NewNacosRegistry
+NewNacosRegistry 使用 nacos 创建服务注册中心，需要传入自行配置的客户端。可自定义服务注册中心配置，配置详情见 Option。
+
+函数签名：
+>func NewNacosRegistry(cli naming_client.INamingClient, opts ...Option) registry.Registry
+示例代码：
+```go
+package main
+
+import (
+	"github.com/cloudwego/kitex/pkg/rpcinfo"
+	"github.com/cloudwego/kitex/server"
+	"github.com/kitex-contrib/registry-nacos/v2/registry"
+	"github.com/nacos-group/nacos-sdk-go/v2/clients"
+	"github.com/nacos-group/nacos-sdk-go/v2/common/constant"
+	"github.com/nacos-group/nacos-sdk-go/v2/vo"
+	"mykitex/kitex_gen/example/shop/item/itemservice"
+
+	"log"
+)
+
+func main() {
+	sc := []constant.ServerConfig{
+		// 设置ip地址和端口号
+		*constant.NewServerConfig("127.0.0.1", 8848),
+	}
+
+	cc := constant.ClientConfig{
+		//  设置命名空间id
+		NamespaceId: "public",
+		// 设置超时时间，单位毫秒
+		TimeoutMs: 5000,
+		// 启动时不在 CacheDir 中加载持久性 nacos 服务信息
+		NotLoadCacheAtStart: true,
+		//  设置日志存储文件夹
+		LogDir: "/tmp/nacos/log",
+		// 设置缓存存储文件夹
+		CacheDir: "/tmp/nacos/cache",
+		// 设置日志等级
+		LogLevel: "info",
+		// 设置用户名
+		Username: "your-name",
+		// 设置密码
+		Password: "your-password",
+	}
+
+	cli, err := clients.NewNamingClient(
+		vo.NacosClientParam{
+			ClientConfig:  &cc,
+			ServerConfigs: sc,
+		},
+	)
+	if err != nil {
+		panic(err)
+	}
+
+	svr := itemservice.NewServer(new(ItemServiceImpl),
+		server.WithServerBasicInfo(&rpcinfo.EndpointBasicInfo{ServiceName: "echo"}),
+		server.WithRegistry(registry.NewNacosRegistry(cli)),
+	)
+	if err := svr.Run(); err != nil {
+		log.Println("server stopped with error:", err)
+	} else {
+		log.Println("server stopped")
+	}
+}
+```
+
+## 服务发现
+### 创建 Resolver
+提供了两个创建 Resolver 的函数
+
+### NewDefaultNacosResolver
+NewDefaultNacosResolver 使用 nacos 创建一个新的服务发现中心，从环境变量中读取信息用于创建 Nacos Client。可自定义服务注册中心配置，配置详情见 Option。
+|环境变量名|	环境变量默认值|	描述|
+|-------|--------|--------|
+|serverAddr|	127.0.0.1|	nacos 服务器地址|
+|serverPort|	8848|	nacos 服务器端口|
+|namespace|		|nacos 中的 namespace Id|
+
+函数签名：
+>func NewDefaultNacosResolver(opts ...Option) (discovery.Resolver, error)
+
+### NewNacosResolver
+NewNacosResolver 使用 nacos 创建服务发现中心，需要传入自行配置的客户端。可自定义服务注册中心配置，配置详情见 Option。
+
+函数签名：
+>func NewNacosResolver(cli naming_client.INamingClient, opts ...Option) discovery.Resolver
+示例代码：
+```go
+```
+服务端
+package main
+
+import (
+	"context"
+	"log"
+	"net"
+
+	"github.com/cloudwego/kitex/pkg/rpcinfo"
+	"github.com/cloudwego/kitex/server"
+	"github.com/kitex-contrib/registry-nacos/example/hello/kitex_gen/api"
+	"github.com/kitex-contrib/registry-nacos/example/hello/kitex_gen/api/hello"
+	"github.com/kitex-contrib/registry-nacos/registry"
+)
+
+type HelloImpl struct{}
+
+func (h *HelloImpl) Echo(_ context.Context, req *api.Request) (resp *api.Response, err error) {
+	resp = &api.Response{
+		Message: req.Message,
+	}
+	return
+}
+
+func main() {
+	r, err := registry.NewDefaultNacosRegistry()
+	if err != nil {
+		panic(err)
+	}
+	svr := hello.NewServer(
+		new(HelloImpl),
+		server.WithRegistry(r),
+		server.WithServerBasicInfo(&rpcinfo.EndpointBasicInfo{ServiceName: "Hello"}),
+		server.WithServiceAddr(&net.TCPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 8080}),
+	)
+	if err := svr.Run(); err != nil {
+		log.Println("server stopped with error:", err)
+	} else {
+		log.Println("server stopped")
+	}
+}
+客户端
+package main
+
+import (
+	"context"
+	"log"
+	"time"
+
+	"github.com/cloudwego/kitex/client"
+	"github.com/kitex-contrib/registry-nacos/example/hello/kitex_gen/api"
+	"github.com/kitex-contrib/registry-nacos/example/hello/kitex_gen/api/hello"
+	"github.com/kitex-contrib/registry-nacos/resolver"
+)
+
+func main() {
+	r, err := resolver.NewDefaultNacosResolver()
+	if err != nil {
+		panic(err)
+	}
+	newClient := hello.MustNewClient(
+		"Hello",
+		client.WithResolver(r),
+		client.WithRPCTimeout(time.Second*3),
+	)
+	for {
+		resp, err := newClient.Echo(context.Background(), &api.Request{Message: "Hello"})
+		if err != nil {
+			log.Fatal(err)
+		}
+		log.Println(resp)
+		time.Sleep(time.Second)
+	}
+}
+注意
+nacos/v2 版本中 kitex 目前不支持多次在同分组下创建多端口示例
+nacos/v2 的服务注册与发现和先前的版本兼容
+nacos-sdk-go v2 版本中 constant.ClientConfig 中 CustomLogger 类型被移除
+nacos/v2 只支持 nacos 2.X 版本
+配置
+可自定义 Nacos 客户端以及服务端的配置，参考 nacos-sdk-go 配置。
+
+# Zookeeper
+Kitex 提供的服务注册与发现 zookeeper 拓展。
+## 安装
+go get github.com/kitex-contrib/registry-zookeeper
+## 服务注册
+### 创建 Registry
+提供了两个创建 Registry 的函数
+
+#### NewZookeeperRegistry
+NewZookeeperRegistry 使用 zookeeper 创建一个服务注册中心，需要将服务通过一个字符串切片与会话超时时间共同传入 Connect。
+
+函数签名：
+>func NewZookeeperRegistry(servers []string, sessionTimeout time.Duration) (registry.Registry, error)
+
+#### NewZookeeperRegistryWithAuth
+NewZookeeperRegistryWithAuth 使用 zookeeper 创建一个服务注册中心，需要将服务通过一个字符串切片与会话超时时间共同传入 Connect。除此之外还需要传入用户与密码来调用 AddAuth，用户与密码不能为空。
+
+示例代码：
+```go
+package main
+
+import (
+	"github.com/cloudwego/kitex/pkg/rpcinfo"
+	"github.com/cloudwego/kitex/server"
+	zkregistry "github.com/kitex-contrib/registry-zookeeper/registry"
+	"log"
+	"mykitex/kitex_gen/example/shop/item/itemservice"
+	"time"
+)
+
+func main() {
+	r, err := zkregistry.NewZookeeperRegistry([]string{"125.37.143.160:2181"}, 40*time.Second)
+	if err != nil {
+		panic(err)
+	}
+
+	svr := itemservice.NewServer(new(ItemServiceImpl), server.WithRegistry(r), server.WithServerBasicInfo(&rpcinfo.EndpointBasicInfo{ServiceName: "item"}))
+	if err := svr.Run(); err != nil {
+		log.Println("server stopped with error:", err)
+	} else {
+		log.Println("server stopped")
+	}
+}
+
+```
+**效果如下**
+```shell
+024/03/02 12:49:40 connected to 125.37.143.160:2181
+2024/03/02 12:49:40.870620 server.go:83: [Info] KITEX: server listen at addr=[::]:8888
+2024/03/02 12:49:40 authenticated: id=72057683656900612, timeout=40000
+2024/03/02 12:49:40 re-submitting `0` credentials after reconnect
+```
+## 服务发现
+### 创建 Resolver
+#### NewZookeeperResolver
+NewZookeeperResolver 使用 zookeeper 创建一个服务发现中心，需要将服务通过一个字符串切片与会话超时时间共同传入 Connect。
+
+函数签名：
+>func NewZookeeperResolver(servers []string, sessionTimeout time.Duration) (discovery.Resolver, error)
+
+>NewZookeeperResolverWithAuth
+NewZookeeperResolverWithAuth 使用 zookeeper 创建一个服务发现中心，需要将服务通过一个字符串切片与会话超时时间共同传入 Connect。除此之外还需要传入用户与密码来调用 AddAuth，用户与密码不能为空。
+
+函数签名：
+>func NewZookeeperResolverWithAuth(servers []string, sessionTimeout time.Duration, user, password string) (discovery.Resolver, error)
+
+**示例代码**：
+```shell
+
+```
+
+# etcd
+docker
+  etcd:
+    image: bitnami/etcd:3.5
+    container_name: etcd
+    ports:
+      - 2379:2379
+      - 2380:2380
+    volumes:
+      - ./etcd/data:/bitnami/etcd-data
+    environment:
+      - TZ=Asia/Shanghai
+      - ALLOW_NONE_AUTHENTICATION=yes
+      - ETCD_ADVERTISE_CLIENT_URLS=http://etcd:2379
