@@ -85,6 +85,21 @@ type bmap struct {
 bmap 就是我们常说的“桶”，桶里面会最多装 8 个 key，这些 key 之所以会落入同一个桶，是因为它们经过哈希计算后，哈希结果是“一类”的。在桶内，又会根据 key 计算出来的 hash 值的高 8 位来决定 key 到底落入桶内的哪个位置（一个桶内最多有8个位置）。
 来一个整体的图：
 ![alt text](image-9.png)
+
+当 map 的 key 和 value 都不是指针，并且 size 都小于 128 字节的情况下，会把 bmap 标记为不含指针，这样可以避免 gc 时扫描整个 hmap。但是，我们看 bmap 其实有一个 overflow 的字段，是指针类型的，破坏了 bmap 不含指针的设想，这时会把 overflow 移动到 extra 字段来。
+```go
+type mapextra struct {
+	// overflow[0] contains overflow buckets for hmap.buckets.
+	// overflow[1] contains overflow buckets for hmap.oldbuckets.
+	overflow [2]*[]*bmap
+
+	// nextOverflow 包含空闲的 overflow bucket，这是预分配的 bucket
+	nextOverflow *bmap
+}
+```
+
+bmap 是存放 k-v 的地方，我们把视角拉近，仔细看 bmap 的内部组成
+![alt text](image-11.png)
 ### 创建 map 
 通过汇编语言可以看到，实际上底层调用的是 makemap 函数，主要做的工作就是初始化 hmap 结构体的各种字段，例如计算 B 的大小，设置哈希种子 hash0 等等。
 ```go
@@ -277,8 +292,841 @@ func main() {
 0 false
 
 ```
-# 编译
 
+## 遍历过程
+本来 map 的遍历过程比较简单：遍历所有的 bucket 以及它后面挂的 overflow bucket，然后挨个遍历 bucket 中的所有 cell。每个 bucket 中包含 8 个 cell，从有 key 的 cell 中取出 key 和 value，这个过程就完成了。
+
+但是，现实并没有这么简单。还记得前面讲过的扩容过程吗？扩容过程不是一个原子的操作，它每次最多只搬运 2 个 bucket，所以如果触发了扩容操作，那么在很长时间里，map 的状态都是处于一个中间态：有些 bucket 已经搬迁到新家，而有些 bucket 还待在老地方。
+
+因此，遍历如果发生在扩容的过程中，就会涉及到遍历新老 bucket 的过程，这是难点所在。
+
+我先写一个简单的代码样例，假装不知道遍历过程具体调用的是什么函数：
+```go
+package main
+
+import "fmt"
+
+func main() {
+	ageMp := make(map[string]int)
+	ageMp["qcrao"] = 18
+
+	for name, age := range ageMp {
+		fmt.Println(name, age)
+	}
+}
+```
+
+执行命令：
+
+go tool compile -S main.go
+得到汇编命令。这里就不逐行讲解了，可以去看之前的几篇文章，说得很详细。
+
+关键的几行汇编代码如下：
+```shell
+// ......
+0x0124 00292 (test16.go:9)      CALL    runtime.mapiterinit(SB)
+
+// ......
+0x01fb 00507 (test16.go:9)      CALL    runtime.mapiternext(SB)
+0x0200 00512 (test16.go:9)      MOVQ    ""..autotmp_4+160(SP), AX
+0x0208 00520 (test16.go:9)      TESTQ   AX, AX
+0x020b 00523 (test16.go:9)      JNE     302
+
+// ......
+```
+
+这样，关于 map 迭代，底层的函数调用关系一目了然。先是调用 mapiterinit 函数初始化迭代器，然后循环调用 mapiternext 函数进行 map 迭代。
+![alt text](image-12.png)
+
+迭代器的结构体定义：
+```go
+type hiter struct {
+	// key 指针
+	key         unsafe.Pointer
+	// value 指针
+	value       unsafe.Pointer
+	// map 类型，包含如 key size 大小等
+	t           *maptype
+	// map header
+	h           *hmap
+	// 初始化时指向的 bucket
+	buckets     unsafe.Pointer
+	// 当前遍历到的 bmap
+	bptr        *bmap
+	overflow    [2]*[]*bmap
+	// 起始遍历的 bucket 编号
+	startBucket uintptr
+	// 遍历开始时 cell 的编号（每个 bucket 中有 8 个 cell）
+	offset      uint8
+	// 是否从头遍历了
+	wrapped     bool
+	// B 的大小
+	B           uint8
+	// 指示当前 cell 序号
+	i           uint8
+	// 指向当前的 bucket
+	bucket      uintptr
+	// 因为扩容，需要检查的 bucket
+	checkBucket uintptr
+}
+```
+假设我们有下图所示的一个 map，起始时 B = 1，有两个 bucket，后来触发了扩容（这里不要深究扩容条件，只是一个设定），B 变成 2。并且， 1 号 bucket 中的内容搬迁到了新的 bucket，1 号裂变成 1 号和 3 号；0 号 bucket 暂未搬迁。老的 bucket 挂在在 *oldbuckets 指针上面，新的 bucket 则挂在 *buckets 指针上面。
+![alt text](image-13.png)
+
+这时，我们对此 map 进行遍历。假设经过初始化后，startBucket = 3，offset = 2。于是，遍历的起点将是 3 号 bucket 的 2 号 cell，下面这张图就是开始遍历时的状态：
+![alt text](image-14.png)
+标红的表示起始位置，bucket 遍历顺序为：3 -> 0 -> 1 -> 2。
+## 赋值
+
+# 接口
+## 值接收者和指针接收者的区别
+||	值接收者|	指针接收者|
+|--------|-------|-------|
+|值类型调用者|	方法会使用调用者的一个副本，类似于“传值”|	使用值的引用来调用方法，上例中，qcrao.growUp() 实际上是 (&qcrao).growUp()|
+指针类型调用者|	指针被解引用为值，上例中，stefno.howOld() 实际上是 (*stefno).howOld()|	实际上也是“传值”，方法里的操作会影响到调用者，类似于指针传参，拷贝了一份指针|
+
+### 值接收者和指针接收者
+先说结论：实现了接收者是值类型的方法，相当于自动实现了接收者是指针类型的方法；而实现了接收者是指针类型的方法，不会自动生成对应接收者是值类型的方法。
+```go
+package main
+
+import "fmt"
+
+type coder interface {
+	code()
+	debug()
+}
+
+type Gopher struct {
+	language string
+}
+
+func (p Gopher) code() {
+	fmt.Printf("I am coding %s language\n", p.language)
+}
+
+func (p *Gopher) debug() {
+	fmt.Printf("I am debuging %s language\n", p.language)
+}
+
+func main() {
+	var c coder = &Gopher{"Go"}
+	c.code()
+	c.debug()
+}
+```
+上述代码里定义了一个接口 coder，接口定义了两个函数：
+```go
+code()
+debug()
+```
+但是如果我们把 main 函数的第一条语句换一下：
+```go
+func main() {
+	var c coder = Gopher{"Go"}
+	c.code()
+	c.debug()
+}
+```
+报错
+>如果实现了接收者是值类型的方法，会隐含地也实现了接收者是指针类型的方法。
+
+### 两者分别在何时使用
+如果方法的接收者是值类型，无论调用者是对象还是对象指针，修改的都是对象的副本，不影响调用者；如果方法的接收者是指针类型，则调用者修改的是指针指向的对象本身。
+
+使用指针作为方法的接收者的理由：
+- 方法能够修改接收者指向的值。
+- 避免在每次调用方法时复制该值，在值的类型为大型结构体时，这样做会更加高效。
+
+是使用值接收者还是指针接收者，不是由该方法是否修改了调用者（也就是接收者）来决定，而是应该基于该类型的本质。
+
+## iface和eface的区别
+iface 和 eface 都是 Go 中描述接口的底层结构体，区别在于 iface 描述的接口包含方法，而 eface 则是不包含任何方法的空接口：interface{}。
+```go
+type iface struct {
+	tab  *itab
+	data unsafe.Pointer
+}
+
+type itab struct {
+	inter  *interfacetype
+	_type  *_type
+	link   *itab
+	hash   uint32 // copy of _type.hash. Used for type switches.
+	bad    bool   // type does not implement interface
+	inhash bool   // has this itab been added to hash?
+	unused [2]byte
+	fun    [1]uintptr // variable sized
+}
+```
+iface 内部维护两个指针，tab 指向一个 itab 实体， 它表示接口的类型以及赋给这个接口的实体类型。data 则指向接口具体的值，一般而言是一个指向堆内存的指针。
+
+再来仔细看一下 itab 结构体：_type 字段描述了实体的类型，包括内存对齐方式，大小等；inter 字段则描述了接口的类型。fun 字段放置和接口方法对应的具体数据类型的方法地址，实现接口调用方法的动态分派，一般在每次给接口赋值发生转换时会更新此表，或者直接拿缓存的 itab。
+
+
+另外，你可能会觉得奇怪，为什么 fun 数组的大小为 1，要是接口定义了多个方法可怎么办？实际上，这里存储的是第一个方法的函数指针，如果有更多的方法，在它之后的内存空间里继续存储。从汇编角度来看，通过增加地址就能获取到这些函数指针，没什么影响。顺便提一句，这些方法是按照函数名称的字典序进行排列的。
+
+再看一下 interfacetype 类型，它描述的是接口的类型：
+```go
+type interfacetype struct {
+	typ     _type
+	pkgpath name
+	mhdr    []imethod
+}
+```
+可以看到，它包装了 _type 类型，_type 实际上是描述 Go 语言中各种数据类型的结构体。我们注意到，这里还包含一个 mhdr 字段，表示接口所定义的函数列表， pkgpath 记录定义了接口的包名。
+![alt text](image-15.png)
+```go
+type eface struct {
+    _type *_type
+    data  unsafe.Pointer
+}
+```
+相比 iface，eface 就比较简单了。只维护了一个 _type 字段，表示空接口所承载的具体的实体类型。data 描述了具体的值。
+
+上面两个函数的参数和 iface 及 eface 结构体的字段是可以联系起来的：两个函数都是将参数组装一下，形成最终的接口。
+
+作为补充，我们最后再来看下 _type 结构体：
+```go
+type _type struct {
+    // 类型大小
+	size       uintptr
+    ptrdata    uintptr
+    // 类型的 hash 值
+    hash       uint32
+    // 类型的 flag，和反射相关
+    tflag      tflag
+    // 内存对齐相关
+    align      uint8
+    fieldalign uint8
+    // 类型的编号，有bool, slice, struct 等等等等
+	kind       uint8
+	alg        *typeAlg
+	// gc 相关
+	gcdata    *byte
+	str       nameOff
+	ptrToThis typeOff
+}
+```
+Go 语言各种数据类型都是在 _type 字段的基础上，增加一些额外的字段来进行管理的：
+```go
+type arraytype struct {
+	typ   _type
+	elem  *_type
+	slice *_type
+	len   uintptr
+}
+
+type chantype struct {
+	typ  _type
+	elem *_type
+	dir  uintptr
+}
+
+type slicetype struct {
+	typ  _type
+	elem *_type
+}
+
+type structtype struct {
+	typ     _type
+	pkgPath name
+	fields  []structfield
+}
+```
+### 接口动态内容和动态值
+### 如何打印出接口的动态类型和值
+```go
+package main
+
+import (
+	"unsafe"
+	"fmt"
+)
+
+type iface struct {
+	itab, data uintptr
+}
+
+func main() {
+	var a interface{} = nil
+
+	var b interface{} = (*int)(nil)
+
+	x := 5
+	var c interface{} = (*int)(&x)
+	
+	ia := *(*iface)(unsafe.Pointer(&a))
+	ib := *(*iface)(unsafe.Pointer(&b))
+	ic := *(*iface)(unsafe.Pointer(&c))
+
+	fmt.Println(ia, ib, ic)
+
+	fmt.Println(*(*int)(unsafe.Pointer(ic.data)))
+}
+```
+## 编译器检查是否实现接口
+>var _ io.Writer = (*myWriter)(nil)
+
+这时候会有点懵，不知道作者想要干什么，实际上这就是此问题的答案。编译器会由此检查 *myWriter 类型是否实现了 io.Writer 接口。
+
+## 接口构造过程
+## 类型转换和断言
+### 类型转换
+><结果类型> := <目标类型> ( <表达式> )
+
+```go
+package main
+
+import "fmt"
+
+func main() {
+	var i int = 9
+
+	var f float64
+	f = float64(i)
+	fmt.Printf("%T, %v\n", f, f)
+
+	f = 10.8
+	a := int(f)
+	fmt.Printf("%T, %v\n", a, a)
+
+	// s := []int(i)
+}
+```
+### 断言 
+前面说过，因为空接口 interface{} 没有定义任何函数，因此 Go 中所有类型都实现了空接口。当一个函数的形参是 interface{}，那么在函数中，需要对形参进行断言，从而得到它的真实类型。
+断言的语法为：
+```go
+<目标类型的值>，<布尔参数> := <表达式>.( 目标类型 ) // 安全类型断言 <目标类型的值> := <表达式>.( 目标类型 )　　//非安全类型断言
+```
+```go
+func main() {
+	var i interface{} = new(Student)
+	s, ok := i.(Student)
+	if ok {
+		fmt.Println(s)
+	}
+}
+```
+## 接口转换原理
+## interface实现的多态
+
+
+
+# 通道
+## CSP
+
+## channel数据结构
+### 数据结构
+```go
+type hchan struct {
+	// chan 里元素数量
+	qcount   uint
+	// chan 底层循环数组的长度
+	dataqsiz uint
+	// 指向底层循环数组的指针
+	// 只针对有缓冲的 channel
+	buf      unsafe.Pointer
+	// chan 中元素大小
+	elemsize uint16
+	// chan 是否被关闭的标志
+	closed   uint32
+	// chan 中元素类型
+	elemtype *_type // element type
+	// 已发送元素在循环数组中的索引
+	sendx    uint   // send index
+	// 已接收元素在循环数组中的索引
+	recvx    uint   // receive index
+	// 等待接收的 goroutine 队列
+	recvq    waitq  // list of recv waiters
+	// 等待发送的 goroutine 队列
+	sendq    waitq  // list of send waiters
+
+	// 保护 hchan 中所有字段
+	lock mutex
+}
+```
+
+waitq 是 sudog 的一个双向链表，而 sudog 实际上是对 goroutine 的一个封装：
+```go
+type waitq struct {
+	first *sudog
+	last  *sudog
+}
+```
+lock 用来保证每个读 channel 或写 channel 的操作都是原子的。
+
+例如，创建一个容量为 6 的，元素为 int 型的 channel 数据结构如下 ：
+
+
+![alt text](image-16.png)
+
+
+## 创建
+```go
+// 无缓冲通道
+ch1 := make(chan int)
+// 有缓冲通道
+ch2 := make(chan int, 10)
+```
+从函数原型来看，创建的 chan 是一个指针。所以我们能在函数间直接传递 channel，而不用传递 channel 的指针。
+
+具体来看下代码：
+```go
+const hchanSize = unsafe.Sizeof(hchan{}) + uintptr(-int(unsafe.Sizeof(hchan{}))&(maxAlign-1))
+
+func makechan(t *chantype, size int64) *hchan {
+	elem := t.elem
+
+	// 省略了检查 channel size，align 的代码
+	// ……
+
+	var c *hchan
+	// 如果元素类型不含指针 或者 size 大小为 0（无缓冲类型）
+	// 只进行一次内存分配
+	if elem.kind&kindNoPointers != 0 || size == 0 {
+		// 如果 hchan 结构体中不含指针，GC 就不会扫描 chan 中的元素
+		// 只分配 "hchan 结构体大小 + 元素大小*个数" 的内存
+		c = (*hchan)(mallocgc(hchanSize+uintptr(size)*elem.size, nil, true))
+		// 如果是缓冲型 channel 且元素大小不等于 0（大小等于 0的元素类型：struct{}）
+		if size > 0 && elem.size != 0 {
+			c.buf = add(unsafe.Pointer(c), hchanSize)
+		} else {
+			// race detector uses this location for synchronization
+			// Also prevents us from pointing beyond the allocation (see issue 9401).
+			// 1. 非缓冲型的，buf 没用，直接指向 chan 起始地址处
+			// 2. 缓冲型的，能进入到这里，说明元素无指针且元素类型为 struct{}，也无影响
+			// 因为只会用到接收和发送游标，不会真正拷贝东西到 c.buf 处（这会覆盖 chan的内容）
+			c.buf = unsafe.Pointer(c)
+		}
+	} else {
+		// 进行两次内存分配操作
+		c = new(hchan)
+		c.buf = newarray(elem, int(size))
+	}
+	c.elemsize = uint16(elem.size)
+	c.elemtype = elem
+	// 循环数组长度
+	c.dataqsiz = uint(size)
+
+	// 返回 hchan 指针
+	return c
+}
+```
+新建一个 chan 后，内存在堆上分配，大概长这样：
+![alt text](image-17.png)
+
+## 发送数据过程
+### 源码分析
+```go
+// 位于 src/runtime/chan.go
+
+func chansend(c *hchan, ep unsafe.Pointer, block bool, callerpc uintptr) bool {
+	// 如果 channel 是 nil
+	if c == nil {
+		// 不能阻塞，直接返回 false，表示未发送成功
+		if !block {
+			return false
+		}
+		// 当前 goroutine 被挂起
+		gopark(nil, nil, "chan send (nil chan)", traceEvGoStop, 2)
+		throw("unreachable")
+	}
+
+	// 省略 debug 相关……
+
+	// 对于不阻塞的 send，快速检测失败场景
+	//
+	// 如果 channel 未关闭且 channel 没有多余的缓冲空间。这可能是：
+	// 1. channel 是非缓冲型的，且等待接收队列里没有 goroutine
+	// 2. channel 是缓冲型的，但循环数组已经装满了元素
+	if !block && c.closed == 0 && ((c.dataqsiz == 0 && c.recvq.first == nil) ||
+		(c.dataqsiz > 0 && c.qcount == c.dataqsiz)) {
+		return false
+	}
+
+	var t0 int64
+	if blockprofilerate > 0 {
+		t0 = cputicks()
+	}
+
+	// 锁住 channel，并发安全
+	lock(&c.lock)
+
+	// 如果 channel 关闭了
+	if c.closed != 0 {
+		// 解锁
+		unlock(&c.lock)
+		// 直接 panic
+		panic(plainError("send on closed channel"))
+	}
+
+	// 如果接收队列里有 goroutine，直接将要发送的数据拷贝到接收 goroutine
+	if sg := c.recvq.dequeue(); sg != nil {
+		send(c, sg, ep, func() { unlock(&c.lock) }, 3)
+		return true
+	}
+
+	// 对于缓冲型的 channel，如果还有缓冲空间
+	if c.qcount < c.dataqsiz {
+		// qp 指向 buf 的 sendx 位置
+		qp := chanbuf(c, c.sendx)
+
+		// ……
+
+		// 将数据从 ep 处拷贝到 qp
+		typedmemmove(c.elemtype, qp, ep)
+		// 发送游标值加 1
+		c.sendx++
+		// 如果发送游标值等于容量值，游标值归 0
+		if c.sendx == c.dataqsiz {
+			c.sendx = 0
+		}
+		// 缓冲区的元素数量加一
+		c.qcount++
+
+		// 解锁
+		unlock(&c.lock)
+		return true
+	}
+
+	// 如果不需要阻塞，则直接返回错误
+	if !block {
+		unlock(&c.lock)
+		return false
+	}
+
+	// channel 满了，发送方会被阻塞。接下来会构造一个 sudog
+
+	// 获取当前 goroutine 的指针
+	gp := getg()
+	mysg := acquireSudog()
+	mysg.releasetime = 0
+	if t0 != 0 {
+		mysg.releasetime = -1
+	}
+
+	mysg.elem = ep
+	mysg.waitlink = nil
+	mysg.g = gp
+	mysg.selectdone = nil
+	mysg.c = c
+	gp.waiting = mysg
+	gp.param = nil
+
+	// 当前 goroutine 进入发送等待队列
+	c.sendq.enqueue(mysg)
+
+	// 当前 goroutine 被挂起
+	goparkunlock(&c.lock, "chan send", traceEvGoBlockSend, 3)
+
+	// 从这里开始被唤醒了（channel 有机会可以发送了）
+	if mysg != gp.waiting {
+		throw("G waiting list is corrupted")
+	}
+	gp.waiting = nil
+	if gp.param == nil {
+		if c.closed == 0 {
+			throw("chansend: spurious wakeup")
+		}
+		// 被唤醒后，channel 关闭了。坑爹啊，panic
+		panic(plainError("send on closed channel"))
+	}
+	gp.param = nil
+	if mysg.releasetime > 0 {
+		blockevent(mysg.releasetime-t0, 2)
+	}
+	// 去掉 mysg 上绑定的 channel
+	mysg.c = nil
+	releaseSudog(mysg)
+	return true
+}
+
+```
+
+# 标准库
+## context
+
+## reflect
+### 什么是反射
+Go 语言提供了一种机制在运行时更新变量和检查它们的值、调用它们的方法，但是在编译时并不知道这些变量的具体类型，这称为反射机制。
+### 社么时候需要反射
+
+使用反射的常见场景有以下两种：
+- 不能明确接口调用哪个函数，需要根据传入的参数在运行时决定。
+- 不能明确传入函数的参数类型，需要在运行时处理任意对象。
+
+**不推荐使用反射的理由有哪些**
+1. 与反射相关的代码，经常是难以阅读的。在软件工程中，代码可读性也是一个非常重要的指标。
+2. Go 语言作为一门静态语言，编码过程中，编译器能提前发现一些类型错误，但是对于反射代码是无能为力的。所以包含反射相关的代码，很可能会运行很久，才会出错，这时候经常是直接 panic，可能会造成严重的后果。
+3. 反射对性能影响还是比较大的，比正常代码运行速度慢一到两个数量级。所以，对于一个项目中处于运行效率关键位置的代码，尽量避免使用反射特性。
+
+### 如何实现反射 ?
+#### types 和 interface
+反射主要与 interface{} 类型相关。关于 interface 的底层结构。
+```go
+type iface struct {
+	tab  *itab
+	data unsafe.Pointer
+}
+
+type itab struct {
+	inter  *interfacetype
+	_type  *_type
+	link   *itab
+	hash   uint32
+	bad    bool
+	inhash bool
+	unused [2]byte
+	fun    [1]uintptr
+}
+```
+其中 itab 由具体类型 _type 以及 interfacetype 组成。_type 表示具体类型，而 interfacetype 则表示具体类型实现的接口类型。
+
+![alt text](image-18.png)
+
+实际上，iface 描述的是非空接口，它包含方法；与之相对的是 eface，描述的是空接口，不包含任何方法，Go 语言里有的类型都 “实现了” 空接口
+
+```go
+type eface struct {
+    _type *_type
+    data  unsafe.Pointer
+}
+```
+相比 iface，eface 就比较简单了。只维护了一个 _type 字段，表示空接口所承载的具体的实体类型。data 描述了具体的值。
+
+![alt text](image-19.png)
+
+
+### 如何比较两个对象完全相同
+Go 语言中提供了一个函数可以完成此项功能
+>func DeepEqual(x, y interface{}) bool
+
+
+DeepEqual 函数的参数是两个 interface，实际上也就是可以输入任意类型，输出 true 或者 flase 表示输入的两个变量是否是“深度”相等。
+
+先明白一点，如果是不同的类型，即使是底层类型相同，相应的值也相同，那么两者也不是“深度”相等。
+
+
+```go
+type MyInt int
+type YourInt int
+
+func main() {
+	m := MyInt(1)
+	y := YourInt(1)
+
+	fmt.Println(reflect.DeepEqual(m, y)) // false
+}
+```
+上面的代码中，m, y 底层都是 int，而且值都是 1，但是两者静态类型不同，前者是 MyInt，后者是 YourInt，因此两者不是“深度”相等。
+
+
+|类型|	深度相等情形|
+|--------|---------|
+|Array|	相同索引处的元素“深度”相等|
+|Struct|	相应字段，包含导出和不导出，“深度”相等|
+|Func|	只有两者都是 nil 时|
+|Interface|	两者存储的具体值“深度”相等|
+|Map|	1、都为 nil；2、非空、长度相等，指向同一个 map 实体对象，或者相应的 key 指向的 value “深度”相等|
+|Pointer|	1、使用 == 比较的结果相等；2、指向的实体“深度”相等|
+|Slice|	1、都为 nil；2、非空、长度相等，首元素指向同一个底层数组的相同元素，即 &x[0] == &y[0] 或者 相同索引处的元素“深度”相等|
+|numbers, bools, strings, and channels|	使用 == 比较的结果为真|
+
+
+
+对于“有环”的类型，比如循环链表，比较两者是否“深度”相等的过程中，需要对已比较的内容作一个标记，一旦发现两个指针之前比较过，立即停止比较，并判定二者是深度相等的。这样做的原因是，及时停止比较，避免陷入无限循环。
+
+
+## unsafe
+### go指针和unsafe.Pointer区别
+
+#### Go 的指针不能进行数学运算
+```go
+a := 5
+p := &a
+
+p++
+p = &a + 3
+```
+上面的代码将不能通过编译，会报编译错误：invalid operation，也就是说不能对指针做数学运算。
+#### 不同类型的指针不能相互转换
+```go
+func main() {
+	a := int(100)
+	var f *float64
+	
+	f = &a
+}
+```
+#### 不同类型的指针不能使用 == 或 != 比较
+只有在两个指针类型相同或者可以相互转换的情况下，才可以对两者进行比较。另外，指针可以通过 == 和 != 直接和 nil 作比较。
+
+
+#### 不同类型的指针变量不能相互赋值
+
+
+#### unsafe 
+unsafe 包提供了 2 点重要的能力：
+- 任何类型的指针和 unsafe.Pointer 可以相互转换。
+- uintptr 类型和 unsafe.Pointer 可以相互转换。
+
+![alt text](image-20.png)
+
+pointer 不能直接进行数学运算，但可以把它转换成 uintptr，对 uintptr 类型进行数学运算，再转换成 pointer 类型。
+
+
+### unsave获取slice获取slice&map长度
+#### 获取slice长度
+通过前面关于 slice 的文章，我们知道了 slice header 的结构体定义：
+```go
+// runtime/slice.go
+type slice struct {
+    array unsafe.Pointer // 元素指针
+    len   int // 长度 
+    cap   int // 容量
+}
+```
+
+调用 make 函数新建一个 slice，底层调用的是 makeslice 函数，返回的是 slice 结构体：
+>func makeslice(et *_type, len, cap int) slice
+
+因此我们可以通过 unsafe.Pointer 和 uintptr 进行转换，得到 slice 的字段值。
+```go
+func main() {
+	s := make([]int, 9, 20)
+	var Len = *(*int)(unsafe.Pointer(uintptr(unsafe.Pointer(&s)) + uintptr(8)))
+	fmt.Println(Len, len(s)) // 9 9
+
+	var Cap = *(*int)(unsafe.Pointer(uintptr(unsafe.Pointer(&s)) + uintptr(16)))
+	fmt.Println(Cap, cap(s)) // 20 20
+}
+```
+Len，cap 的转换流程如下：
+```shell
+Len: &s => pointer => uintptr => pointer => *int => int
+Cap: &s => pointer => uintptr => pointer => *int => int
+```
+
+#### 获取 map 长度
+```go
+type hmap struct {
+	count     int
+	flags     uint8
+	B         uint8
+	noverflow uint16
+	hash0     uint32
+
+	buckets    unsafe.Pointer
+	oldbuckets unsafe.Pointer
+	nevacuate  uintptr
+
+	extra *mapextra
+}
+```
+和 slice 不同的是，makemap 函数返回的是 hmap 的指针，注意是指针
+
+```go
+func main() {
+	mp := make(map[string]int)
+	mp["qcrao"] = 100
+	mp["stefno"] = 18
+
+	count := **(**int)(unsafe.Pointer(&mp))
+	fmt.Println(count, len(mp)) // 2 2
+}
+```
+count 的转换过程：
+>&mp => pointer => **int => int
+
+
+### unsafe修改私有成员
+对于一个结构体，通过 offset 函数可以获取结构体成员的偏移量，进而获取成员的地址，读写该地址的内存，就可以达到改变成员值的目的。
+
+这里有一个内存分配相关的事实：结构体会被分配一块连续的内存，结构体的地址也代表了第一个成员的地址。
+```go
+
+package main
+
+import (
+	"fmt"
+	"unsafe"
+)
+
+type Programmer struct {
+	name string
+	language string
+}
+
+func main() {
+	p := Programmer{"stefno", "go"}
+	fmt.Println(p)
+	
+	name := (*string)(unsafe.Pointer(&p))
+	*name = "qcrao"
+
+	lang := (*string)(unsafe.Pointer(uintptr(unsafe.Pointer(&p)) + unsafe.Offsetof(p.language)))
+	*lang = "Golang"
+
+	fmt.Println(p)
+}
+```
+运行代码，输出：
+```shell
+{stefno go}
+{qcrao Golang}
+```
+name 是结构体的第一个成员，因此可以直接将 &p 解析成 *string。这一点，在前面获取 map 的 count 成员时，用的是同样的原理。
+
+对于结构体的私有成员，现在有办法可以通过 unsafe.Pointer 改变它的值了。
+
+我把 Programmer 结构体升级，多加一个字段：
+```go
+type Programmer struct {
+	name string
+	age int
+	language string
+}
+```
+并且放在其他包，这样在 main 函数中，它的三个字段都是私有成员变量，不能直接修改。但我通过 unsafe.Sizeof() 函数可以获取成员大小，进而计算出成员的地址，直接修改内存。
+```go
+func main() {
+	p := Programmer{"stefno", 18, "go"}
+	fmt.Println(p)
+
+	lang := (*string)(unsafe.Pointer(uintptr(unsafe.Pointer(&p)) + unsafe.Sizeof(int(0)) + unsafe.Sizeof(string(""))))
+	*lang = "Golang"
+
+	fmt.Println(p)
+}
+```
+### 实现字符串和byte切片零拷贝
+这是一个非常精典的例子。实现字符串和 bytes 切片之间的转换，要求是 zero-copy。想一下，一般的做法，都需要遍历字符串或 bytes 切片，再挨个赋值。
+```go
+type StringHeader struct {
+	Data uintptr
+	Len  int
+}
+
+type SliceHeader struct {
+	Data uintptr
+	Len  int
+	Cap  int
+}
+```
+上面是反射包下的结构体，路径：src/reflect/value.go。只需要共享底层 Data 和 Len 就可以实现 zero-copy。
+```go
+func string2bytes(s string) []byte {
+	return *(*[]byte)(unsafe.Pointer(&s))
+}
+func bytes2string(b []byte) string{
+	return *(*string)(unsafe.Pointer(&b))
+}
+```
+# 编译
+### 接口类型和 nil 作比较
+接口值的零值是指动态类型和动态值都为 nil。当仅且当这两部分的值都为 nil 的情况下，这个接口值就才会被认为 接口值 == nil。
 # 调度器
 ## goroutine和线程区别
 **内存占用**
