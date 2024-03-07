@@ -300,7 +300,6 @@ func main() {
 
 因此，遍历如果发生在扩容的过程中，就会涉及到遍历新老 bucket 的过程，这是难点所在。
 
-我先写一个简单的代码样例，假装不知道遍历过程具体调用的是什么函数：
 ```go
 package main
 
@@ -317,8 +316,7 @@ func main() {
 ```
 
 执行命令：
-
-go tool compile -S main.go
+>go tool compile -S main.go
 得到汇编命令。这里就不逐行讲解了，可以去看之前的几篇文章，说得很详细。
 
 关键的几行汇编代码如下：
@@ -370,13 +368,553 @@ type hiter struct {
 	checkBucket uintptr
 }
 ```
-假设我们有下图所示的一个 map，起始时 B = 1，有两个 bucket，后来触发了扩容（这里不要深究扩容条件，只是一个设定），B 变成 2。并且， 1 号 bucket 中的内容搬迁到了新的 bucket，1 号裂变成 1 号和 3 号；0 号 bucket 暂未搬迁。老的 bucket 挂在在 *oldbuckets 指针上面，新的 bucket 则挂在 *buckets 指针上面。
+前面已经提到过，即使是对一个写死的 map 进行遍历，每次出来的结果也是无序的。下面我们就可以近距离地观察他们的实现了
+```go
+// 生成随机数 r
+r := uintptr(fastrand())
+if h.B > 31-bucketCntBits {
+	r += uintptr(fastrand()) << 31
+}
+
+// 从哪个 bucket 开始遍历
+it.startBucket = r & (uintptr(1)<<h.B - 1)
+// 从 bucket 的哪个 cell 开始遍历
+it.offset = uint8(r >> h.B & (bucketCnt - 1))
+```
+
+例如，B = 2，那 `uintptr(1)<<h.B - 1` 结果就是 3，低 8 位为 0000 0011，将 r 与之相与，就可以得到一个 0~3 的 bucket 序号；bucketCnt - 1 等于 7，低 8 位为 0000 0111，将 r 右移 2 位后，与 7 相与，就可以得到一个 0~7 号的 cell。
+
+于是，在 mapiternext 函数中就会从 it.startBucket 的 it.offset 号的 cell 开始遍历，取出其中的 key 和 value，直到又回到起点 bucket，完成遍历过程。
+
+假设我们有下图所示的一个 map，起始时 B = 1，有两个 bucket，后来触发了扩容，B 变成 2。并且， 1 号 bucket 中的内容搬迁到了新的 bucket，1 号裂变成 1 号和 3 号；0 号 bucket 暂未搬迁。老的 bucket 挂在在 *oldbuckets 指针上面，新的 bucket 则挂在 *buckets 指针上面。
 ![alt text](image-13.png)
 
 这时，我们对此 map 进行遍历。假设经过初始化后，startBucket = 3，offset = 2。于是，遍历的起点将是 3 号 bucket 的 2 号 cell，下面这张图就是开始遍历时的状态：
 ![alt text](image-14.png)
+
 标红的表示起始位置，bucket 遍历顺序为：3 -> 0 -> 1 -> 2。
+
+因为 3 号 bucket 对应老的 1 号 bucket，因此先检查老 1 号 bucket 是否已经被搬迁过。判断方法就是：
+```go
+func evacuated(b *bmap) bool {
+	h := b.tophash[0]
+	return h > empty && h < minTopHash
+}
+```
+如果 b.tophash[0] 的值在标志值范围内，即在 (0,4) 区间里，说明已经被搬迁过了。
+```go
+empty = 0
+evacuatedEmpty = 1
+evacuatedX = 2
+evacuatedY = 3
+minTopHash = 4
+```
+在本例中，老 1 号 bucket 已经被搬迁过了。所以它的 tophash[0] 值在 (0,4) 范围内，因此只用遍历新的 3 号 bucket。
+
+依次遍历 3 号 bucket 的 cell，这时候会找到第一个非空的 key：元素 e。到这里，mapiternext 函数返回，这时我们的遍历结果仅有一个元素：
+![alt text](image-21.png)
+由于返回的 key 不为空，所以会继续调用 mapiternext 函数。
+
+继续从上次遍历到的地方往后遍历，从新 3 号 overflow bucket 中找到了元素 f 和 元素 g。
+
+遍历结果集也因此壮大：
+![alt text](image-22.png)
+并没有这么简单，回忆一下，老 0 号 bucket 在搬迁后将裂变成 2 个 bucket：新 0 号、新 2 号。而我们此时正在遍历的只是新 0 号 bucket。所以，我们只会取出老 0 号 bucket 中那些在裂变之后，分配到新 0 号 bucket 中的那些 key。
+因此，lowbits == 00 的将进入遍历结果集：
+![alt text](image-23.png)
+和之前的流程一样，继续遍历新 1 号 bucket，发现老 1 号 bucket 已经搬迁，只用遍历新 1 号 bucket 中现有的元素就可以了。结果集变成：
+![alt text](image-24.png)
+继续遍历新 2 号 bucket，它来自老 0 号 bucket，因此需要在老 0 号 bucket 中那些会裂变到新 2 号 bucket 中的 key，也就是 lowbit == 10 的那些 key。
+
+这样，遍历结果集变成：
+![alt text](image-25.png)
+map 遍历的核心在于理解 2 倍扩容时，老 bucket 会分裂到 2 个新 bucket 中去。而遍历操作，会按照新 bucket 的序号顺序进行，碰到老 bucket 未搬迁的情况时，要在老 bucket 中找到将来要搬迁到新 bucket 来的 key。
+
+
+
 ## 赋值
+
+实际上插入或修改 key 的语法是一样的，只不过前者操作的 key 在 map 中不存在，而后者操作的 key 存在 map 中。
+mapassign 有一个系列的函数，根据 key 类型的不同，编译器会将其优化为相应的“快速函数”。
+|key类型|	插入|
+|-------------|--------|-
+|uint32|	mapassign_fast32(t *maptype, h *hmap, key uint32) unsafe.Pointer|
+|uint64|	mapassign_fast64(t *maptype, h *hmap, key uint64) unsafe.Pointer|
+|string|	mapassign_faststr(t *maptype, h *hmap, ky string) unsafe.Pointer|
+
+我们只用研究最一般的赋值函数 mapassign。
+整体来看，流程非常得简单：对 key 计算 hash 值，根据 hash 值按照之前的流程，找到要赋值的位置，对相应位置进行赋值。
+
+源码大体和之前讲的类似，核心还是一个双层循环，外层遍历 bucket 和它的 overflow bucket，内层遍历整个 bucket 的各个 cell。
+
+我这里会针对这个过程提几点重要的。
+
+函数首先会检查 map 的标志位 flags。如果 flags 的写标志位此时被置 1 了，说明有其他协程在执行“写”操作，进而导致程序 panic。这也说明了 map 对**协程是不安全**的。
+
+通过前文我们知道扩容是渐进式的，如果 map 处在扩容的过程中，那么当 key 定位到了某个 bucket 后，需要确保这个 bucket 对应的老 bucket 完成了迁移过程。即老 bucket 里的 key 都要迁移到新的 bucket 中来，才能在新的 bucket 中进行插入或者更新的操作。
+
+上面说的操作是在函数靠前的位置进行的，只有进行完了这个搬迁操作后，我们才能放心地在新 bucket 里定位 key 要安置的地址，再进行之后的操作。
+
+现在到了定位 key 应该放置的位置了，所谓找准自己的位置很重要。准备两个指针，一个（inserti）指向 key 的 hash 值在 tophash 数组所处的位置，另一个(insertk)指向 cell 的位置（也就是 key 最终放置的地址），当然，对应 value 的位置就很容易定位出来了。这三者实际上都是关联的，在 tophash 数组中的索引位置决定了 key 在整个 bucket 中的位置（共 8 个 key），而 value 的位置需要“跨过” 8 个 key 的长度。
+
+在循环的过程中，inserti 和 insertk 分别指向第一个找到的空闲的 cell。如果之后在 map 没有找到 key 的存在，也就是说原来 map 中没有此 key，这意味着插入新 key。那最终 key 的安置地址就是第一次发现的“空位”（tophash 是 empty）。
+
+如果这个 bucket 的 8 个 key 都已经放置满了，那在跳出循环后，发现 inserti 和 insertk 都是空，这时候需要在 bucket 后面挂上 overflow bucket。当然，也有可能是在 overflow bucket 后面再挂上一个 overflow bucket。这就说明，太多 key hash 到了此 bucket。
+
+在正式安置 key 之前，还要检查 map 的状态，看它是否需要进行扩容。如果满足扩容的条件，就主动触发一次扩容操作。
+
+这之后，整个之前的查找定位 key 的过程，还得再重新走一次。因为扩容之后，key 的分布都发生了变化。
+
+>func mapassign(t *maptype, h *hmap, key unsafe.Pointer) unsafe.Pointer
+
+
+## 删除
+写操作底层的执行函数是 mapdelete：
+>func mapdelete(t *maptype, h *hmap, key unsafe.Pointer) 
+根据 key 类型的不同，删除操作会被优化成更具体的函数：
+|key 类型|	删除|
+|------|-------|
+|uint32|	mapdelete_fast32(t *maptype, h *hmap, key uint32)|
+|uint64	|mapdelete_fast64(t *maptype, h *hmap, key uint64)|
+|string|	mapdelete_faststr(t *maptype, h *hmap, ky string)|
+
+当然，我们只关心 mapdelete 函数。它首先会检查 h.flags 标志，如果发现写标位是 1，直接 panic，因为这表明有其他协程同时在进行写操作。
+
+计算 key 的哈希，找到落入的 bucket。检查此 map 如果正在扩容的过程中，直接触发一次搬迁操作。
+
+删除操作同样是两层循环，核心还是找到 key 的具体位置。寻找过程都是类似的，在 bucket 中挨个 cell 寻找。
+
+找到对应位置后，对 key 或者 value 进行“清零”操作：
+```go
+// 对 key 清零
+if t.indirectkey {
+	*(*unsafe.Pointer)(k) = nil
+} else {
+	typedmemclr(t.key, k)
+}
+
+// 对 value 清零
+if t.indirectvalue {
+	*(*unsafe.Pointer)(v) = nil
+} else {
+	typedmemclr(t.elem, v)
+}
+```
+最后，将 count 值减 1，将对应位置的 tophash 值置成 Empty。
+
+## 扩容
+
+使用哈希表的目的就是要快速查找到目标 key，然而，随着向 map 中添加的 key 越来越多，key 发生碰撞的概率也越来越大。bucket 中的 8 个 cell 会被逐渐塞满，查找、插入、删除 key 的效率也会越来越低。最理想的情况是一个 bucket 只装一个 key，这样，就能达到 O(1) 的效率，但这样空间消耗太大，用空间换时间的代价太高。
+
+Go 语言采用一个 bucket 里装载 8 个 key，定位到某个 bucket 后，还需要再定位到具体的 key，这实际上又用了时间换空间。
+
+当然，这样做，要有一个度，不然所有的 key 都落在了同一个 bucket 里，直接退化成了链表，各种操作的效率直接降为 O(n)，是不行的。
+
+因此，需要有一个指标来衡量前面描述的情况，这就是装载因子。Go 源码里这样定义 装载因子：
+>loadFactor := count / (2^B)
+
+count 就是 map 的元素个数，2^B 表示 bucket 数量。
+
+再来说触发 map 扩容的时机：在向 map 插入新 key 的时候，会进行条件检测，符合下面这 2 个条件，就会触发扩容：
+- 装载因子超过阈值，源码里定义的阈值是 6.5。
+- overflow 的 bucket 数量过多：当 B 小于 15，也就是 bucket 总数 2^B 小于 2^15 时，如果 overflow 的 bucket 数量超过 2^B；当 B >= 15，也就是 bucket 总数 2^B 大于等于 2^15，如果 overflow 的 bucket 数量超过 2^15。
+
+通过汇编语言可以找到赋值操作对应源码中的函数是 mapassign，对应扩容条件的源码如下：
+```go
+// src/runtime/hashmap.go/mapassign
+
+// 触发扩容时机
+if !h.growing() && (overLoadFactor(int64(h.count), h.B) || tooManyOverflowBuckets(h.noverflow, h.B)) {
+		hashGrow(t, h)
+	}
+
+// 装载因子超过 6.5
+func overLoadFactor(count int64, B uint8) bool {
+	return count >= bucketCnt && float32(count) >= loadFactor*float32((uint64(1)<<B))
+}
+
+// overflow buckets 太多
+func tooManyOverflowBuckets(noverflow uint16, B uint8) bool {
+	if B < 16 {
+		return noverflow >= uint16(1)<<B
+	}
+	return noverflow >= 1<<15
+}
+```
+- 第 1 点：我们知道，每个 bucket 有 8 个空位，在没有溢出，且所有的桶都装满了的情况下，装载因子算出来的结果是 8。因此当装载因子超过 6.5 时，表明很多 bucket 都快要装满了，查找效率和插入效率都变低了。在这个时候进行扩容是有必要的。
+- 第 2 点：是对第 1 点的补充。就是说在装载因子比较小的情况下，这时候 map 的查找和插入效率也很低，而第 1 点识别不出来这种情况。表面现象就是计算装载因子的分子比较小，即 map 里元素总数少，但是 bucket 数量多（真实分配的 bucket 数量多，包括大量的 overflow bucket）。
+
+不难想像造成这种情况的原因：不停地插入、删除元素。先插入很多元素，导致创建了很多 bucket，但是装载因子达不到第 1 点的临界值，未触发扩容来缓解这种情况。之后，删除元素降低元素总数量，再插入很多元素，导致创建很多的 overflow bucket，但就是不会触犯第 1 点的规定，你能拿我怎么办？overflow bucket 数量太多，导致 key 会很分散，查找插入效率低得吓人，因此出台第 2 点规定。这就像是一座空城，房子很多，但是住户很少，都分散了，找起人来很困难。
+
+对于命中条件 1，2 的限制，都会发生扩容。但是扩容的策略并不相同，毕竟两种条件应对的场景不同。
+
+对于条件 1，元素太多，而 bucket 数量太少，很简单：将 B 加 1，bucket 最大数量（2^B）直接变成原来 bucket 数量的 2 倍。于是，就有新老 bucket 了。注意，这时候元素都在老 bucket 里，还没迁移到新的 bucket 来。而且，新 bucket 只是最大数量变为原来最大数量（2^B）的 2 倍（2^B * 2）。
+
+对于条件 2，其实元素没那么多，但是 overflow bucket 数特别多，说明很多 bucket 都没装满。解决办法就是开辟一个新 bucket 空间，将老 bucket 中的元素移动到新 bucket，使得同一个 bucket 中的 key 排列地更紧密。这样，原来，在 overflow bucket 中的 key 可以移动到 bucket 中来。结果是节省空间，提高 bucket 利用率，map 的查找和插入效率自然就会提升。
+
+对于条件 2 的解决方案，曹大的博客里还提出了一个极端的情况：如果插入 map 的 key 哈希都一样，就会落到同一个 bucket 里，超过 8 个就会产生 overflow bucket，结果也会造成 overflow bucket 数过多。移动元素其实解决不了问题，因为这时整个哈希表已经退化成了一个链表，操作效率变成了 O(n)。
+
+再来看一下扩容具体是怎么做的。由于 map 扩容需要将原有的 key/value 重新搬迁到新的内存地址，如果有大量的 key/value 需要搬迁，会非常影响性能。因此 Go map 的扩容采取了一种称为“渐进式”地方式，原有的 key 并不会一次性搬迁完毕，每次最多只会搬迁 2 个 bucket。
+
+上面说的 hashGrow() 函数实际上并没有真正地“搬迁”，它只是分配好了新的 buckets，并将老的 buckets 挂到了 oldbuckets 字段上。真正搬迁 buckets 的动作在 growWork() 函数中，而调用 growWork() 函数的动作是在 mapassign 和 mapdelete 函数中。也就是插入或修改、删除 key 的时候，都会尝试进行搬迁 buckets 的工作。先检查 oldbuckets 是否搬迁完毕，具体来说就是检查 oldbuckets 是否为 nil。
+
+我们先看 hashGrow() 函数所做的工作，再来看具体的搬迁 buckets 是如何进行的。
+```go
+func hashGrow(t *maptype, h *hmap) {
+	// B+1 相当于是原来 2 倍的空间
+	bigger := uint8(1)
+
+	// 对应条件 2
+	if !overLoadFactor(int64(h.count), h.B) {
+		// 进行等量的内存扩容，所以 B 不变
+		bigger = 0
+		h.flags |= sameSizeGrow
+	}
+	// 将老 buckets 挂到 buckets 上
+	oldbuckets := h.buckets
+	// 申请新的 buckets 空间
+	newbuckets, nextOverflow := makeBucketArray(t, h.B+bigger)
+
+	flags := h.flags &^ (iterator | oldIterator)
+	if h.flags&iterator != 0 {
+		flags |= oldIterator
+	}
+	// 提交 grow 的动作
+	h.B += bigger
+	h.flags = flags
+	h.oldbuckets = oldbuckets
+	h.buckets = newbuckets
+	// 搬迁进度为 0
+	h.nevacuate = 0
+	// overflow buckets 数为 0
+	h.noverflow = 0
+
+	// ……
+}
+```
+主要是申请到了新的 buckets 空间，把相关的标志位都进行了处理：例如标志 nevacuate 被置为 0， 表示当前搬迁进度为 0。
+
+值得一说的是对 h.flags 的处理：
+```go
+
+flags := h.flags &^ (iterator | oldIterator)
+if h.flags&iterator != 0 {
+	flags |= oldIterator
+}
+```
+这里得先说下运算符：&^。这叫按位置 0运算符。例如：
+```shell
+x = 01010011
+y = 01010100
+z = x &^ y = 00000011
+```
+如果 y bit 位为 1，那么结果 z 对应 bit 位就为 0，否则 z 对应 bit 位就和 x 对应 bit 位的值相同。
+
+所以上面那段对 flags 一顿操作的代码的意思是：先把 h.flags 中 iterator 和 oldIterator 对应位清 0，然后如果发现 iterator 位为 1，那就把它转接到 oldIterator 位，使得 oldIterator 标志位变成 1。潜台词就是：buckets 现在挂到了 oldBuckets 名下了，对应的标志位也转接过去吧。
+
+几个标志位如下：
+```go
+// 可能有迭代器使用 buckets
+iterator     = 1
+// 可能有迭代器使用 oldbuckets
+oldIterator  = 2
+// 有协程正在向 map 中写入 key
+hashWriting  = 4
+// 等量扩容（对应条件 2）
+sameSizeGrow = 8
+```
+再来看看真正执行搬迁工作的 growWork() 函数。
+```go
+
+func growWork(t *maptype, h *hmap, bucket uintptr) {
+	// 确认搬迁老的 bucket 对应正在使用的 bucket
+	evacuate(t, h, bucket&h.oldbucketmask())
+
+	// 再搬迁一个 bucket，以加快搬迁进程
+	if h.growing() {
+		evacuate(t, h, h.nevacuate)
+	}
+}
+h.growing() 函数非常简单：
+
+
+func (h *hmap) growing() bool {
+	return h.oldbuckets != nil
+}
+```
+如果 oldbuckets 不为空，说明还没有搬迁完毕，还得继续搬。
+
+bucket&h.oldbucketmask() 这行代码，如源码注释里说的，是为了确认搬迁的 bucket 是我们正在使用的 bucket。oldbucketmask() 函数返回扩容前的 map 的 bucketmask。
+
+所谓的 bucketmask，作用就是将 key 计算出来的哈希值与 bucketmask 相与，得到的结果就是 key 应该落入的桶。比如 B = 5，那么 bucketmask 的低 5 位是 11111，其余位是 0，hash 值与其相与的意思是，只有 hash 值的低 5 位决策 key 到底落入哪个 bucket。
+
+接下来，我们集中所有的精力在搬迁的关键函数 evacuate。源码贴在下面，不要紧张，我会加上大面积的注释，通过注释绝对是能看懂的。之后，我会再对搬迁过程作详细说明。
+
+源码如下：
+```go
+func evacuate(t *maptype, h *hmap, oldbucket uintptr) {
+	// 定位老的 bucket 地址
+	b := (*bmap)(add(h.oldbuckets, oldbucket*uintptr(t.bucketsize)))
+	// 结果是 2^B，如 B = 5，结果为32
+	newbit := h.noldbuckets()
+	// key 的哈希函数
+	alg := t.key.alg
+	// 如果 b 没有被搬迁过
+	if !evacuated(b) {
+		var (
+			// 表示bucket 移动的目标地址
+			x, y   *bmap
+			// 指向 x,y 中的 key/val
+			xi, yi int
+			// 指向 x，y 中的 key
+			xk, yk unsafe.Pointer
+			// 指向 x，y 中的 value
+			xv, yv unsafe.Pointer
+		)
+		// 默认是等 size 扩容，前后 bucket 序号不变
+		// 使用 x 来进行搬迁
+		x = (*bmap)(add(h.buckets, oldbucket*uintptr(t.bucketsize)))
+		xi = 0
+		xk = add(unsafe.Pointer(x), dataOffset)
+		xv = add(xk, bucketCnt*uintptr(t.keysize))、
+
+		// 如果不是等 size 扩容，前后 bucket 序号有变
+		// 使用 y 来进行搬迁
+		if !h.sameSizeGrow() {
+			// y 代表的 bucket 序号增加了 2^B
+			y = (*bmap)(add(h.buckets, (oldbucket+newbit)*uintptr(t.bucketsize)))
+			yi = 0
+			yk = add(unsafe.Pointer(y), dataOffset)
+			yv = add(yk, bucketCnt*uintptr(t.keysize))
+		}
+
+		// 遍历所有的 bucket，包括 overflow buckets
+		// b 是老的 bucket 地址
+		for ; b != nil; b = b.overflow(t) {
+			k := add(unsafe.Pointer(b), dataOffset)
+			v := add(k, bucketCnt*uintptr(t.keysize))
+
+			// 遍历 bucket 中的所有 cell
+			for i := 0; i < bucketCnt; i, k, v = i+1, add(k, uintptr(t.keysize)), add(v, uintptr(t.valuesize)) {
+				// 当前 cell 的 top hash 值
+				top := b.tophash[i]
+				// 如果 cell 为空，即没有 key
+				if top == empty {
+					// 那就标志它被"搬迁"过
+					b.tophash[i] = evacuatedEmpty
+					// 继续下个 cell
+					continue
+				}
+				// 正常不会出现这种情况
+				// 未被搬迁的 cell 只可能是 empty 或是
+				// 正常的 top hash（大于 minTopHash）
+				if top < minTopHash {
+					throw("bad map state")
+				}
+
+				k2 := k
+				// 如果 key 是指针，则解引用
+				if t.indirectkey {
+					k2 = *((*unsafe.Pointer)(k2))
+				}
+
+				// 默认使用 X，等量扩容
+				useX := true
+				// 如果不是等量扩容
+				if !h.sameSizeGrow() {
+					// 计算 hash 值，和 key 第一次写入时一样
+					hash := alg.hash(k2, uintptr(h.hash0))
+
+					// 如果有协程正在遍历 map
+					if h.flags&iterator != 0 {
+						// 如果出现 相同的 key 值，算出来的 hash 值不同
+						if !t.reflexivekey && !alg.equal(k2, k2) {
+							// 只有在 float 变量的 NaN() 情况下会出现
+							if top&1 != 0 {
+								// 第 B 位置 1
+								hash |= newbit
+							} else {
+								// 第 B 位置 0
+								hash &^= newbit
+							}
+							// 取高 8 位作为 top hash 值
+							top = uint8(hash >> (sys.PtrSize*8 - 8))
+							if top < minTopHash {
+								top += minTopHash
+							}
+						}
+					}
+
+					// 取决于新哈希值的 oldB+1 位是 0 还是 1
+					// 详细看后面的文章
+					useX = hash&newbit == 0
+				}
+
+				// 如果 key 搬到 X 部分
+				if useX {
+					// 标志老的 cell 的 top hash 值，表示搬移到 X 部分
+					b.tophash[i] = evacuatedX
+					// 如果 xi 等于 8，说明要溢出了
+					if xi == bucketCnt {
+						// 新建一个 bucket
+						newx := h.newoverflow(t, x)
+						x = newx
+						// xi 从 0 开始计数
+						xi = 0
+						// xk 表示 key 要移动到的位置
+						xk = add(unsafe.Pointer(x), dataOffset)
+						// xv 表示 value 要移动到的位置
+						xv = add(xk, bucketCnt*uintptr(t.keysize))
+					}
+					// 设置 top hash 值
+					x.tophash[xi] = top
+					// key 是指针
+					if t.indirectkey {
+						// 将原 key（是指针）复制到新位置
+						*(*unsafe.Pointer)(xk) = k2 // copy pointer
+					} else {
+						// 将原 key（是值）复制到新位置
+						typedmemmove(t.key, xk, k) // copy value
+					}
+					// value 是指针，操作同 key
+					if t.indirectvalue {
+						*(*unsafe.Pointer)(xv) = *(*unsafe.Pointer)(v)
+					} else {
+						typedmemmove(t.elem, xv, v)
+					}
+
+					// 定位到下一个 cell
+					xi++
+					xk = add(xk, uintptr(t.keysize))
+					xv = add(xv, uintptr(t.valuesize))
+				} else { // key 搬到 Y 部分，操作同 X 部分
+					// ……
+					// 省略了这部分，操作和 X 部分相同
+				}
+			}
+		}
+		// 如果没有协程在使用老的 buckets，就把老 buckets 清除掉，帮助gc
+		if h.flags&oldIterator == 0 {
+			b = (*bmap)(add(h.oldbuckets, oldbucket*uintptr(t.bucketsize)))
+			// 只清除bucket 的 key,value 部分，保留 top hash 部分，指示搬迁状态
+			if t.bucket.kind&kindNoPointers == 0 {
+				memclrHasPointers(add(unsafe.Pointer(b), dataOffset), uintptr(t.bucketsize)-dataOffset)
+			} else {
+				memclrNoHeapPointers(add(unsafe.Pointer(b), dataOffset), uintptr(t.bucketsize)-dataOffset)
+			}
+		}
+	}
+
+	// 更新搬迁进度
+	// 如果此次搬迁的 bucket 等于当前进度
+	if oldbucket == h.nevacuate {
+		// 进度加 1
+		h.nevacuate = oldbucket + 1
+		// Experiments suggest that 1024 is overkill by at least an order of magnitude.
+		// Put it in there as a safeguard anyway, to ensure O(1) behavior.
+		// 尝试往后看 1024 个 bucket
+		stop := h.nevacuate + 1024
+		if stop > newbit {
+			stop = newbit
+		}
+		// 寻找没有搬迁的 bucket
+		for h.nevacuate != stop && bucketEvacuated(t, h, h.nevacuate) {
+			h.nevacuate++
+		}
+		
+		// 现在 h.nevacuate 之前的 bucket 都被搬迁完毕
+		
+		// 所有的 buckets 搬迁完毕
+		if h.nevacuate == newbit {
+			// 清除老的 buckets
+			h.oldbuckets = nil
+			// 清除老的 overflow bucket
+			// 回忆一下：[0] 表示当前 overflow bucket
+			// [1] 表示 old overflow bucket
+			if h.extra != nil {
+				h.extra.overflow[1] = nil
+			}
+			// 清除正在扩容的标志位
+			h.flags &^= sameSizeGrow
+		}
+	}
+}
+```
+
+搬迁的目的就是将老的 buckets 搬迁到新的 buckets。而通过前面的说明我们知道，应对条件 1，新的 buckets 数量是之前的一倍，应对条件 2，新的 buckets 数量和之前相等。
+
+对于条件 2，从老的 buckets 搬迁到新的 buckets，由于 bucktes 数量不变，因此可以按序号来搬，比如原来在 0 号 bucktes，到新的地方后，仍然放在 0 号 buckets。
+
+对于条件 1，就没这么简单了。要重新计算 key 的哈希，才能决定它到底落在哪个 bucket。例如，原来 B = 5，计算出 key 的哈希后，只用看它的低 5 位，就能决定它落在哪个 bucket。扩容后，B 变成了 6，因此需要多看一位，它的低 6 位决定 key 落在哪个 bucket。这称为 rehash。
+![alt text](image-26.png)
+
+因此，某个 key 在搬迁前后 bucket 序号可能和原来相等，也可能是相比原来加上 2^B（原来的 B 值），取决于 hash 值 第 6 bit 位是 0 还是 1。
+
+再明确一个问题：如果扩容后，B 增加了 1，意味着 buckets 总数是原来的 2 倍，原来 1 号的桶“裂变”到两个桶。
+
+例如，原始 B = 2，1号 bucket 中有 2 个 key 的哈希值低 3 位分别为：010，110。由于原来 B = 2，所以低 2 位 10 决定它们落在 2 号桶，现在 B 变成 3，所以 010、110 分别落入 2、6 号桶。
+
+![alt text](image-27.png)
+
+再来讲搬迁函数中的几个关键点：
+
+evacuate 函数每次只完成一个 bucket 的搬迁工作，因此要遍历完此 bucket 的所有的 cell，将有值的 cell copy 到新的地方。bucket 还会链接 overflow bucket，它们同样需要搬迁。因此会有 2 层循环，外层遍历 bucket 和 overflow bucket，内层遍历 bucket 的所有 cell。
+
+
+
+有一个特殊情况是：有一种 key，每次对它计算 hash，得到的结果都不一样。这个 key 就是 math.NaN() 的结果，它的含义是 not a number，类型是 float64。当它作为 map 的 key，在搬迁的时候，会遇到一个问题：再次计算它的哈希值和它当初插入 map 时的计算出来的哈希值不一样！
+
+你可能想到了，这样带来的一个后果是，这个 key 是永远不会被 Get 操作获取的！当我使用 m[math.NaN()] 语句的时候，是查不出来结果的。这个 key 只有在遍历整个 map 的时候，才有机会现身。所以，可以向一个 map 插入任意数量的 math.NaN() 作为 key。
+
+当搬迁碰到 math.NaN() 的 key 时，只通过 tophash 的最低位决定分配到 X part 还是 Y part（如果扩容后是原来 buckets 数量的 2 倍）。如果 tophash 的最低位是 0 ，分配到 X part；如果是 1 ，则分配到 Y part。
+
+这是通过 tophash 值与新算出来的哈希值进行运算得到的：
+```go
+if top&1 != 0 {
+    // top hash 最低位为 1
+    // 新算出来的 hash 值的 B 位置 1
+	hash |= newbit
+} else {
+    // 新算出来的 hash 值的 B 位置 0
+	hash &^= newbit
+}
+
+// hash 值的 B 位为 0，则搬迁到 x part
+// 当 B = 5时，newbit = 32，二进制低 6 位为 10 0000
+useX = hash&newbit == 0
+```
+其实这样的 key 我随便搬迁到哪个 bucket 都行，当然，还是要搬迁到上面裂变那张图中的两个 bucket 中去。但这样做是有好处的，在后面讲 map 迭代的时候会再详细解释，暂时知道是这样分配的就行。
+
+确定了要搬迁到的目标 bucket 后，搬迁操作就比较好进行了。将源 key/value 值 copy 到目的地相应的位置。
+
+设置 key 在原始 buckets 的 tophash 为 evacuatedX 或是 evacuatedY，表示已经搬迁到了新 map 的 x part 或是 y part。新 map 的 tophash 则正常取 key 哈希值的高 8 位。
+
+下面通过图来宏观地看一下扩容前后的变化。
+
+扩容前，B = 2，共有 4 个 buckets，lowbits 表示 hash 值的低位。假设我们不关注其他 buckets 情况，专注在 2 号 bucket。并且假设 overflow 太多，触发了等量扩容（对应于前面的条件 2）。
+
+![alt text](image-28.png)
+
+扩容完成后，overflow bucket 消失了，key 都集中到了一个 bucket，更为紧凑了，提高了查找的效率。
+
+![alt text](image-29.png)
+
+假设触发了 2 倍的扩容，那么扩容完成后，老 buckets 中的 key 分裂到了 2 个 新的 bucket。一个在 x part，一个在 y 的 part。依据是 hash 的 lowbits。新 map 中 0-3 称为 x part，4-7 称为 y part。
+
+![alt text](image-30.png)
+
+注意，上面的两张图忽略了其他 buckets 的搬迁情况，表示所有的 bucket 都搬迁完毕后的情形。实际上，我们知道，搬迁是一个“渐进”的过程，并不会一下子就全部搬迁完毕。所以在搬迁过程中，oldbuckets 指针还会指向原来老的 []bmap，并且已经搬迁完毕的 key 的 tophash 值会是一个状态值，表示 key 的搬迁去向。
+
+## float可以作为map的key
+float 型可以作为 key，但是由于精度的问题，会导致一些诡异的问题，慎用之。
+## 可以遍历边删除
+map 并不是一个线程安全的数据结构。同时读写一个 map 是未定义的行为，如果被检测到，会直接 panic。
+## 可以对map的key和value进行取值吗
+无法对 map 的 key 或 value 进行取址。
+## 如何比较两个map相同
+map 深度相等的条件：
+1、都为 nil
+2、非空、长度相等，指向同一个 map 实体对象
 
 # 接口
 ## 值接收者和指针接收者的区别
@@ -610,13 +1148,65 @@ func main() {
 }
 ```
 ## 接口转换原理
-## interface实现的多态
+通过前面提到的 iface 的源码可以看到，实际上它包含接口的类型 interfacetype 和 实体类型的类型 _type，这两者都是 iface 的字段 itab 的成员。也就是说生成一个 itab 同时需要接口的类型和实体的类型。
+><interface 类型， 实体类型> ->itable
 
+
+当判定一种类型是否满足某个接口时，Go 使用类型的方法集和接口所需要的方法集进行匹配，如果类型的方法集完全包含接口的方法集，则可认为该类型实现了该接口。
+
+Go 会对方法集的函数按照函数名的字典序进行排序，所以实际的时间复杂度为 O(m+n)。
+
+这里我们来探索将一个接口转换给另外一个接口背后的原理，当然，能转换的原因必然是类型兼容。
+```go
+package main
+
+import "fmt"
+
+type coder interface {
+	code()
+	run()
+}
+
+type runner interface {
+	run()
+}
+
+type Gopher struct {
+	language string
+}
+
+func (g Gopher) code() {
+	return
+}
+
+func (g Gopher) run() {
+	return
+}
+
+func main() {
+	var c coder = Gopher{}
+
+	var r runner
+	r = c
+	fmt.Println(c, r)
+}
+```
+
+
+
+## interface实现的多态
+多态是一种运行期的行为，它有以下几个特点：
+1. 一种类型具有多种类型的能力
+2. 允许不同的对象对同一消息做出灵活的反应
+3. 以一种通用的方式对待个使用的对象
+4. 非动态语言必须通过继承和接口的方式来实现
 
 
 # 通道
 ## CSP
+在Go语言中，CSP代表Communicating Sequential Processes（通信顺序进程），这是一种并发编程模型，由Tony Hoare提出。在Go语言中，CSP的概念被深入集成到了语言设计之中，主要体现在goroutine（轻量级线程）和channel（通道）这两个特性上。
 
+Go语言通过goroutine实现并发执行，goroutine之间的通信和同步则是通过channel来完成。goroutine可以在不同的处理器核心上并行执行任务，而channel则作为goroutine之间传递数据的管道，使得多个goroutine能够有效地协同工作，实现了CSP模型中的并发控制。
 ## channel数据结构
 ### 数据结构
 ```go
@@ -663,7 +1253,7 @@ lock 用来保证每个读 channel 或写 channel 的操作都是原子的。
 ![alt text](image-16.png)
 
 
-## 创建
+### 创建
 ```go
 // 无缓冲通道
 ch1 := make(chan int)
@@ -717,7 +1307,7 @@ func makechan(t *chantype, size int64) *hchan {
 新建一个 chan 后，内存在堆上分配，大概长这样：
 ![alt text](image-17.png)
 
-## 发送数据过程
+## 发送数据过程 ?
 ### 源码分析
 ```go
 // 位于 src/runtime/chan.go
@@ -844,14 +1434,203 @@ func chansend(c *hchan, ep unsafe.Pointer, block bool, callerpc uintptr) bool {
 }
 
 ```
+- 如果检测到 channel 是空的，当前 goroutine 会被挂起。
+
+- 对于不阻塞的发送操作，如果 channel 未关闭并且没有多余的缓冲空间（说明：a. channel 是非缓冲型的，且等待接收队列里没有 goroutine；b. channel 是缓冲型的，但循环数组已经装满了元素）
+## channel发送和接受与元素的本质
+就是说 channel 的发送和接收操作本质上都是 “值的拷贝”，无论是从 sender goroutine 的栈到 chan buf，还是从 chan buf 到 receiver goroutine，或者是直接从 sender goroutine 到 receiver goroutine。
+![alt text](image-31.png)
+## goroutine 泄漏
+泄漏的原因是 goroutine 操作 channel 后，处于发送或接收阻塞状态，而 channel 处于满或空的状态，一直得不到改变。同时，垃圾回收器也不会回收此类资源，进而导致 gouroutine 会一直处于等待队列中，不见天日。
+
+
+## channel 应用
+
+### 停止信号 
+
+channel 用于停止信号的场景还是挺多的，经常是关闭某个 channel 或者向 channel 发送一个元素，使得接收 channel 的那一方获知道此信息，进而做一些其他的操作。
+
+### 任务定时
+与 timer 结合，一般有两种玩法：实现超时控制，实现定期执行某个任务。
+
+有时候，需要执行某项操作，但又不想它耗费太长时间，上一个定时器就可以搞定：
+```go
+select {
+	case <-time.After(100 * time.Millisecond):
+	case <-s.stopc:
+		return false
+}
+```
+等待 100 ms 后，如果 s.stopc 还没有读出数据或者被关闭，就直接结束。这是来自 etcd 源码里的一个例子，这样的写法随处可见。
+
+定时执行某个任务，也比较简单：
+```go
+
+func worker() {
+	ticker := time.Tick(1 * time.Second)
+	for {
+		select {
+		case <- ticker:
+			// 执行定时任务
+			fmt.Println("执行 1s 定时任务")
+		}
+	}
+}
+```
+每隔 1 秒种，执行一次定时任务。
+
+### 解耦生产方和消费方 
+服务启动时，启动 n 个 worker，作为工作协程池，这些协程工作在一个 for {} 无限循环里，从某个 channel 消费工作任务并执行：
+```go
+func main() {
+	taskCh := make(chan int, 100)
+	go worker(taskCh)
+
+    // 塞任务
+	for i := 0; i < 10; i++ {
+		taskCh <- i
+	}
+
+    // 等待 1 小时 
+	select {
+	case <-time.After(time.Hour):
+	}
+}
+
+func worker(taskCh <-chan int) {
+	const N = 5
+	// 启动 5 个工作协程
+	for i := 0; i < N; i++ {
+		go func(id int) {
+			for {
+				task := <- taskCh
+				fmt.Printf("finish task: %d by worker %d\n", task, id)
+				time.Sleep(time.Second)
+			}
+		}(i)
+	}
+}
+```
+5 个工作协程在不断地从工作队列里取任务，生产方只管往 channel 发送任务即可，解耦生产方和消费方。
+
+程序输出：
+```shell
+finish task: 1 by worker 4
+finish task: 2 by worker 2
+finish task: 4 by worker 3
+finish task: 3 by worker 1
+finish task: 0 by worker 0
+finish task: 6 by worker 0
+finish task: 8 by worker 3
+finish task: 9 by worker 1
+finish task: 7 by worker 4
+finish task: 5 by worker 2
+```
+### 控制并发数 
+有时需要定时执行几百个任务，例如每天定时按城市来执行一些离线计算的任务。但是并发数又不能太高，因为任务执行过程依赖第三方的一些资源，对请求的速率有限制。这时就可以通过 channel 来控制并发数。
+
+下面的例子来自《Go 语言高级编程》：
+
+```go
+var limit = make(chan int, 3)
+
+func main() {
+    // …………
+    for _, w := range work {
+        go func() {
+            limit <- 1
+            w()
+            <-limit
+        }()
+    }
+    // …………
+}
+```
+构建一个缓冲型的 channel，容量为 3。接着遍历任务列表，每个任务启动一个 goroutine 去完成。真正执行任务，访问第三方的动作在 w() 中完成，在执行 w() 之前，先要从 limit 中拿“许可证”，拿到许可证之后，才能执行 w()，并且在执行完任务，要将“许可证”归还。这样就可以控制同时运行的 goroutine 数。
+
 
 # 标准库
 ## context
+context 主要用来在 goroutine 之间传递上下文信息，包括：取消信号、超时时间、截止时间、k-v 等。
+### context作用
+在 Go 的 server 里，通常每来一个请求都会启动若干个 goroutine 同时工作：有些去数据库拿数据，有些调用下游接口获取相关数据……
+![alt text](image-32.png)
+
+这些 goroutine 需要共享这个请求的基本数据。这时，所有正在为这个请求工作的 goroutine 需要快速退出，因为它们的“工作成果”不再被需要了。在相关联的 goroutine 都退出后，系统就可以回收相关的资源。
+
+Go 语言中的 server 实际上是一个“协程模型”，也就是说一个协程处理一个请求。例如在业务的高峰期，某个下游服务的响应变慢，而当前系统的请求又没有超时控制，或者超时时间设置地过大，那么等待下游服务返回数据的协程就会越来越多。而我们知道，协程是要消耗系统资源的，后果就是协程数激增，内存占用飙涨，甚至导致服务不可用。更严重的会导致雪崩效应，整个服务对外表现为不可用，这肯定是 P0 级别的事故。这时，肯定有人要背锅了。
+
+
+
+context 包就是为了解决上面所说的这些问题而开发的：在 一组 goroutine 之间传递共享的值、取消信号、deadline……
+
+![alt text](image-33.png)
+用简练一些的话来说，在Go 里，我们不能直接杀死协程，协程的关闭一般会用 channel+select 方式来控制。但是在某些场景下，例如处理一个请求衍生了很多协程，这些协程之间是相互关联的：需要共享一些全局变量、有共同的 deadline 等，而且可以同时被关闭。再用 channel+select 就会比较麻烦，这时就可以通过 context 来实现。
+>context 用来解决 goroutine 之间退出通知、元数据传递的功能。
+
+在官方博客里，对于使用 context 提出了几点建议：
+1. 不要将 Context 塞到结构体里。直接将 Context 类型作为函数的第一参数，而且一般都命名为 ctx。
+2. 不要向函数传入一个 nil 的 context，如果你实在不知道传什么，标准库给你准备好了一个 context：todo。
+3. 不要把本应该作为函数参数的类型塞到 context 中，context 存储的应该是一些共同的数据。例如：登陆的 session、cookie 等。
+4. 同一个 context 可能会被传递到多个 goroutine，别担心，context 是并发安全的。
+#### 传递共享的数据
+对于 Web 服务端开发，往往希望将一个请求处理的整个过程串起来，这就非常依赖于 Thread Local（对于 Go 可理解为单个协程所独有） 的变量，而在 Go 语言中并没有这个概念，因此需要在函数调用的时候传递 context。
+#### 取消 goroutine
+我们先来设想一个场景：打开外卖的订单页，地图上显示外卖小哥的位置，而且是每秒更新 1 次。app 端向后台发起 websocket 连接（现实中可能是轮询）请求后，后台启动一个协程，每隔 1 秒计算 1 次小哥的位置，并发送给端。如果用户退出此页面，则后台需要“取消”此过程，退出 goroutine，系统回收资源。
+```go
+func Perform() {
+    for {
+        calculatePos()
+        sendResult()
+        time.Sleep(time.Second)
+    }
+}
+```
+#### 防止 goroutine 泄漏 ?
+### context.Value的查找过程
+```go
+type valueCtx struct {
+	Context
+	key, val interface{}
+}
+```
+```go
+func (c *valueCtx) String() string {
+	return fmt.Sprintf("%v.WithValue(%#v, %#v)", c.Context, c.key, c.val)
+}
+
+func (c *valueCtx) Value(key interface{}) interface{} {
+	if c.key == key {
+		return c.val
+	}
+	return c.Context.Value(key)
+}
+```
+由于它直接将 Context 作为匿名字段，因此仅管它只实现了 2 个方法，其他方法继承自父 context。但它仍然是一个 Context，这是 Go 语言的一个特点。
+创建 valueCtx 的函数：
+```go
+func WithValue(parent Context, key, val interface{}) Context {
+	if key == nil {
+		panic("nil key")
+	}
+	if !reflect.TypeOf(key).Comparable() {
+		panic("key is not comparable")
+	}
+	return &valueCtx{parent, key, val}
+}
+```
+对 key 的要求是可比较，因为之后需要通过 key 取出 context 中的值，可比较是必须的。
+
+通过层层传递 context，最终形成这样一棵树：
+![alt text](image-34.png)
+和链表有点像，只是它的方向相反：Context 指向它的父节点，链表则指向下一个节点。通过 WithValue 函数，可以创建层层的 valueCtx，存储 goroutine 间可以共享的变量。
+
+它会顺着链路一直往上找，比较当前节点的 key 是否是要找的 key，如果是，则直接返回 value。否则，一直顺着 context 往前，最终找到根节点，直接返回一个 nil。所以用 Value 方法的时候要判断结果是否为 nil。
 
 ## reflect
 ### 什么是反射
 Go 语言提供了一种机制在运行时更新变量和检查它们的值、调用它们的方法，但是在编译时并不知道这些变量的具体类型，这称为反射机制。
-### 社么时候需要反射
+### 什么时候需要反射
 
 使用反射的常见场景有以下两种：
 - 不能明确接口调用哪个函数，需要根据传入的参数在运行时决定。
@@ -899,6 +1678,39 @@ type eface struct {
 ![alt text](image-19.png)
 
 
+接下来，就是接口之间的各种转换和赋值了：
+```go
+var r io.Reader
+tty, err := os.OpenFile("/Users/qcrao/Desktop/test", os.O_RDWR, 0)
+if err != nil {
+    return nil, err
+}
+r = tty
+```
+
+首先声明 r 的类型是 io.Reader，注意，这是 r 的静态类型，此时它的动态类型为 nil，并且它的动态值也是 nil。
+
+之后，r = tty 这一语句，将 r 的动态类型变成 *os.File，动态值则变成非空，表示打开的文件对象。这时，r 可以用<value, type>对来表示为： <tty, *os.File>。
+
+![alt text](image-35.png)
+
+#### 反射的基本函数
+reflect 包里定义了一个接口和一个结构体，即 reflect.Type 和 reflect.Value，它们提供很多函数来获取存储在接口里的类型信息。
+
+reflect.Type 主要提供关于类型相关的信息，所以它和 _type 关联比较紧密；reflect.Value 则结合 _type 和 data 两者，因此程序员可以获取甚至改变类型的值。
+
+reflect 包中提供了两个基础的关于反射的函数来获取上述的接口和结构体：
+```go
+func TypeOf(i interface{}) Type 
+func ValueOf(i interface{}) Value
+```
+TypeOf 函数用来提取一个接口中值的类型信息。由于它的输入参数是一个空的 interface{}，调用此函数时，实参会先被转化为 interface{}类型。这样，实参的类型信息、方法集、值信息都存储到 interface{} 变量里了。
+```go
+func TypeOf(i interface{}) Type {
+	eface := *(*emptyInterface)(unsafe.Pointer(&i))
+	return toType(eface.typ)
+}
+```
 ### 如何比较两个对象完全相同
 Go 语言中提供了一个函数可以完成此项功能
 >func DeepEqual(x, y interface{}) bool
