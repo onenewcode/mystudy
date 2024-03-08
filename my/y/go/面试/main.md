@@ -1641,7 +1641,7 @@ Go 语言提供了一种机制在运行时更新变量和检查它们的值、�
 2. Go 语言作为一门静态语言，编码过程中，编译器能提前发现一些类型错误，但是对于反射代码是无能为力的。所以包含反射相关的代码，很可能会运行很久，才会出错，这时候经常是直接 panic，可能会造成严重的后果。
 3. 反射对性能影响还是比较大的，比正常代码运行速度慢一到两个数量级。所以，对于一个项目中处于运行效率关键位置的代码，尽量避免使用反射特性。
 
-### 如何实现反射 ?
+### 如何实现反射 
 #### types 和 interface
 反射主要与 interface{} 类型相关。关于 interface 的底层结构。
 ```go
@@ -1709,6 +1709,112 @@ TypeOf 函数用来提取一个接口中值的类型信息。由于它的输入�
 func TypeOf(i interface{}) Type {
 	eface := *(*emptyInterface)(unsafe.Pointer(&i))
 	return toType(eface.typ)
+}
+```
+注意，返回值 Type 实际上是一个接口，定义了很多方法，用来获取类型相关的各种信息，而 *rtype 实现了 Type 接口
+```go
+type Type interface {
+    // 所有的类型都可以调用下面这些函数
+
+	// 此类型的变量对齐后所占用的字节数
+	Align() int
+	
+	// 如果是 struct 的字段，对齐后占用的字节数
+	FieldAlign() int
+
+	// 返回类型方法集里的第 `i` (传入的参数)个方法
+	Method(int) Method
+
+	// 通过名称获取方法
+	MethodByName(string) (Method, bool)
+
+	// 获取类型方法集里导出的方法个数
+	NumMethod() int
+
+	// 类型名称
+	Name() string
+
+	// 返回类型所在的路径，如：encoding/base64
+	PkgPath() string
+
+	// 返回类型的大小，和 unsafe.Sizeof 功能类似
+	Size() uintptr
+
+	// 返回类型的字符串表示形式
+	String() string
+
+	// 返回类型的类型值
+	Kind() Kind
+
+	// 类型是否实现了接口 u
+	Implements(u Type) bool
+
+	// 是否可以赋值给 u
+	AssignableTo(u Type) bool
+
+	// 是否可以类型转换成 u
+	ConvertibleTo(u Type) bool
+
+	// 类型是否可以比较
+	Comparable() bool
+
+	// 下面这些函数只有特定类型可以调用
+	// 如：Key, Elem 两个方法就只能是 Map 类型才能调用
+	
+	// 类型所占据的位数
+	Bits() int
+
+	// 返回通道的方向，只能是 chan 类型调用
+	ChanDir() ChanDir
+
+	// 返回类型是否是可变参数，只能是 func 类型调用
+	// 比如 t 是类型 func(x int, y ... float64)
+	// 那么 t.IsVariadic() == true
+	IsVariadic() bool
+
+	// 返回内部子元素类型，只能由类型 Array, Chan, Map, Ptr, or Slice 调用
+	Elem() Type
+
+	// 返回结构体类型的第 i 个字段，只能是结构体类型调用
+	// 如果 i 超过了总字段数，就会 panic
+	Field(i int) StructField
+
+	// 返回嵌套的结构体的字段
+	FieldByIndex(index []int) StructField
+
+	// 通过字段名称获取字段
+	FieldByName(name string) (StructField, bool)
+
+	// FieldByNameFunc returns the struct field with a name
+	// 返回名称符合 func 函数的字段
+	FieldByNameFunc(match func(string) bool) (StructField, bool)
+
+	// 获取函数类型的第 i 个参数的类型
+	In(i int) Type
+
+	// 返回 map 的 key 类型，只能由类型 map 调用
+	Key() Type
+
+	// 返回 Array 的长度，只能由类型 Array 调用
+	Len() int
+
+	// 返回类型字段的数量，只能由类型 Struct 调用
+	NumField() int
+
+	// 返回函数类型的输入参数个数
+	NumIn() int
+
+	// 返回函数类型的返回值个数
+	NumOut() int
+
+	// 返回函数类型的第 i 个值的类型
+	Out(i int) Type
+
+    // 返回类型结构体的相同部分
+	common() *rtype
+	
+	// 返回类型结构体的不同部分
+	uncommon() *uncommonType
 }
 ```
 ### 如何比较两个对象完全相同
