@@ -814,13 +814,13 @@ nacos/nacos-server
 
 
 ## minio/minio
-```
+
 docker pull minio/minio
 
 mkdir -p /mount/docker/minio/{config,data}
 
 
-```
+```shell
 docker run -p 9000:9000 -p 9090:9090 \
      --name minio \
      -d --restart=always \
@@ -831,6 +831,7 @@ docker run -p 9000:9000 -p 9090:9090 \
      minio/minio server \
      /data --console-address ":9090" -address ":9000"
 ```     
+
 
 注意： docker最新版安装会报错 ，提示port问题，因为最新版提供了api和console两个端口，所以需要--console-address ":9000" --address ":9090" 进行指定启动，前期版本不需要，直接运行即可
 

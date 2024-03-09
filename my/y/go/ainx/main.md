@@ -539,7 +539,7 @@ import "ainx/ainterface"
 
 type Request struct {
 	conn ainterface.IConnection //已经和客户端建立好的链接
-	date []byte                 //客户端请求数据
+	msg  ainterface.IMessage    //客户端请求数据
 }
 
 // 获取请求链接信息
