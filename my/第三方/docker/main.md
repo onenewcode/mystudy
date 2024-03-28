@@ -25,26 +25,33 @@ Docker仓库类似于代码仓库，是Docker 集中存放镜像文件的场所�
 一个简单的示例:
 
 ```shell
-# escape=\ (backslash) 
-# This dockerfile uses he ubuntu:xeniel image 
-# VERSION 2 - EDITION 1 
-# Author: docker_user 
-# Command format: Ins ruc ion [arguments / command] 
-# Base image use, 
-FROM ubuntu:xeniel 
+# 该 image 文件继承我自己的 gwave image，冒号表示标签，这里标签是2.0.0，即2.0.0版本的 gwave。
+FROM iphysreserch/gwave:2.0.0
 
-# Main ainer: docker user <docker user email.com>
-LABEL main ainer docker user<docker user@email.com> 
-# Commands upda he image 
-RUN echo "deb http://archive.ubuntu.com/ubuntu/ xeniel main universe" >> /etc/apt/sources.list
+# 将当前目录下的所有文件(除了.dockerignore排除的路径),都拷贝进入 image 文件里微系统的/waveform目录
+COPY . /waveform
 
-RUN apt-get  && apt-get install -y nginx 
-RUN echo "\ndaemon off;">> /etc/nginx/nginx.conf
-# Commands when crea ing a new con ainer
-CMD /usr/sbin/nginx 
+# 指定接下来的工作路径为/waveform (也就是微系统的 pwd)
+WORKDIR /waveform
+
+# 定义一个微系统里的环境变量
+ENV VERSION=2.0.0	# optional
+
+# 将容器 3000 端口暴露出来， 允许外部连接这个端口
+EXPOSE 3000			# optional
+
+# 在/waveform目录下，运行以下命令更新系统程序包。注意，安装后所有的依赖都将打包进入 image 文件
+RUN apt-get update && apt-get upgrade	# optional
+
+# 将我这个 image 做成一个 app 可执行程序，容器启动后自动执行下面指令
+ENTRYPOINT ["bash", "setup.sh"]
 
 ```
-首行可以通过注释来指定解析器命令，后续通过注释说明镜像的相关信息。主体部分首先使用 FROM 指令指明所基于的镜像名称，接下来一般是使用 LABEL 指令说明维护者信息。后面则是镜像操作指令，例如 RUN 指令将对镜像执行跟随的命令。每运行一条 RUN 指令，镜像添加新的一层，并提交。最后是 CMD 指令，来指定运行容器时的操作命令。
+可以在项目的根目录下创建一个 .dockerignore 文件夹，表示可排除的文件，类似 .gitignore。
+
+也可将 ENTRYPOINT 换做 CMD ，都是容器启动后自动执行指令，简单区别就是 ENTRYPOINT 可以在本地启动容器时加额外的shell参数。另外，一个 Dockerfile 可以包含多个RUN命令，但是只能有一个CMD 或者 ENTRYPOINT 命令。
+>CMD bash setup.sh
+
 
 ##  指令说明
 |分类|指令|说明|
@@ -133,7 +140,7 @@ CMD /usr/sbin/nginx
     </tr>
 </table>
 
-## 创建镜像
+ ## 创建镜像
 编写完成 Dockerfile 之后，可以通过 docker [image] build 命令来创建镜像。基本的格式为 docker build [OPT ONS] PATH | URL 
 
 该命令将读取指定路径下（包括子目录）的 Dockerfile, 并将该路径下所有数据作为上下(Context) 发送给 Docker 服务端。 Docker 服务端在校验 Dockerfile 格式通过后，逐条执行其中定义的指令，碰到 ADD COPY RUN 指令会生成一层新的镜像。
