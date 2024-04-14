@@ -1,24 +1,104 @@
 # minikube
 ## 安装
+### 前置条件
+已经安装docker
 ### 乌班图安装
+#### Minikube
 科学上网是我你们安装的前提。
 ```shell
 curl -LO https://storage.googleapis.com/minikube/releases/latest/minikube-linux-amd64
 
 sudo install minikube-linux-amd64 /usr/local/bin/minikube
 ```
-## 测试
-首先我已将安装了docker，我们接下来以docker为虚拟化环境来运行minikube。
+**测试**
+输入以下命令可以验证是否安装Minikube成功
+>minikube version
 
-然后运行以下命令来测试运行。
+出现以下内容则说明安装完成
 ```shell
-minikube start --image-mirror-country='cn'
+minikube version: v1.32.0
+commit: 8220a6eb95f0a4d75f7f2d7b14cef975f050512d
 ```
-第一次运行会比较慢，因为我们第一次会下载一个比较大的镜像。
+#### Kubernetes
+为了管理集群资源、部署应用程序并检查Kubernetes集群的日志，我们可以使用其命令行工具，称为kubectl。在这里，我们将使用以下几个命令来安装它。
+```shell
+curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl"
+chmod +x ./kubectl
+sudo mv kubectl /usr/local/bin/
+```
+要检查kubectl版本，请运行：
+>kubectl version --client --output=yaml
+
+```shell
+clientVersion:
+  buildDate: "2024-03-15T00:08:19Z"
+  compiler: gc
+  gitCommit: 6813625b7cd706db5bc7388921be03071e1a492d
+  gitTreeState: clean
+  gitVersion: v1.29.3
+  goVersion: go1.21.8
+  major: "1"
+  minor: "29"
+  platform: linux/amd64
+kustomizeVersion: v5.0.4-0.20230601165947-6ce0bf390ce3
+
+```
+#### 启动minikube
+>minikube start --vm-driver docker
+
+运行结果如下
+```shell
+* minikube v1.32.0 on Ubuntu 22.04
+* Using the docker driver based on existing profile
+* Starting control plane node minikube in cluster minikube
+* Pulling base image ...
+* Updating the running docker "minikube" container ...
+! This container is having trouble accessing https://registry.k8s.io
+* To pull new external images, you may need to configure a proxy: https://minikube.sigs.k8s.io/docs/reference/networking/proxy/
+* Preparing Kubernetes v1.28.3 on Docker 24.0.7 ...
+* Verifying Kubernetes components...
+  - Using image gcr.io/k8s-minikube/storage-provisioner:v5
+* Enabled addons: storage-provisioner, default-storageclass
+* Done! kubectl is now configured to use "minikube" cluster and "default" namespace by default
+```
+
+#### 基础操作
+1. 查看状态
+> minikube status
+
+2. 通过ssh访问Minikube命令行：
+>minikube ssh
+
+3. 查看当前激活的Minikube附加组件：
+>minikube addons list
+
+4. 检查集群信息
+> kubectl cluster-info
+
+5. 查看当前活动的节点：
+> kubectl get nodes
+
+6.  查看集群的默认配置视图：
+> kubectl config view
+7. 停止并删除Minikube集群：
+>minikube stop
+
+#### 外部或远程访问Kubernetes仪表板
+Minikube附带了一个名为Dashboard的附加组件，通过运行本步骤中给定的命令可以自动启用它。因此，我们可以启动它以访问基于Web的Kubernetes用户界面，以部署容器应用程序、管理集群、获取资源概览等等...
+>minikube dashboard
+
+如果您在仅具有命令行界面的本地Ubuntu 22.04服务器上使用Minikube，并且希望在与服务器相同网络的其他计算机上远程访问MiniKube仪表板，则可以使用前面的步骤命令之一替代使用kubectl代理来打开本地的8001端口以访问Kubernetes的Web界面。
+>kubectl proxy --port=8000 --address='0.0.0.0' --accept-hosts='^.*' &
+
+接着我们只需要访问相应的端口进能够访问控制台,本人访问的地址如下
+>http://192.168.218.134:8000/api/v1/namespaces/kubernetes-dashboard/services/http:kubernetes-dashboard:/proxy/#/workloads?namespace=default
+
+![alt text](image-12.png)
 
 # Kubernetes介绍
 ##  Kubernetes介绍
 Kubernetes是一个可以移植、可扩展的开源平台，使用 声明式的配置 并依据配置信息自动地执行容器化应用程序的管理。
+
 
 容器化越来越流行，主要原因是它带来的诸多好处：
 - **敏捷地创建和部署应用程序**：相较于创建虚拟机镜像，创建容器镜像更加容易和快速
@@ -90,7 +170,7 @@ kubectl get pods
 ## 查看Pods/Nodes
 ### Pods概述
 ![alt text](image.png)
-Pod 容器组 是一个k8s中一个抽象的概念，用于存放一组 container(可包含一个或多个 container 容器，即图上正方体)，以及这些 container （容器）的一些共享资源。这些资源包括：
+Pod 容器组 是一个k8s中一个抽象的概念，用于存放一组 container，以及这些 container （容器）的一些共享资源。这些资源包括：
 - 共享存储，称为卷(Volumes)，即图上紫色圆柱网络，每个 Pod（容器组）在集群中有个唯一的 IP，pod（容器组）中的 container（容器）共享该IP地址
 - container（容器）的基本信息，例如容器的镜像版本，对外暴露的端口等
 
@@ -158,7 +238,11 @@ kubectl exec -it nginx-pod-xxxxxx /bin/bash
 
 ## 公布应用程序
 ### Kubernetes Service（服务）概述
-Kubernetes 中的 Service提供了这样的一个抽象层，它选择具备某些特征的 Pod并为它们定义一个访问方式。Service（服务）使 Pod（容器组）之间的相互依赖解耦（原本从一个 Pod 中访问另外一个 Pod，需要知道对方的 IP 地址）。一个 Service选定哪些 Pod通常由 LabelSelector(标签选择器) 来决定。
+事实上，Pod（容器组）有自己的 生命周期。当 worker node（节点）故障时，节点上运行的 Pod（容器组）也会消失。然后，Deployment (opens new window)可以通过创建新的 Pod（容器组）来动态地将群集调整回原来的状态，以使应用程序保持运行。
+
+举个例子，假设有一个图像处理后端程序，具有 3 个运行时副本。这 3 个副本是可以替换的（无状态应用），即使 Pod（容器组）消失并被重新创建，或者副本数由 3 增加到 5，前端系统也无需关注后端副本的变化。由于 Kubernetes 集群中每个 Pod（容器组）都有一个唯一的 IP 地址（即使是同一个 Node 上的不同 Pod），我们需要一种机制，为前端系统屏蔽后端系统的 Pod（容器组）在销毁、创建过程中所带来的 IP 地址的变化。
+
+Kubernetes 中的 Service提供了这样的一个抽象层，它选择具备某些特征的 Pod并为它们定义一个访问方式。Service（服务）使 Pod（容器组）之间的相互依赖解耦。一个 Service选定哪些 Pod通常由 LabelSelector(标签选择器) 来决定。
 
 在创建Service的时候，通过设置配置文件中的 spec.type 字段的值，可以以不同方式向外部暴露应用程序：
 
@@ -254,11 +338,11 @@ spec:
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: nginx-deployment
+  name: nginx-deployment # 指定的唯一名称，在同一命名空间内必须唯一。
   labels:
     app: nginx
 spec:
-  replicas: 4
+  replicas: 2  #使用该Deployment创建两个应用程序实例
   selector:
     matchLabels:
       app: nginx
@@ -281,6 +365,7 @@ spec:
 >watch kubectl get pods -o wide
 
 ## 执行滚动更新
+用户期望应用程序始终可用，为此开发者/运维者在更新应用程序时要分多次完成。在 Kubernetes 中，这是通过 Rolling Update 滚动更新完成的。Rolling Update滚动更新 通过使用新版本的 Pod 逐步替代旧版本的 Pod 来实现 Deployment 的更新，从而实现零停机。新的 Pod 将在具有可用资源的 Node（节点）上进行调度。
 ### 滚动更新概述
 1. 原本 Service A 将流量负载均衡到 4 个旧版本的 Pod 上
 

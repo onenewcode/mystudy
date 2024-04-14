@@ -442,7 +442,6 @@ import (
 	"github.com/nacos-group/nacos-sdk-go/v2/common/constant"
 	"github.com/nacos-group/nacos-sdk-go/v2/vo"
 	"mykitex/kitex_gen/example/shop/item/itemservice"
-
 	"log"
 )
 
@@ -514,9 +513,8 @@ NewNacosResolver 使用 nacos 创建服务发现中心，需要传入自行配�
 函数签名：
 >func NewNacosResolver(cli naming_client.INamingClient, opts ...Option) discovery.Resolver
 示例代码：
+**服务端**
 ```go
-```
-服务端
 package main
 
 import (
@@ -557,7 +555,9 @@ func main() {
 		log.Println("server stopped")
 	}
 }
-客户端
+```
+**客户端**
+```go
 package main
 
 import (
@@ -590,6 +590,7 @@ func main() {
 		time.Sleep(time.Second)
 	}
 }
+```
 注意
 nacos/v2 版本中 kitex 目前不支持多次在同分组下创建多端口示例
 nacos/v2 的服务注册与发现和先前的版本兼容
@@ -669,7 +670,11 @@ NewZookeeperResolverWithAuth 使用 zookeeper 创建一个服务发现中心，�
 
 ```
 
-# etcd
+# Kitex 提供的服务注册与发现 etcd 拓展
+## etcd介绍
+etcd 是一个高度可用的、分布式、一致性的键值存储系统，主要用于服务发现、配置共享、协调分布式系统状态等场景。它是使用 Go 语言编写的，并采用 Raft 算法保证数据的强一致性。etcd 在云原生生态系统中扮演着至关重要的角色，特别是在 Kubernetes（K8s）中作为其元数据存储和集群协调的核心组件。
+## docker 安装
+```yaml
 docker
   etcd:
     image: bitnami/etcd:3.5
@@ -683,3 +688,330 @@ docker
       - TZ=Asia/Shanghai
       - ALLOW_NONE_AUTHENTICATION=yes
       - ETCD_ADVERTISE_CLIENT_URLS=http://etcd:2379
+```
+## 代码实现
+### 安装包
+>go get github.com/kitex-contrib/registry-etcd
+
+### 服务注册
+#### 注册函数
+提供了三个创建 Registry 的函数
+
+**NewEtcdRegistry**
+NewEtcdRegistry 使用 etcd 创建一个新的服务注册中心，需要传入端点值。可自定义服务注册中心配置，配置详情见 Option。
+函数签名：
+>func NewEtcdRegistry(endpoints []string, opts ...Option) (registry.Registry, error)
+
+**NewEtcdRegistryWithAuth**
+NewEtcdRegistryWithAuth 创建服务注册中心需要传入 auth 参数。
+函数签名：
+>func NewEtcdRegistryWithAuth(endpoints []string, username, password string) (registry.Registry, error)
+
+**NewEtcdRegistryWithRetry**
+NewEtcdRegistryWithRetry 创建服务注册中心传入自定义 Retry 配置。
+函数签名：
+>func NewEtcdRegistryWithRetry(endpoints []string, retryConfig *retry.Config, opts ...Option) (registry.Registry, error)
+
+使用 NewRetryConfig(opts ...Option) *Config 生成 Retry 配置，配置详情见 Option。
+
+**代码示例**
+```go
+package main
+
+import (
+	"github.com/cloudwego/kitex/pkg/rpcinfo"
+	"github.com/cloudwego/kitex/server"
+	etcd "github.com/kitex-contrib/registry-etcd"
+	"log"
+	"mykitex/kitex_gen/example/shop/item/itemservice"
+	"net"
+)
+
+func main() {
+	// 使用时请传入真实 etcd 的服务地址，本例中为 127.0.0.1:2379
+	r, err := etcd.NewEtcdRegistry([]string{"127.0.0.1:2379"})
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	addr, _ := net.ResolveTCPAddr("tcp", "127.0.0.1:8890")
+	svr := itemservice.NewServer(new(ItemServiceImpl),
+		server.WithServiceAddr(addr),
+		// 指定 Registry 与服务基本信息
+		server.WithRegistry(r),
+		server.WithServerBasicInfo(
+			&rpcinfo.EndpointBasicInfo{
+				ServiceName: "example.shop.item",
+			},
+		),
+	)
+
+	err = svr.Run()
+
+	if err != nil {
+		log.Println(err.Error())
+	}
+}
+```
+#### Option
+Etcd 拓展在服务注册部分中提供了 option 配置。
+
+**WithTLSOpt**
+Etcd 扩展提供了 WithTLSOpt 用于帮助用户配置 Etcd 中的 TLS 选项。
+函数签名：
+>func WithTLSOpt(certFile, keyFile, caFile string) Option
+
+**WithAuthOpt**
+Etcd 扩展提供了 WithAuthOpt 用于帮助用户配置 Etcd 中的 Username 和 Password 选项。
+函数签名：
+>func WithAuthOpt(username, password string) Option
+
+**WithDialTimeoutOpt**
+Etcd 扩展提供了 WithTimeoutOpt 用于帮助用户配置连接超时时间。
+>func WithDialTimeoutOpt(dialTimeout time.Duration) Option
+
+**Retry**
+在服务注册到 etcd 之后，它会定期检查服务的状态。如果发现任何异常状态，它将尝试重新注册服务。observeDelay 是正常情况下检查服务状态的延迟时间，而 retryDelay 是断开连接后尝试注册服务的延迟时间。
+
+**默认配置**
+
+|配置名|	默认值|	描述|
+|-------|--------|-------|
+|WithMaxAttemptTimes(maxAttemptTimes uint) Option|	5|	用于设置最大尝试次数，如果为 0，则表示无限尝试|
+|WithObserveDelay(observeDelay time.Duration) Option|	30 * time.Second|	用于设置正常连接条件下检查服务状态的延迟时间|
+|WithRetryDelay(t time.Duration) Option	|10 * time.Second|	用于设置断开连接后重试的延迟时间|
+
+### 服务发现
+#### 发现函数
+**NewEtcdResolver**
+NewEtcdResolver 使用 etcd 创建一个新的服务发现中心，需要传入端点值。可自定义服务发现中心配置，配置详情见 Option。
+函数签名：
+>func NewEtcdResolver(endpoints []string, opts ...Option) (discovery.Resolver, error)
+
+**NewEtcdResolverWithAuth**
+NewEtcdResolverWithAuth 服务发现中心，需要传入 Auth 参数。
+函数签名：
+>func NewEtcdResolverWithAuth(endpoints []string, username, password string) (discovery.Resolver, error)
+
+
+**代码示例**
+```go
+package main
+
+import (
+	"context"
+	"github.com/cloudwego/kitex/client"
+	"github.com/cloudwego/kitex/pkg/rpcinfo"
+	etcd "github.com/kitex-contrib/registry-etcd"
+	"log"
+	"mykitex/kitex_gen/example/shop/item"
+	"mykitex/kitex_gen/example/shop/item/itemservice"
+	"time"
+)
+
+func main() {
+	// 使用时请传入真实 etcd 的服务地址，本例中为 127.0.0.1:2379
+	r, err := etcd.NewEtcdResolver([]string{"127.0.0.1:2379"})
+	if err != nil {
+		log.Fatal(err)
+	}
+	// 指定 Resolve
+	cl, err := itemservice.NewClient("example.shop.item",
+		client.WithResolver(r),
+		client.WithClientBasicInfo(
+			&rpcinfo.EndpointBasicInfo{
+				ServiceName: "example.shop.item",
+			},
+		),
+	)
+	for {
+		if err != nil {
+			log.Println("发现服务失败")
+		}
+		p, _ := cl.GetItem(context.Background(), &item.GetItemReq{Id: 1})
+		log.Println(p)
+		time.Sleep(time.Second)
+	}
+
+}
+```
+#### Option
+Etcd 拓展在服务发现部分中提供了 option 配置。
+
+**WithTLSOpt**
+Etcd 扩展提供了 WithTLSOpt 用于帮助用户配置 Etcd 中的TLS选项。
+函数签名：
+>func WithTLSOpt(certFile, keyFile, caFile string) Option
+
+**WithAuthOpt**
+Etcd 扩展提供了WithAuthOpt用于帮助用户配置 Etcd 中的Username和Password选项。
+函数签名：
+>func WithAuthOpt(username, password string) Option
+
+>WithDialTimeoutOpt
+Etcd 扩展提供了WithTimeoutOpt用于帮助用户配置连接超时时间。
+>func WithDialTimeoutOpt(dialTimeout time.Duration) Option
+
+# 代码仓库
+https://github.com/onenewcode/mykitex
+
+
+# Etcd配置中心
+## 安装
+>go get github.com/kitex-contrib/config-etcd
+
+## Suite
+etcd 的配置中心适配器，kitex 通过 WithSuite 将 etcd 中的配置转换为 kitex 的治理特性配置。
+
+### suite结构体
+```go
+type EtcdServerSuite struct {
+    uid        int64
+    etcdClient etcd.Client // config-etcd 中的 etcd client
+    service    string
+    opts       utils.Options
+}
+```
+函数签名:
+>func NewSuite(service string, cli etcd.Client, opts ...utils.Option,) *EtcdServerSuite
+
+## 服务端代码
+```go
+package main
+
+import "C"
+import (
+	"github.com/cloudwego/kitex/pkg/rpcinfo"
+	"github.com/cloudwego/kitex/server"
+	etcd_c "github.com/kitex-contrib/config-etcd/etcd"
+	etcdServer "github.com/kitex-contrib/config-etcd/server"
+	etcd_r "github.com/kitex-contrib/registry-etcd"
+	"log"
+	"mykitex/kitex_gen/example/shop/item/itemservice"
+	"net"
+)
+
+func main() {
+	// 设置服务注册，使用时请传入真实 etcd 的服务地址，本例中为 127.0.0.1:2379
+	r, err := etcd_r.NewEtcdRegistry([]string{"127.0.0.1:2379"})
+	// 从指定的etcd服务器中建立连接
+	etcdClient, _ := etcd_c.NewClient(etcd_c.Options{})
+	if err != nil {
+		log.Fatal(err)
+	}
+	addr, _ := net.ResolveTCPAddr("tcp", "127.0.0.1:8890")
+	svr := itemservice.NewServer(new(ItemServiceImpl),
+		server.WithServiceAddr(addr),
+		// 指定 Registry 与服务基本信息
+		server.WithRegistry(r),
+		server.WithServerBasicInfo(
+			&rpcinfo.EndpointBasicInfo{
+				ServiceName: "example.shop.item",
+			},
+		),
+		server.WithSuite(etcdServer.NewSuite("example.shop.item", etcdClient)),
+	)
+
+	err = svr.Run()
+
+	if err != nil {
+		log.Println(err.Error())
+	}
+}
+
+```
+## 客户端代码
+```go
+package main
+
+import (
+	"context"
+	"log"
+	"mykitex/kitex_gen/example/shop/item"
+	"mykitex/kitex_gen/example/shop/item/itemservice"
+	"time"
+
+	"github.com/cloudwego/kitex/client"
+	etcdclient "github.com/kitex-contrib/config-etcd/client"
+	"github.com/kitex-contrib/config-etcd/etcd"
+)
+
+func main() {
+	etcdClient, err := etcd.NewClient(etcd.Options{})
+	if err != nil {
+		panic(err)
+	}
+
+	serviceName := "example.shop.item" // 你的服务端名称
+	clientName := "ClientName"         // 你的客户端名称
+	cl, err := itemservice.NewClient(
+		serviceName,
+		client.WithHostPorts("0.0.0.0:8888"),
+		client.WithSuite(etcdclient.NewSuite(serviceName, clientName, etcdClient)),
+	)
+	for {
+		if err != nil {
+			log.Println("发现服务失败")
+		}
+		p, _ := cl.GetItem(context.Background(), &item.GetItemReq{Id: 1})
+		log.Println(p)
+		time.Sleep(time.Second)
+	}
+}
+```
+## 代码解析
+>etcdClient, err := etcd.NewClient(etcd.Options{})
+首先我们调用以上代码与服务与用于配置中心的etcd建立连接，系统默认的是连接路径是http://127.0.0.1:2379。
+
+然后使用以下代码，把我们的配置注入新生成的客户端中
+>client.WithSuite(etcdclient.NewSuite(serviceName, clientName, etcdClient))
+
+在说明访问路径之前我们首先要说明options结构体
+### options
+```go
+type Options struct {
+	Node             []string
+	Prefix           string
+	ServerPathFormat string
+	ClientPathFormat string
+	Timeout          time.Duration
+	LoggerConfig     *zap.Config
+	ConfigParser     ConfigParser
+}
+```
+etcd 中的 key 由 prefix 和 path 组成，prefix 为前缀，path 为路径。
+|参数|	变量默认值|	作用|
+|--------|-------|--------|
+|Node|	127.0.0.1:2379|	Etcd 服务器节点|
+|Prefix|	/KitexConfig|	Etcd 中的 prefix|
+|ClientPathFormat|	{{.ClientServiceName}}/{{.ServerServiceName}}/{{.Category}}|	使用 go template 语法渲染生成对应的 ID, 使用 ClientServiceName ServiceName Category 三个元数据，用于和 Prefix 组成 etcd 中配置的 key|
+|ServerPathFormat|	{{.ServerServiceName}}/{{.Category}}|	使用 go template 语法渲染生成对应的 ID, 使用 ServiceName Category 两个元数据，用于和 Prefix 组成 etcd 中配置的 key
+Timeout	5 * time.Second	五秒超时时间|
+|LoggerConfig|	NULL|	默认日志|
+|ConfigParser|	defaultConfigParser|	默认解析器，默认为解析 json 格式的数据|
+
+其中的Category的值不需要我们指定，他们有自己的常量值，客户端中有三种，类型种类如下，更多配置请参考https://www.cloudwego.io/zh/docs/kitex/tutorials/service-governance/config-center/etcd/#options-%E9%BB%98%E8%AE%A4%E5%80%BC 系统自动开启，如果配置中心有数据便会加载，配置的数据，**注意**默认情况下我们的解析器是json解析器，只能解析json格式的数据。
+```go
+const (
+	retryConfigName          = "retry"  //  重试
+	rpcTimeoutConfigName     = "rpc_timeout" // rpc_timeout
+	circuitBreakerConfigName = "circuit_break" //circuit_break
+)
+```
+
+接下来回到我们加载数据的过程，以以下代码为例
+```go
+	serviceName := "example.shop.item" // 你的服务端名称
+	clientName := "ClientName"         // 你的客户端名称
+	cl, err := itemservice.NewClient(
+		serviceName,
+		client.WithHostPorts("0.0.0.0:8888"),
+		client.WithSuite(etcdclient.NewSuite(serviceName, clientName, etcdClient)),
+	)
+```
+这样我们访问的路径为以下三个
+```shell
+127.0.0.1:2379/KitexConfig/example.shop.item/ClientName/retry
+127.0.0.1:2379/KitexConfig/example.shop.item/ClientName/rpc_timeout
+127.0.0.1:2379/KitexConfig/example.shop.item/ClientName/circuit_break
+```

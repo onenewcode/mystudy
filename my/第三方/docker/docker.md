@@ -831,7 +831,12 @@ docker run -p 9000:9000 -p 9090:9090 \
      minio/minio server \
      /data --console-address ":9090" -address ":9000"
 ```     
-
+docker run -p 9000:9000 -p 9090:9090 \
+     --name minio \
+     -e "MINIO_ACCESS_KEY=minioadmin" \
+     -e "MINIO_SECRET_KEY=minioadmin" \
+     minio/minio server \
+     /data --console-address ":9090" -address ":9000"
 
 注意： docker最新版安装会报错 ，提示port问题，因为最新版提供了api和console两个端口，所以需要--console-address ":9000" --address ":9090" 进行指定启动，前期版本不需要，直接运行即可
 
