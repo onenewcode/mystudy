@@ -1025,8 +1025,73 @@ selector:
     - {key: environment, operator: NotIn, values: [dev]}
 ```
 ## 注解annotation
+注解（annotation）可以用来向 Kubernetes 对象的 metadata.annotations 字段添加任意的信息。Kubernetes 的客户端或者自动化工具可以存取这些信息以实现其自定义的逻辑。
+- 向Kubernetes对象添加注解
+- 句法和字符集
 ### 向Kubernetes对象添加注解
+Kubernetes 对象的 metadata 字段可以添加自定义的标签（label）或者注解（annotation）。标签用来选择对象或者用来查找符合指定条件的一组对象。与此相对，注解不是用来标记对象或者选择对象的。metadata 中的注解可以很大，也可以很小；可以是结构化的，也可以是非结构化的；还可以包括标签中不允许出现的字符。
 
+与标签相似，注解也是 key/value map，例如：
+```yaml
+metadata:
+  annotations:
+    key1: value1
+    key2: value2
+``` 
+类似于下面的信息可以记录在注解中：
+- 声明式配置层用到的状态信息。
+- Build、release、image信息，例如 timestamp、release ID、git branch、PR number、image hash、registry address
+- 日志、监控、分析、审计系统的参数
+- 第三方工具所需要的信息，例如 name、version、build information、URL
+- 轻量级的发布工具用到的信息，例如，config、checkpoint
+- 负责人的联系方式，例如，电话号码、网址、电子信箱
+- 用户用来记录备忘信息的说明，例如，对标准镜像做了什么样的修改、维护过程中有什么特殊信息需要记住
+
+下面是一个来自于实际 Deployment 的注解：
+```yaml
+metadata:
+  annotations:
+    deployment.kubernetes.io/revision: 7  # 由Deployment控制器添加，用于记录当前发布的修改次数
+    k8s.eip.work/displayName: busybox   # Kuboard添加，Deployment显示在Kuboard界面上的名字
+    k8s.eip.work/ingress: false     # Kuboard添加，根据此参数显示Deployment是否配置了Ingress
+    k8s.eip.work/service: none      # Kuboard添加，根据此参数显示Deployment是否配置了Service
+```
+    
+除了使用注解，您也可以将这类信息存放在一个外部的数据库，然而，在使用、分享这些信息的时候，可能会变得难以管理。
+### 句法和字符集
+注解是一组名值对。
+
+注解的 key 有两个部分：可选的前缀和标签名，通过 / 分隔。
+- 注解名：
+  - 标签名部分是必须的
+  - 不能多于 63 个字符
+  - 必须由字母、数字开始和结尾
+  - 可以包含字母、数字、减号-、下划线_、小数点.
+- 注解前缀：
+  - 注解前缀部分是可选的
+  - 如果指定，必须是一个DNS的子域名，例如：k8s.eip.work
+  - 不能多于 253 个字符
+  - 使用 / 和标签名分隔
+
+如果省略注解前缀，则注解的 key 将被认为是专属于用户的。Kubernetes的系统组件（例如，kube-scheduler、kube-controller-manager、kube-apiserver、kubectl 或其他第三方组件）向用户的Kubernetes对象添加注解时，必须指定一个前缀。
+
+kubernetes.io/ 和 k8s.io/ 这两个前缀是 Kubernetes 核心组件预留的。Kuboard 使用 k8s.eip.work 这个前缀。
+
+下面的例子中，Pod包含一个注解 imageregistry: https://hub.docker.com/
+```yaml
+apiVersion: v1
+kind: Pod
+metadata:
+  name: annotations-demo
+  annotations:
+    imageregistry: "https://hub.docker.com/"
+spec:
+  containers:
+  - name: nginx
+    image: nginx:1.7.9
+    ports:
+    - containerPort: 80
+```
 ## 字段选择器
 ### 概述
 
@@ -1090,6 +1155,807 @@ FOO_SERVICE_PORT=<Service的端口>
 ```
 ## Runtime Class
 ### 设计目标
+
+
+# 工作负载
+## 容器组_概述
+###  什么是 Pod 容器组
+Pod（容器组）是 Kubernetes 中最小的可部署单元。一个 Pod（容器组）包含了一个应用程序容器（某些情况下是多个容器）、存储资源、一个唯一的网络 IP 地址、以及一些确定容器该如何运行的选项。Pod 容器组代表了 Kubernetes 中一个独立的应用程序运行实例，该实例可能由单个容器或者几个紧耦合在一起的容器组成。
+
+Kubernetes 集群中的 Pod 存在如下两种使用途径：
+- 一个 Pod 中只运行一个容器。"one-container-per-pod" 是 Kubernetes 中最常见的使用方式。此时，您可以认为 Pod 容器组是该容器的 wrapper，Kubernetes 通过 Pod 管理容器，而不是直接管理容器。
+- 一个 Pod 中运行多个需要互相协作的容器。您可以将多个紧密耦合、共享资源且始终在一起运行的容器编排在同一个 Pod 中，可能的情况有：
+  - Content management systems, file and data loaders, local cache managers 等
+  - log and checkpoint backup, compression, rotation, snapshotting 等
+  - data change watchers, log tailers, logging and monitoring adapters, event publishers 等
+  - proxies, bridges, adapters 等
+  - controllers, managers, configurators, and updaters
+
+
+每一个 Pod 容器组都是用来运行某一特定应用程序的一个实例。如果您想要水平扩展您的应用程序（运行多个实例），您运行多个 Pod 容器组，每一个代表应用程序的一个实例。Kubernetes 中，称其为 replication（复制副本）。Kubernetes 中 Controller（控制器）负责为应用程序创建和管理这些复制的副本。
+
+### Pod 如何管理多个容器
+Pod 的设计目的是用来支持多个互相协同的容器，是的他们形成一个有意义的服务单元。一个 Pod 中的多个容器很自然就可以随 Pod 被一起调度到集群中的同一个物理机或虚拟机上。Pod 中的容器可以：
+- 共享资源、依赖
+- 互相通信
+- 相互协商何时以何种方式结束运行
+
+
+某些 Pod 除了使用 app container （工作容器）以外，还会使用 init container （初始化容器），初始化容器运行并结束后，工作容器才开始启动。
+
+Pod 为其成员容器提供了两种类型的共享资源：网络和存储
+
+- 网络 Networking
+  - 同一个 Pod 中的所有容器 IP 地址都相同
+  - 同一个 Pod 中的不同容器不能使用相同的端口，否则会导致端口冲突
+  - 同一个 Pod 中的不同容器可以通过 localhost:port 进行通信
+  - 同一个 Pod 中的不同容器可以通过使用常规的进程间通信手段，例如 SystemV semaphores 或者 POSIX 共享内存
+- 存储 Storage
+  - Pod 中可以定义一组共享的数据卷。Pod 中所有的容器都可以访问这些共享数据卷，以便共享数据。Pod 中数据卷的数据也可以存储持久化的数据，使得容器在重启后仍然可以访问到之前存入到数据卷中的数据。请参考 数据卷 Volume
+
+### 使用 Pod 容器组
+您应该尽量避免在 Kubernetes 中直接创建单个 Pod。因为在 Kubernetes 的设计中 Pod 是一个相对来说存活周期短暂，且随时会丢弃的实体。在 Pod 被创建后，将被调度到集群中的一个节点上运行。Pod 将一直保留在该节点上，直到 Pod 以下情况发生：
+- Pod 中的容器全部结束运行
+- Pod 被删除
+- 由于节点资源不够，Pod 被驱逐
+- 节点出现故障（例如死机）
+
+Pod 本身并不能自愈（self-healing）。如果一个 Pod 所在的 Node （节点）出现故障，或者调度程序自身出现故障，Pod 将被删除；同理，当因为节点资源不够或节点维护而驱逐 Pod 时，Pod 也将被删除。Kubernetes 通过引入 Controller（控制器）的概念来管理 Pod 实例。在 Kubernetes 中，更为推荐的做法是使用 Controller 来管理 Pod，而不是直接创建 Pod。
+
+### 容器组和控制器
+用户应该始终使用控制器来创建 Pod，而不是直接创建 Pod，控制器可以提供如下特性：
+- 水平扩展（运行 Pod 的多个副本）
+- rollout（版本更新）
+- self-healing（故障恢复）
+例如：当一个节点出现故障，控制器可以自动地在另一个节点调度一个配置完全一样的 Pod，以替换故障节点上的 Pod。
+
+在 Kubernetes 中，广泛使用的控制器有：
+- Deployment
+- StatefulSet
+- DaemonSet
+
+控制器通过其中配置的 Pod Template 信息来创建 Pod。
+
+### Pod Template
+Pod Template 是关于 Pod 的定义，但是被包含在其他的 Kubernetes 对象中。控制器通过 Pod Template 信息来创建 Pod。正是由于 Pod Template 的存在，Kuboard 可以使用一个工作负载编辑器来处理不同类型的控制器。
+
+
+### Termination of Pods
+Pod 代表了运行在集群节点上的进程，而进程的终止有两种方式：
+- gracefully terminate （优雅地终止）
+- 直接 kill，此时进程没有机会执行清理动作
+
+当用户发起删除 Pod 的指令时，Kubernetes 需要：
+- 让用户知道 Pod 何时被删除
+- 确保删除 Pod 的指令最终能够完成
+
+Kubernetes 收到用户删除 Pod 的指令后：
+1. 记录强制终止前的等待时长（grace period）
+2. 向 Pod 中所有容器的主进程发送 TERM 信号
+3. 一旦等待超时，向超时的容器主进程发送 KILL 信号
+4. 删除 Pod 在 API Server 中的记录
+
+## 容器组_生命周期
+### Pod phase
+Pod phase 代表其所处生命周期的阶段。Pod phase 并不是用来代表其容器的状态，也不是一个严格的状态机。
+phase 的可能取值有：
+
+|Phase|	描述|
+|--------|--------|
+|Pending|	Kubernetes 已经创建并确认该 Pod。此时可能有两种情况：1.Pod 还未完成调度（例如没有合适的节|
+|Running|	该 Pod 已经被绑定到一个节点，并且该 Pod 所有的容器都已经成功创建。其中至少有一个容器正在运行，或者正在启动/重启|
+|Succeeded	|Pod 中的所有容器都已经成功终止，并且不会再被重启|
+|Failed|	Pod 中的所有容器都已经终止，至少一个容器终止于失败状态：容器的进程退出码不是 0，或者被系统 kill|
+|Unknown|	因为某些未知原因，不能确定 Pod 的状态，通常的原因是 master 与 Pod 所在节点之间的通信故障|
+### Pod conditions
+每一个 Pod 都有一个数组描述其是否达到某些指定的条件。Pod condition 数组在 Kuboard 中的显示如下图所示：
+![alt text](image-13.png)
+
+该数组的每一行可能有六个字段：
+
+|字段名|	描述|
+|--------|--------|
+|type|	type 是最重要的字段，可能的取值有：<br> PodScheduled： Pod 已被调度到一个节点<br>Ready： Pod 已经可以接受服务请求，应该被添加到所匹配 Service 的负载均衡的资源池<br>Initialized：Pod 中所有初始化容器已成功执行<br>Unschedulable：不能调度该 Pod（缺少资源或者其他限制）<br>ContainersReady：Pod 中所有容器都已就绪
+|status|	能的取值有：<br>True<br>False<br>Unknown|
+|reason|	Condition 发生变化的原因，使用一个符合驼峰规则的英文单词描述|
+|message|	Condition 发生变化的原因的详细描述，human-readable|
+|lastTransitionTime|	Condition 发生变化的时间戳|
+|lastProbeTime|	上一次针对 Pod 做健康检查/就绪检查的时间戳|
+### 容器的检查
+Probe 是指 kubelet 周期性地检查容器的状况。有三种类型的 Probe：
+- ExecAction： 在容器内执行一个指定的命令。如果该命令的退出状态码为 0，则成功
+- TCPSocketAction： 探测容器的指定 TCP 端口，如果该端口处于 open 状态，则成功
+- HTTPGetAction： 探测容器指定端口/路径上的 HTTP Get 请求，如果 HTTP 响应状态码在 200 到 400（不包含400）之间，则成功
+
+Probe 有三种可能的结果：
+- Success： 容器通过检测
+- Failure： 容器未通过检测
+- Unknown： 检测执行失败，此时 kubelet 不做任何处理
+
+Kubelet 可以在两种情况下对运行中的容器执行 Probe：
+- 就绪检查 readinessProbe： 确定容器是否已经就绪并接收服务请求。如果就绪检查失败，kubernetes 将该 Pod 的 IP 地址从所有匹配的 Service 的资源池中移除掉。
+- 健康检查 livenessProbe： 确定容器是否正在运行。如果健康检查失败，kubelete 将结束该容器，并根据 restart policy（重启策略）确定是否重启该容器。
+### 何时使用 健康检查/就绪检查？
+- 如果容器中的进程在碰到问题时可以自己 crash，您并不需要执行健康检查；kubelet 可以自动的根据 Pod 的 restart policy（重启策略）执行对应的动作
+- 如果您希望在容器的进程无响应后，将容器 kill 掉并重启，则指定一个健康检查 liveness probe，并同时指定 restart policy（重启策略）为 Always 或者 OnFailure
+- 如果您想在探测 Pod 确实就绪之后才向其分发服务请求，请指定一个就绪检查 readiness probe。此时，就绪检查的内容可能和健康检查相同。就绪检查适合如下几类容器：
+  - 初始化时需要加载大量的数据、配置文件
+  - 启动时需要执行迁移任务
+  - 其他
+
+
+Kuboard 中配置健康检查/就绪检查
+Kuboard 可以在工作负载编辑器中配置健康检查/就绪检查，界面如下所示：
+
+Kubernetes教程：在Kuboard中配置容器的健康检查/就绪检查
+
+### 容器的状态
+一旦 Pod 被调度到节点上，kubelet 便开始使用容器引擎（通常是 docker）创建容器。容器有三种可能的状态：Waiting / Running / Terminated：
+- Waiting： 容器的初始状态。处于 Waiting 状态的容器，仍然有对应的操作在执行，例如：拉取镜像、应用 Secrets等。
+- Running： 容器处于正常运行的状态。容器进入 Running 状态之后，如果指定了 postStart hook，该钩子将被执行。
+- Terminated： 容器处于结束运行的状态。容器进入 Terminated 状态之前，如果指定了 preStop hook，该钩子将被执行。
+
+
+### 重启策略
+定义 Pod 或工作负载时，可以指定 restartPolicy，可选的值有：
+- Always （默认值）
+- OnFailure
+- Never
+restartPolicy 将作用于 Pod 中的所有容器。kubelete 将在五分钟内，按照递延的时间间隔（10s, 20s, 40s ......）尝试重启已退出的容器，并在十分钟后再次启动这个循环，直到容器成功启动，或者 Pod 被删除。
+
+### 容器组的存活期
+通常，如果没有人或者控制器删除 Pod，Pod 不会自己消失。只有一种例外，那就是 Pod 处于 Scucceeded 或 Failed 的 phase，并超过了垃圾回收的时长（在 kubernetes master 中通过 terminated-pod-gc-threshold 参数指定），kubelet 自动将其删除。
+
+## 容器组_初始化容器
+### 初始化容器介绍
+Pod 可以包含多个工作容器，也可以包含一个或多个初始化容器，初始化容器在工作容器启动之前执行。
+
+初始化容器与工作容器完全相同，除了如下几点：
+- 初始化容器总是运行并自动结束
+- kubelet 按顺序执行 Pod 中的初始化容器，前一个初始化容器成功结束后，下一个初始化容器才开始运行。所有的初始化容器成功执行后，才开始启动工作容器
+- 如果 Pod 的任意一个初始化容器执行失败，kubernetes 将反复重启该 Pod，直到初始化容器全部成功（除非 Pod 的 restartPolicy 被设定为 Never）
+- 初始化容器的 Resource request / limits 处理不同，
+- 初始化容器不支持 就绪检查 readiness probe，因为初始化容器必须在 Pod ready 之前运行并结束
+### 使用初始化容器
+初始化容器可以指定不同于工作容器的镜像，这使得初始化容器相较于直接在工作容器中编写启动相关的代码更有优势：
+- 初始化容器可以包含工作容器中没有的工具代码或者自定义代码。例如：您无需仅仅为了少量的 setup 工作（使用 sed, awk, python 或 dig 进行环境设定）而重新从一个基础镜像制作另外一个镜像
+- 初始化容器可以更安全地执行某些使工作容器变得不安全的代码
+- 应用程序的镜像构建者和部署者可以各自独立地工作，而无需一起构建一个镜像
+- 初始化容器相较于工作容器，可以以另外一个视角处理文件系统。例如，他们可以拥有访问 Secrets 的权限，而工作容器却不一定被授予该权限
+- 初始化容器在任何工作容器启动之前结束运行，这个特性使得我们可以阻止或者延迟工作容器的启动，直到某些前提条件得到满足。一旦前提条件满足，所有的工作容器将同时并行启动
+
+### Examples
+下面是一些使用初始化容器的例子：
+- 使用一行 shell 命令，等待某一个 Service 启动后再启动工作容器
+>for i in {1..100}; do sleep 1; if dig myservice; then exit 0; fi; done; exit 1
+ 
+- 使用 Pod 的信息将其注册到某一个远程服务：
+>curl -X POST http://$MANAGEMENT_SERVICE_HOST:$MANAGEMENT_SERVICE_PORT/register -d 'instance=$(<POD_NAME>)&ip=$(<POD_IP>)'
+   
+- 等候一定时间再启动工作容器
+>sleep 60
+   
+- 将 Git repository 克隆到一个数据卷
+- 根据某些参数，运行一个模板工具动态生成工作容器所需要的配置文件
+
+### 初始化容器的行为
+- Pod 的启动时，首先初始化网络和数据卷，然后按顺序执行每一个初始化容器。任何一个初始化容器都必须成功退出，才能开始下一个初始化容器。如果某一个容器启动失败或者执行失败，kubelet 将根据 Pod 的 restartPolicy 决定是否重新启动 Pod。
+- 只有所有的初始化容器全都执行成功，Pod 才能进入 ready 状态。初始化容器的端口是不能够通过 kubernetes Service 访问的。Pod 在初始化过程中处于 Pending 状态，并且同时有一个 type 为 initializing status 为 True 的 Condition
+- 如果 Pod 重启，所有的初始化容器也将被重新执行。
+- 您可以重启、重试、重新执行初始化容器，因此初始化容器中的代码必须是 幂等 的。具体来说，向 emptyDir 写入文件内容的代码应该考虑到该文件已经存在的情况。请参考 幂等 获得更多信息
+- 您可以组合使用就绪检查和 activeDeadlineSeconds Kuboard 暂不支持，以防止初始化容器始终失败。
+- Pod 中不能包含两个同名的容器（初始化容器和工作容器也不能同名）。
+
+#### Resources
+在确定初始化容器的执行顺序以后，以下 resource 使用规则将适用：
+- 所有初始化容器中最高的 resource request/limit 是最终生效的 request/limit
+- 对于 Pod 来说，最终生效的 resource request/limit 是如下几个当中较高的一个：
+  - 所有工作容器某一个 resource request/limit 的和
+  - 最终生效的初始化容器的 request/limit 的和
+- Kubelet 依据最终生效的 request/limit 执行调度，这意味着，在执行初始化容器时，就已经为 Pod 申请了其资源需求
+### Pod 重启的原因
+Pod 重启时，所有的初始化容器都会重新执行，Pod 重启的原因可能有：
+- 用户更新了 Pod 的定义，并改变了初始化容器的镜像
+  - 改变任何一个初始化容器的镜像，将导致整个 Pod 重启
+  - 改变工作容器的镜像，将只重启该工作容器，而不重启 Pod
+- Pod 容器基础设施被重启（例如 docker engine），这种情况不常见，通常只有 node 节点的 root 用户才可以执行此操作
+- Pod 中所有容器都已经结束，restartPolicy 是 Always，且初始化容器执行的记录已经被垃圾回收，此时将重启整个 Pod
+## 容器组_配置初始化容器
+
+本例中，您将创建一个Pod，该Pod包含一个应用程序容器（工作容器）和一个初始化容器（Init Container）。初始化容器执行结束之后，应用程序容器（工作容器）才开始启动。
+
+Pod 的配置文件如下：
+```yaml
+apiVersion: v1
+kind: Pod
+metadata:
+  name: init-demo
+spec:
+  containers:
+  - name: nginx
+    image: nginx
+    ports:
+    - containerPort: 80
+    volumeMounts:
+    - name: workdir
+      mountPath: /usr/share/nginx/html
+  # These containers are run during pod initialization
+  initContainers:
+  - name: install
+    image: busybox
+    command:
+    - wget
+    - "-O"
+    - "/work-dir/index.html"
+    - https://kuboard.cn
+    volumeMounts:
+    - name: workdir
+      mountPath: "/work-dir"
+  dnsPolicy: Default
+  volumes:
+  - name: workdir
+    emptyDir: {}
+```
+    
+从配置文件可以看出，Pod 中初始化容器和应用程序共享了同一个数据卷。初始化容器将该共享数据卷挂载到 /work-dir 路径，应用程序容器将共享数据卷挂载到 /usr/share/nginx/html 路径。初始化容器执行如下命令后，就退出执行：
+>wget -O /work-dir/index.html https://kuboard.cn
+ 
+   
+执行该命令时，初始化容器将结果写入了应用程序容器 nginx 服务器对应的 html 根路径下的 index.html。
+- 执行命令以创建 Pod
+>kubectl apply -f https://kuboard.cn/statics/learning/initcontainer/config.yaml
+ 
+   
+- 验证nginx容器已经运行
+>kubectl get pod init-demo
+ 
+    
+- 获得 nginx 容器的命令行终端：
+>kubectl exec -it init-demo -- /bin/bash
+
+## 容器组_Debug初始化容器
+
+
+本文描述了如何诊断初始化容器InitContainer在执行过程中的问题_本文中的命令行使用 <pod-name> 来指代Pod的名称_使用 <init-container-1> 和 <init-container-2> 来指代初始化容器的名称。
+
+### 检查初始化容器的状态
+执行命令，查看 Pod 的状态：
+>kubectl get pod <pod-name>
+    
+   
+### 查看初始化容器的详情
+查看初始化容器的更多信息：
+>kubectl describe pod <pod-name>
+     
+假设 Pod 包含两个初始化容器，显示结果可能如下所示：
+```yaml
+Init Containers:
+  <init-container-1>:
+    Container ID:    ...
+    ...
+    State:           Terminated
+      Reason:        Completed
+      Exit Code:     0
+      Started:       ...
+      Finished:      ...
+    Ready:           True
+    Restart Count:   0
+    ...
+  <init-container-2>:
+    Container ID:    ...
+    ...
+    State:           Waiting
+      Reason:        CrashLoopBackOff
+    Last State:      Terminated
+      Reason:        Error
+      Exit Code:     1
+      Started:       ...
+      Finished:      ...
+    Ready:           False
+    Restart Count:   3
+    ...
+```
+
+    
+也可以直接读取 Pod 的 status.initContainerStatuses 字段，命令行如下所示：
+
+kubectl get pod <pod-name> --template '{{.status.initContainerStatuses}}'
+ 
+    
+该命令将以 JSON 格式返回信息
+
+### 查看初始化容器的日志
+执行命令查看初始化容器的日志：
+>kubectl logs <pod-name> -c <init-container-1>
+ 
+
+    
+### 理解 Pod 状态
+如果 Pod 的状态以 Init: 开头，表示该 Pod 正在执行初始化容器。下表描述了 Debug 初始化容器的过程中，一些可能出现的 Pod 状态：
+
+|状态|	描述|
+|-------|--------|
+|Init:N/M|	Pod 中包含 M 个初始化容器，其中 N 个初始化容器已经成功执行|
+|Init:Error|	Pod 中有一个初始化容器执行失败|
+|Init:CrashLoopBackOff	|Pod 中有一个初始化容器反复执行失败|
+|Pending|	Pod 还未开始执行初始化容器|
+|PodInitializing or Running|	Pod 已经完成初始化容器的执行|
+
+## 容器组_毁坏Disruptions
+参考文档： Disruptions(opens new window)
+
+本文面向想要构建高可用的应用程序的应用程序管理员，为此，您需要理解有哪些毁坏（disruption）可能发生在Pod上。
+
+本文也是为集群管理员准备的，如果集群管理员想要将集群的部分管理任务自动化的话，例如，升级、自动伸缩等。
+
+TIP
+
+Disruption ---> 毁坏。 暂时没想到合适的词，如果您有想法，请联系我。
+
+自愿的和非自愿的毁坏
+处理毁坏（Disruptions）
+Disruption Budget如何工作
+PDB Example
+区分集群管理员和应用管理员的角色
+如何执行毁坏性的操作（Disruptive Action）
+自愿的和非自愿的毁坏
+除非有人（人或者控制器）销毁Pod，或者出现不可避免的硬件/软件故障，Pod不会凭空消失。此类不可避免的情况，我们称之为非自愿的毁坏（involuntary disruption）。例如：
+
+节点所在物理机的硬件故障
+集群管理员误删了虚拟机
+云供应商或管理程序故障导致虚拟机被删
+Linux 内核故障
+集群所在的网络发生分片，导致节点不可用
+节点资源耗尽，导致 Pod 被驱逐
+除了节点资源耗尽这种情况以外，大部分人对其他情况都十分熟悉，因为这并不是 Kubernetes 所特有的情况。
+
+还有一类毁坏，我们称之为自愿的毁坏（voluntary disruptions）。主要包括由应用管理员或集群管理员主动执行的操作。应用管理员可能执行的操作有：
+
+删除 Deployment 或其他用于管理 Pod 的控制器
+修改 Deployment 中 Pod 模板的定义，导致 Pod 重启
+直接删除一个 Pod
+集群管理员可能执行的操作有：
+
+排空节点 (opens new window)以便维修或升级
+排空节点，以将集群缩容
+从节点上删除某个 Pod，以使得其他的 Pod 能够调度到该节点上
+这些操作可能直接由集群管理员执行，或者由执行管理员运行的自动化脚本执行，也可能由您的集群托管商执行。
+
+向您的集群管理员、云供应商询问，您的集群是否激活了任何形式的自愿的毁坏。如果没有激活，您无需创建 Pod Disruption Budgets。
+
+警告
+
+并非所有自愿的毁坏都受 Pod Disruption Budgets 限制，例如，删除 Deployment 或 Pod。
+
+处理毁坏（Disruptions）
+弥补非自愿的毁坏可以采取的方法有：
+
+确保您的 Pod 申请合适的计算资源
+如果需要高可用，为您的程序运行多个副本，参考 Deployment、StatefulSet
+如果需要更高的高可用性，将应用程序副本分布到多个机架上（参考 anti-affinity）或分不到多个地区（使用 multi-zone cluster (opens new window)）
+自愿的毁坏，发生频率不定。在一个基础的 Kubernetes 集群中，可能不会发生自愿的毁坏。当你的集群管理员或者托管供应商运行某些额外的服务是可能导致自愿的毁坏发生。例如：
+
+更新节点上的软件
+自定义实现的自动伸缩程序
+集群管理员或托管供应商应该为您提供这方面的文档。
+
+Kubernetes 提供了 Disruption Budget 这一特性，以帮助我们在高频次自愿的毁坏会发生的情况下，仍然运行高可用的应用程序。
+
+Disruption Budget如何工作
+应用程序管理员可以为每一个应用程序创建 PodDisruptionBudget 对象（PDB）。PDB限制了多副本应用程序在自愿的毁坏情况发生时，最多有多少个副本可以同时停止。例如，一个 web 前端的程序需要确保可用的副本数不低于总副本数的一定比例。
+
+集群管理员以及托管供应商在进行系统维护时，应该使用兼容 PodDisruptionBudget 的工具（例如 kubectl drain，此类工具调用 Eviction API (opens new window)）而不是直接删除 Pod 或者 Deployment。
+
+kubectl drain 命令会尝试将节点上所有的 Pod 驱逐掉。驱逐请求可能会临时被拒绝，kubectl drain 将周期性地重试失败的请求，直到节点上所有的 Pod 都以终止，或者直到超过了预先配置的超时时间。
+
+PDB 指定了应用程序最少期望的副本数（相对于总副本数）。例如，某个 Deployment 的 .spec.replicas 为 5，期望的副本数是 5个。如果他对应的 PDB 允许最低 4个副本数，则 Eviction API（kubectl drain）在同一时刻最多会允许1个自愿的毁坏，而不是2个或更多：
+
+PDB 通过 Pod 的 .metadata.ownerReferences 查找到其对应的控制器（Deployment、StatefulSet）
+PDB 通过 控制器（Deployment、StatefulSet）的 .spec.replicas 字段来确定期望的副本数
+PDB 通过控制器（Deployment、StatefulSet）的 label selector 来确定哪些 Pod 属于同一个应用程序
+PDB 不能阻止 非自愿的毁坏 发生，但是当这类毁坏发生时，将被计入到当前毁坏数里
+通过 kubectl drain 驱逐 Pod 时，Pod 将被优雅地终止（gracefully terminated，参考 terminationGracePeriodSeconds）
+在滚动更新过程中被删除的 Pod 也将计入到 PDB 的当前毁坏数，但是控制器（例如 Deployment、StatefulSet）在执行滚动更新时，并不受 PDB 的约束。滚动更新过程中，同时可以删除的 Pod 数量在控制器对象（Deployment、StatefulSet等）的定义中规定，参考滚动更新。
+
+PDB Example
+假设有一个集群共有三个工作节点，node-1、node-2、node-3，集群上运行了多个应用程序，其中一个 Deployment 有 3个 Pod 副本 pod-a、pod-b、pod-c，并且对应了 PDB 限定 3 个 Pod 中至少要有 2 个可用。另外有一个无关的 pod-x 没有对应的PDB。最开始时，Pod 在节点上的分布如下表所示：
+
+node-1	node-2	node-3
+pod-a available	pod-b available	pod-c available
+pod-x available		
+此时，假设集群管理员想要重启机器，以便更新 Linux 内核版本修复其中的一个漏洞。集群管理员首先尝试使用 kubectl drain 命令排空 node-1，此时 kubectl drain 将尝试驱逐 pod-a 和 pod-x。这个操作将立刻能够执行成功，两个 Pod 都将同时进入 terminating 状态，集群的状态将如下所示：
+
+node-1 draining	node-2	node-3
+pod-a terminating	pod-b available	pod-c available
+pod-x terminating		
+Deployment控制器发现其中的一个 Pod 正在终止，因此，将立刻创建一个新的 Pod 以替代该 Pod，假设其为 pod-d。由于 node-1 已经被标记不可用（cordoned 警戒线），pod-d 将调度到另外一个节点上。另外一个控制器同样也为 pod-x 创建了一个替代 Pod pod-y。
+
+此时，集群状态如下所示：
+
+node-1 draining	node-2	node-3
+pod-a terminating	pod-b available	pod-c available
+pod-x terminating	pod-d starting	pod-y
+当 pod-a 和 pod-x 终止以后，集群状态如下所示：
+
+node-1 drained	node-2	node-3
+pod-b available	pod-c available
+pod-d starting	pod-y
+此时，如果集群管理员不够耐心，立刻尝试排空 node-2 或 node-3，则 kubectl drain 命令将被组织阻止，因为当前该 Deployment 只有 2个可用的 Pod，而其 PDB 要求至少有 2个可用的 Pod。
+
+当 pod-d 完成启动后，集群的状态将如下所示：
+
+node-1 drained	node-2	node-3
+pod-b available	pod-c available
+pod-d available	pod-y
+此时，集群管理员尝试排空 node-2。kubectl drain 将按照某种顺序尝试驱逐 node-2 上的两个 Pod，假设先是 pod-b 然后是 pod-d。驱逐 pod-b 的操作将执行成功，但是，当 kubectl drain 尝试驱逐 pod-d 时，该请求将被拒绝，否则该 Deployment 将只剩下一个可用的 Pod。
+
+Deployment 此时将创建一个 Pod pod-e 用于替换 Pod pod-b。由于集群中没有足够的资源来调度 pod-e，kubectl drain 将再次被阻止。集群状态如下所示：
+
+node-1 drained	node-2	node-3	no node
+pod-b available	pod-c available	pod-e pending
+pod-d available	pod-y	
+此时，集群管理员需要向集群中添加节点，才能继续集群的升级操作。
+
+Kubernetes中，如下因素决定了毁坏发生的频率：
+
+应用程序所需要的副本数
+对一个 Pod 执行优雅终止（gracefully shutdown）所需要的时间
+新的 Pod 实例启动所需要的时间
+控制器的类型
+集群资源的容量
+区分集群管理员和应用管理员的角色
+通常，我们认为集群管理员和应用管理员是不同的角色，且相互之间所共有的知识并不多。对这两个角色的职责进行区分，在如下场景中是非常有用的：
+
+多个应用程序团队共享一个 Kubernetes 集群
+第三方工具或服务将集群的管理自动化
+Pod Disruption Budget 是区分两种角色时的必要的界面，双方要就此概念达成共识。如果你所在的组织中，并不严格区分集群管理员和应用程序管理员，则，您并不需要使用 Pod Disruption Budget。
+
+如何执行毁坏性的操作（Disruptive Action）
+如果您是集群管理员，且需要在所有节点上执行毁坏性的操作（disruptive action），例如节点或系统软件的升级，此时，可能的选择有：
+
+接受升级过程中的停机时间
+故障转移（Failover）到另外一个集群副本
+无停机时间，但是将有额外的代价，因为需要由双份的节点以及更多的人力成本来管理集群之间的切换
+编写容错的应用程序（disruption tolerant application）并使用 PDB
+无停机时间
+最少的资源冗余
+支持更多的集群管理自动化
+编写容错的应用程序（disruption-tolerant application）非常需要技巧，但是要容忍自愿的毁坏所做的工作与支持自动伸缩（autoscaling）与容忍非自愿的毁坏（tolerating involuntary disruption）所做的工作是大量重叠的
+
+## 容器组_配置PodDisruptionBudget
+参考文档： Specifying a Disruption Budget for your Application(opens new window)
+
+本文讲述了如何限制应用程序同时受到的毁坏数量，以便在集群管理员维护集群节点的同时，仍然可以保证应用的高可用性
+
+前提
+使用PodDisruptionBudget保护应用程序
+确定需要PDB保护的应用
+思考应用程序如何应对毁坏
+指定百分比时的舍入逻辑
+定义PodDisruptionBudget
+创建PDB对象
+检查PDB的状态
+任意控制器和选择器
+前提
+熟悉如何部署多副本的应用程序 伸缩应用程序
+熟悉 Pod Disruption 的概念
+确认与集群管理员或者供应商确定，您所使用的 Kubernetes 集群支持 PodDisruptionBudget
+使用PodDisruptionBudget保护应用程序
+确定哪个应用程序需要使用 PodDisruptionBudget（PDB）保护
+思考应用程序如何处理毁坏（disruption）
+创建 PDB yaml 文件
+从 yaml 文件创建 PDB 对象
+确定需要PDB保护的应用
+通常如下几种 Kubernetes 控制器创建的应用程序可以使用 PDB：
+
+Deployment
+ReplicationController
+ReplicaSet
+StatefulSet
+PDB 中 .spec.selector 字段的内容必须与控制器中 .spec.selector 字段的内容相同。
+
+自 Kubernetes v 1.15 开始，PDB支持激活了 scale subresource (opens new window)的 custom controller.
+
+也可以为那些不是通过上述控制器创建的 Pod（或者任意一组 Pod）设置 PDB，但是，这个时候存在一些限制条件，请参考 任意控制器和选择器
+
+思考应用程序如何应对毁坏
+当自愿毁坏发生时，在短时间内，您的应用程序最多可以容许多少个实例被终止。
+
+无状态的前端：
+关注点：不能让服务能力（serving capacity）降低超过 10%
+解决方案：在 PDB 中配置 minAvailable 90%
+单实例有状态应用：
+关注点：未经同意不能关闭此应用程序
+解决方案1： 不使用 PDB，并且容忍偶尔的停机
+解决方案2： 在 PDB 中设置 maxUnavailable=0。与集群管理员达成一致（不是通过Kubernetes，而是邮件、电话或面对面），请集群管理员在终止应用之前与你沟通。当集群管理员联系你时，准备好停机时间，删除 PDB 以表示已准备好应对毁坏。并做后续处理
+多实例有状态应用，例如 consul、zookeeper、etcd：
+关注点：不能将实例数降低到某个数值，否则写入会失败
+解决方案1： 在 PDB 中设置 maxUnavailable 为 1 （如果副本数会发生变化，可以使用此设置）
+解决方案2： 在 PDB 中设置 minAvailable 为最低数量（例如，当总副本数为 5 时，设置为3）（可以同时容忍更多的毁坏数）
+可以重新开始的批处理任务：
+关注点：当发生自愿毁坏时，Job仍然需要完成其执行任务
+解决方案： 不创建 PDB。Job 控制器将会创建一个 Pod 用于替换被毁坏的 Pod
+指定百分比时的舍入逻辑
+minAvailable 或 maxUnavailable 可以指定为整数或者百分比。
+
+当指定一个整数时，代表 Pod 的数量。例如，设置 minAvailable 为 10，则至少 10 个 Pod 必须始终可用，即便是在毁坏发生时
+当指定一个百分比时（例如，50%），代表总 Pod 数量的一个百分比。例如，设置 maxUnavailable 为 50%，则最多可以有 50% 的 Pod 可以被毁坏
+如果指定这些值为一个百分数，其计算结果可能不会正好是一个整数。例如，假设有 7 个 Pod，minAvailable 设置为 50%，你将很难判断，到底是 3 个还是 4 个 Pod 必须始终保持可用。Kubernetes 将向上舍入（round up to the nearest integer），因此，此处必须有 4 个 Pod 始终可用。可参考具体的 Kubernetes 代码(opens new window)
+
+定义PodDisruptionBudget
+PodDisruptionBudget 包含三个字段：
+
+标签选择器 .spec.selector 用于指定 PDB 适用的 Pod。此字段为必填
+.spec.minAvailable：当完成驱逐时，最少仍然要保留多少个 Pod 可用。该字段可以是一个整数，也可以是一个百分比
+.spec.maxUnavailable： 当完成驱逐时，最多可以有多少个 Pod 被终止。该字段可以是一个整数，也可以是一个百分比
+在一个 PodDisruptionBudget 中，只能指定 maxUnavailable 和 minAvailable 中的一个。 maxUnavailable 只能应用到那些有控制器的 Pod 上。下面的例子中，“期望的副本数” 是 PodDisruptionBudget 对应 Pod 的控制器的 .spec.replicas 字段：
+
+例子1： minAvailable 为 5 时，只要 PodDisruptionBudget 的 selector 匹配的 Pod 中有超过 5 个仍然可用，就可以继续驱逐 Pod 例子2： minAvailable 为 30% 时，至少保证期望副本数的 30% 可用 例子3： maxUnavailable 为 5 时，最多可以有 5 个副本不可用（unthealthy） 例子4： maxUnavailable 为 30% 时，最多可以有期望副本数的 30% 不可用
+
+通常，一个 PDB 对应一个控制器创建的 Pod，例如，Deployment、ReplicaSet或StatefulSet。
+
+注意
+
+PodDisruptionBudget 并不能真正确保指定数量（或百分比）的Pod始终保持可用。例如，当 Pod 数量已经为 PDB 中指定的最小数时，某一个节点可能意外宕机，导致 Pod 数量低于 PDB 中指定的数量。 PodDisruptionBudget 只能保护应用避免受到 自愿毁坏 的影响，而不是所有原因的毁坏。
+
+maxUnavailable 为 0%（或0）或者 minAvailable 为 100%（或与控制器的 .spec.replicas 相等）将阻止节点排空任务。按照 PodDisruptionBudget 的语义，这种做法是允许的。
+
+下面是两个 PDB 的例子：
+
+使用 minAvailable
+
+apiVersion: policy/v1beta1
+kind: PodDisruptionBudget
+metadata:
+  name: zk-pdb
+spec:
+  minAvailable: 2
+  selector:
+    matchLabels:
+      app: zookeeper
+ 
+        已复制到剪贴板！
+    
+使用 maxUnavailable
+
+apiVersion: policy/v1beta1
+kind: PodDisruptionBudget
+metadata:
+  name: zk-pdb
+spec:
+  maxUnavailable: 1
+  selector:
+    matchLabels:
+      app: zookeeper
+ 
+        已复制到剪贴板！
+    
+例如，如果 zk-pdb 对象选择的 Pod 对应的 StatefulSet 的 spec.replicas 为 3，则两个 PDB 含义相同。推荐使用 maxUnavailable 这种形式的定义，因为当控制器的 spec.replicas 发生变化时，应用受到的影响更小一些。例如，将其副本数伸缩到 10，如果使用 minAvailable=2 这种形式，则可能会有 8 个 Pod 被毁坏。而如果使用 maxUnavailable=1 这种形式，应用程序将可以保存 9 个可用实例。
+
+创建PDB对象
+使用 kubectl apply -f mypdb.yaml 命令可以创建或更新 PDB 对象
+
+检查PDB的状态
+假设名称空间中实际没有与 app: zookeeper 匹配的 Pod，执行命令
+
+kubectl get poddisruptionbudgets
+ 
+        已复制到剪贴板！
+    
+输出结果为：
+
+NAME      MIN-AVAILABLE   ALLOWED-DISRUPTIONS   AGE
+zk-pdb    2               0                     7s
+ 
+        已复制到剪贴板！
+    
+如果存在 3 个匹配的 Pod，执行命令
+
+kubectl get poddisruptionbudgets
+ 
+        已复制到剪贴板！
+    
+输出结果为：
+
+NAME      MIN-AVAILABLE   ALLOWED-DISRUPTIONS   AGE
+zk-pdb    2               1                     7s
+ 
+        已复制到剪贴板！
+    
+ALLOWED-DISRUPTIONS 为非零证书，意味着 disruption 控制器已经匹配到了 Pod，计算了匹配的 Pod 数，并更新了 PDB 的状态。
+
+执行命令，可以获得 PDB 的更多信息：
+
+kubectl get poddisruptionbudgets zk-pdb -o yaml
+ 
+        已复制到剪贴板！
+    
+输出结果如下所示：
+
+apiVersion: policy/v1beta1
+kind: PodDisruptionBudget
+metadata:
+  creationTimestamp: 2019-11-19T021:38:26Z
+  generation: 1
+  name: zk-pdb
+…
+status:
+  currentHealthy: 3
+  desiredHealthy: 3
+  disruptedPods: null
+  disruptionsAllowed: 1
+  expectedPods: 3
+  observedGeneration: 1
+ 
+        已复制到剪贴板！
+    
+任意控制器和选择器
+如果您只配合 Kubernetes 内建控制器（Deployment、ReplicationController、ReplicaSet、StatefulSet）使用 PDB，您可以跳过此章节。
+
+PDB 可以用于保护其他类型控制器（例如，“operator”）创建的 Pod，或者直接创建的 Pod（bare pod），但是有如下限定：
+
+只能使用 .spec.minAvailable，不能使用 .spec.maxUnavailable
+.spec.minAvailable 字段中只能使用整型数字，不能使用百分比
+当配合内建控制器（Deployment、ReplicationController、ReplicaSet、StatefulSet）使用时，PDB 的标签选择器可以选择控制器创建 Pod 的一个子集或者超集。然而，当名称空间中有多个 PDB 时，必须十分小心，PDB 的标签选择器之间不能重叠。
+# 控制器
+## 概述
+Pod（容器组）是 Kubernetes 中最小的调度单元，您可以通过 kubectl 直接创建一个 Pod。Pod 本身并不能自愈（self-healing）。如果一个 Pod 所在的 Node （节点）出现故障，或者调度程序自身出现故障，Pod 将被删除；同理，当因为节点资源不够或节点维护而驱逐 Pod 时，Pod 也将被删除。
+
+Kubernetes 通过引入 Controller（控制器）的概念来管理 Pod 实例。在 Kubernetes 中，您应该始终通过创建 Controller 来创建 Pod，而不是直接创建 Pod。控制器可以提供如下特性：
+- 水平扩展（运行 Pod 的多个副本）
+- rollout（版本更新）
+- self-healing（故障恢复） 例如：当一个节点出现故障，控制器可以自动地在另一个节点调度一个配置完全一样的 Pod，以替换故障节点上的 Pod。
+
+在 Kubernetes 支持的控制器有如下几种：
+- Deployment Kuboard 已支持
+- StatefulSet Kuboard 已支持
+- DaemonSet Kuboard 已支持
+- CronJob Kuboard 正在计划中
+- Jobs - Run to Completion Kuboard 正在计划中
+- ReplicaSet (opens new window)使用 Deployment
+
+- ReplicationController (opens new window)使用 Deployment
+
+- Garbage Collection(opens new window)
+- TTL Controller for Finished Resources(opens new window)
+
+### 在 Kuboard 中的体现
+在 Kuboard 工作负载编辑器中，控制器的概念如下图所示：
+![alt text](image-14.png)
+
+## Deployment
+### 介绍 Deployment
+#### Pod 容器组
+Pod 容器组是 Kubernetes 中最小的调度单元，更多信息请参考 容器组 - 概述
+#### ReplicaSet 副本集
+ReplicaSet 副本集的用途是为指定的 Pod 维护一个副本（实例）数量稳定的集合。下面是一个定义 ReplicaSet 副本集的 yaml 文件：
+```yaml
+apiVersion: apps/v1
+kind: ReplicaSet
+metadata:
+  name: frontend
+  labels:
+    tier: frontend
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      tier: frontend
+  template:
+    metadata:
+      labels:
+        tier: frontend
+    spec:
+      containers:
+      - name: php-redis
+        image: gcr.io/google_samples/gb-frontend:v3
+```
+    
+ReplicaSet 副本集的主要几个字段有：
+- selector 确定哪些 Pod 属于该副本集
+- replicas 副本集应该维护几个 Pod 副本（实例）
+- template Pod 的定义
+
+副本集将通过创建、删除 Pod 容器组来确保符合 selector 选择器的 Pod 数量等于 replicas 指定的数量。当符合 selector 选择器的 Pod 数量不够时，副本集通过使用 template 中的定义来创建 Pod。
+
+在 Kubernetes 中，并不建议您直接使用 ReplicaSet，推荐使用 Deployment，由 Deployment 创建和管理 ReplicaSet.
+
+#### Deployment 概述
+Deployment 是最常用的用于部署无状态服务的方式。Deployment 控制器使得您能够以声明的方式更新 Pod（容器组）和 ReplicaSet（副本集）。
+
+以“声明”的方式管理 Pod 和 ReplicaSet，其本质是将一些特定场景的一系列运维步骤固化下来，以便快速准确无误的执行。Deployment 为我们确定了如下几种运维场景：
+- 创建Deployment 创建 Deployment 后，Deployment 控制器将立刻创建一个 ReplicaSet 副本集，并由 ReplicaSet 创建所需要的 Pod。
+- 更新Deployment 更新 Deployment 中 Pod 的定义（例如，发布新版本的容器镜像）。此时 Deployment 控制器将为该 Deployment 创建一个新的 ReplicaSet 副本集，并且逐步在新的副本集中创建 Pod，在旧的副本集中删除 Pod，以达到滚动更新的效果。
+- 回滚Deployment 回滚到一个早期 Deployment 版本。
+- 伸缩Deployment 水平扩展 Deployment，以便支持更大的负载，或者水平- 收缩 Deployment，以便节省服务器资源。
+- 暂停和继续Deployment
+- 查看Deployment状态
+- 清理策略
+- 金丝雀发布
+
+### 创建 Deployment
+
+下面的 yaml 文件定义了一个 Deployment，该 Deployment 将创建一个有 3 个 nginx Pod 副本的 ReplicaSet（副本集）：
+```yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: nginx-deployment
+  labels:
+    app: nginx
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: nginx
+  template:
+    metadata:
+      labels:
+        app: nginx
+    spec:
+      containers:
+      - name: nginx
+        image: nginx:1.7.9
+        ports:
+        - containerPort: 80
+```
+    
+在这个例子中：
+- 将创建一个名为 nginx-deployment 的 Deployment（部署），名称由 .metadata.name 字段指定
+- 该 Deployment 将创建 3 个 Pod 副本，副本数量由 .spec.replicas 字段指定
+- .spec.selector 字段指定了 Deployment 如何找到由它管理的 Pod。此案例中，我们使用了 Pod template 中定义的一个标签（app: nginx）。对于极少数的情况，这个字段也可以定义更加复杂的规则
+- .template 字段包含了如下字段：
+  - .template.metadata.labels 字段，指定了 Pod 的标签（app: nginx）
+  - .template.spec.containers[].image 字段，表明该 Pod 运行一个容器 nginx:1.7.9
+  - .template.spec.containers[].name 字段，表明该容器的名字是 nginx
+
+
+执行命令以创建 Deployment
+>kubectl apply -f https://k8s.io/examples/controllers/nginx-deployment.yaml
+ 
+
+    
+**字段含义**
+
+|字段名称|	说明|
+|-------|--------|
+|NAME|	Deployment name|
+|DESIRED|	Deployment 期望的 Pod 副本数，即 Deployment 中 .spec.replicas 字段指定的数值。该数值是“期望”值|
+|CURRENT|	当前有多少个 Pod 副本数在运行|
+|UP-TO-DATE|	Deployment 中，符合当前 Pod Template 定义的 Pod 数量|
+|AVAILABLE|	当前对用户可用的 Pod 副本数|
+|AGE|	Deployment 部署以来到现在的时长|
+
+- 查看 Deployment 的发布状态（rollout status），执行命令 kubectl rollout status deployment.v1.apps/nginx-deployment。输出结果树下所示：
+```shell
+Waiting for rollout to finish: 2 out of 3 new replicas have been updated...
+deployment.apps/nginx-deployment successfully rolled out
+```
+
+- 等待几秒后，再次执行命令 kubectl get deployments，输出结果如下所示：
+```shell
+NAME               DESIRED   CURRENT   UP-TO-DATE   AVAILABLE   AGE
+nginx-deployment   3         3         3            3           18s
+```
+    
+此时该 Deployment 已经完成了 3 个 Pod 副本的创建，并且所有的副本都是 UP-TO-DATE（符合最新的 Pod template 定义） 和 AVAILABEL
+
+- 查看该 Deployment 创建的 ReplicaSet（rs），执行命令 kubectl get rs，输出结果如下所示：
+```shell
+NAME                          DESIRED   CURRENT   READY   AGE
+nginx-deployment-75675f5897   3         3         3       18s
+```
+    
+- 查看 Pod 的标签，执行命令 kubectl get pods --show-labels，输出结果如下所示：
+```shell
+NAME                                READY     STATUS    RESTARTS   AGE       LABELS
+nginx-deployment-75675f5897-7ci7o   1/1       Running   0          18s       app=nginx,pod-template-hash=3123191453
+nginx-deployment-75675f5897-kzszj   1/1       Running   0          18s       app=nginx,pod-template-hash=3123191453
+nginx-deployment-75675f5897-qqcnn   1/1       Running   0          18s       app=nginx,pod-template-hash=3123191453
+```
+    
+Deployment 创建的 ReplicaSet（副本集）确保集群中有 3 个 nginx Pod。
+### 
 
 # 服务发现，负载均衡，网络
 ## Service
