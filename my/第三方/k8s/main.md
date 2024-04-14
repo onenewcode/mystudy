@@ -418,6 +418,10 @@ spec:
 
 # 架构
 ## 节点
+Kubernetes中节点（node）指的是一个工作机器。不同的集群中，节点可能是虚拟机也可能是物理机。每个节点都由 master 组件管理，并包含了运行 Pod（容器组）所需的服务。这些服务包括：
+- 容器引擎
+- kubelet
+- kube-proxy 
 ### 节点状态
 节点的状态包含如下信息：
 - Addresses
@@ -433,7 +437,7 @@ spec:
 >kubectl describe node <your-node-name>
 ####  Addresses
 
-依据你集群部署的方式（在哪个云供应商部署，或是在物理机上部署），Addesses 字段可能有所不同。
+依据你集群部署的方式，Addesses 字段可能有所不同。
 - HostName： 在节点命令行界面上执行 hostname 命令所获得的值。启动 kubelet 时，可以通过参数 --hostname-override 覆盖
 - ExternalIP：通常是节点的外部IP（可以从集群外访问的内网IP地址；上面的例子中，此字段为空）
 - InternalIP：通常是从节点内部可以访问的 IP 地址
@@ -464,7 +468,7 @@ Capacity 中的字段表示节点上的资源总数，Allocatable 中的字段�
 - 操作系统名称
 
 ### 节点管理
-与 Pod 和 Service 不一样，节点并不是由 Kubernetes 创建的，节点由云供应商（例如，Google Compute Engine、阿里云等）创建，或者节点已经存在于您的物理机/虚拟机的资源池。向 Kubernetes 中创建节点时，仅仅是创建了一个描述该节点的 API 对象。节点 API 对象创建成功后，Kubernetes将检查该节点是否有效。例如，假设您创建如下节点信息：
+与 Pod 和 Service 不一样，节点并不是由 Kubernetes 创建的，节点由云供应商创建，或者节点已经存在于您的物理机/虚拟机的资源池。向 Kubernetes 中创建节点时，仅仅是创建了一个描述该节点的 API 对象。节点 API 对象创建成功后，Kubernetes将检查该节点是否有效。例如，假设您创建如下节点信息：
 ```yaml
 kind: Node
 apiVersion: v1
@@ -477,10 +481,8 @@ metadata:
 节点控制器是一个负责管理节点的 Kubernetes master 组件。在节点的生命周期中，节点控制器起到了许多作用。
 - 首先，节点控制器在注册节点时为节点分配 CIDR 地址块
 - 第二，节点控制器通过云供应商（cloud-controller-manager）接口检查节点列表中每一个节点对象对应的虚拟机是否可用。在云环境中，只要节点状态异常，节点控制器检查其虚拟机在云供应商的状态，如果虚拟机不可用，自动将节点对象从 APIServer 中删除。
-- 第三，节点控制器监控节点的健康状况。当节点变得不可触达时（例如，由于节点已停机，节点控制器不再收到来自节点的心跳信号），节点控制器将节点API对象的 NodeStatus Condition 取值从 NodeReady 更新为 Unknown；然后在等待 pod-eviction-timeout 时间后，将节点上的所有 Pod 从节点驱逐。
-- 默认40秒未收到心跳，修改 NodeStatus Condition 为 Unknown；
-- 默认 pod-eviction-timeout 为 5分钟
-- 节点控制器每隔 --node-monitor-period 秒检查一次节点的状态
+- 第三，节点控制器监控节点的健康状况。当节点变得不可触达时，节点控制器将节点API对象的 NodeStatus Condition 取值从 NodeReady 更新为 Unknown；然后在等待 pod-eviction-timeout 时间后，将节点上的所有 Pod 从节点驱逐。
+
 
 #### 节点自注册（Self-Registration）
 如果 kubelet 的启动参数 --register-node为 true（默认为 true），kubelet 会尝试将自己注册到 API Server。kubelet自行注册时，将使用如下选项：
@@ -504,13 +506,17 @@ metadata:
 节点API对象中描述了节点的容量（Capacity），例如，CPU数量、内存大小等信息。通常，节点在向 APIServer 注册的同时，在节点API对象里汇报了其容量（Capacity）。如果您 手动管理节点，您需要在添加节点时自己设置节点的容量。
 
 ## 集群内的通信
+### Master-Node
 Master-Node 之间的通信可以分为如下两类：
 - Cluster to Master
 - Master to Cluster
 ### Cluster to Master
-所有从集群访问 Master 节点的通信，都是针对 apiserver 的。
+所有从集群访问 Master 节点的通信，都是针对 apiserver 的（没有任何其他 master 组件发布远程调用接口）。通常安装 Kubernetes 时，apiserver 监听 HTTPS 端口（443），并且配置了一种或多种 客户端认证方式 authentication (opens new window)。至少需要配置一种形式的 授权方式 authorization (opens new window)，尤其是 匿名访问 anonymous requests (opens new window)或 Service Account Tokens (opens new window)被启用的情况下。
 
 ### Master to Cluster
+从 master（apiserver）到Cluster存在着两条主要的通信路径：
+- apiserver 访问集群中每个节点上的 kubelet 进程
+- 使用 apiserver 的 proxy 功能，从 apiserver 访问集群中的任意节点、Pod、Service
 #### apiserver to kubelet
 apiserver 在如下情况下访问 kubelet：
 - 抓取 Pod 的日志
@@ -548,7 +554,7 @@ Job 是一种 Kubernetes API 对象，一个 Job 将运行一个（或多个）P
 ## Kubernetes对象
 ### 什么是Kubernetes对象
 Kubernetes对象指的是Kubernetes系统的持久化实体，所有这些对象合起来，代表了你集群的实际情况。常规的应用里，我们把应用程序的数据存储在数据库中，Kubernetes将其数据以Kubernetes对象的形式通过 api server存储在 etcd 中。具体来说，这些数据（Kubernetes对象）描述了：
-- 集群中运行了哪些容器化应用程序（以及在哪个节点上运行）
+- 集群中运行了哪些容器化应用程序
 - 集群中对应用程序可用的资源
 - 应用程序相关的策略定义，例如，重启策略、升级策略、容错策略
 - 其他Kubernetes管理应用程序时所需要的信息
@@ -603,15 +609,15 @@ spec:
 - metadata 用于唯一确定该对象的元数据：包括 name 和 namespace，如果 namespace 为空，则默认值为 default
 - spec 描述您对该对象的期望状态
 
-## 管理Kubernetes对象
-### 管理方式
+### 管理Kubernetes对象
+#### 管理方式
 |管理方式|	操作对象|	推荐的环境|	参与编辑的人数|	学习曲线|
 |--------|---------|---------|----------|----------|
 |指令性的命令行|	Kubernetes对象|	开发环境|	1+|	最低|
 |指令性的对象配置	|单个 yaml |文件	|生产环境	|1	|适中|
 |声明式的对象配置|	包含多个 yaml 文件的多个目录	|生产环境|	1+|	最高|
 
-### 指令性的命令行
+#### 指令性的命令行
 当使用指令性的命令行（imperative commands）时，用户通过向 kubectl 命令提供参数的方式，直接操作集群中的 Kubernetes 对象。此时，用户无需编写或修改 .yaml 文件。
 
 创建一个 Deployment 对象，以运行一个 nginx 实例：
@@ -619,7 +625,7 @@ spec:
 
 >kubectl create deployment nginx --image nginx
 
-### 指令性的对象配置
+#### 指令性的对象配置
 使用指令性的对象配置时，需要向 kubectl 命令指定具体的操作（create,replace,apply,delete等），可选参数以及至少一个配置文件的名字。配置文件中必须包括一个完整的对象的定义，可以是 yaml 格式，也可以是 json 格式。
 
 通过配置文件创建对象
@@ -631,10 +637,10 @@ spec:
 直接使用配置文件中的对象定义，替换Kubernetes中对应的对象：
 >kubectl replace -f nginx.yaml
  
-### 声明式的对象配置
+#### 声明式的对象配置
 当使用声明式的对象配置时，用户操作本地存储的Kubernetes对象配置文件，然而，在将文件传递给 kubectl 命令时，并不指定具体的操作，由 kubectl 自动检查每一个对象的状态并自行决定是创建、更新、还是删除该对象。使用这种方法时，可以直接针对一个或多个文件目录进行操作。
 
-例子
+**例子**
 处理 configs 目录中所有配置文件中的Kubernetes对象，根据情况创建对象、或更新Kubernetes中已经存在的对象。可以先执行 diff 指令查看具体的变更，然后执行 apply 指令执行变更：
 ```shell
 kubectl diff -f configs/
@@ -669,7 +675,7 @@ UID 是由 Kubernetes 系统生成的，唯一标识某个 Kubernetes 对象的�
 
 ## 名称空间
 ### 何时使用名称空间 
-名称空间的用途是，为不同团队的用户（或项目）提供虚拟的集群空间，也可以用来区分开发环境/测试环境、准上线环境/生产环境。
+名称空间的用途是，为不同团队的用户提供虚拟的集群空间，也可以用来区分开发环境/测试环境、准上线环境/生产环境。
 
 名称空间为 名称 提供了作用域。名称空间内部的同类型对象不能重名，但是跨名称空间可以有同名同类型对象。名称空间不可以嵌套，任何一个Kubernetes对象只能在一个名称空间中。
 
@@ -711,7 +717,7 @@ kubectl config view --minify | grep namespace:
 当您创建一个 Service 时，Kubernetes 为其创建一个对应的 DNS 条目。该 DNS 记录的格式为 <service-name>.<namespace-name>.svc.cluster.local，也就是说，如果在容器中只使用 <service-name>，其DNS将解析到同名称空间下的 Service。这个特点在多环境的情况下非常有用，例如将开发环境、测试环境、生产环境部署在不同的名称空间下，应用程序只需要使用 <service-name> 即可进行服务发现，无需为不同的环境修改配置。如果您想跨名称空间访问服务，则必须使用完整的域名（fully qualified domain name，FQDN）。
 
 #### 并非所有对象都在名称空间里
-大部分的 Kubernetes 对象（例如，Pod、Service、Deployment、StatefulSet等）都必须在名称空间里。但是某些更低层级的对象，是不在任何名称空间中的，例如 nodes、persistentVolumes、storageClass 等
+大部分的 Kubernetes 对象都必须在名称空间里。但是某些更低层级的对象，是不在任何名称空间中的，例如 nodes、persistentVolumes、storageClass 等
 ## 使用名称空间共享集群
 ### 查看名称空间
 查看集群中的名称空间列表：
@@ -853,20 +859,20 @@ kubectl get deployment
 
 #### 为什么需要名称空间
 一个Kubernetes集群应该可以满足多组用户的不同需要。Kubernetes名称空间可以使不同的项目、团队或客户共享同一个 Kubernetes 集群。实现的方式是，提供：
+- 名称 的作用域
+- 为不同的名称空间定义不同的授权方式和资源分配策略 Resource Quota 和 resource limit range
 
-名称 的作用域
-为不同的名称空间定义不同的授权方式和资源分配策略 Resource Quota 和 resource limit range
 每一个用户组都期望独立于其他用户组进行工作。通过名称空间，每个用户组拥有自己的：
 
-Kubernetes 对象（Pod、Service、Deployment等）
-授权（谁可以在该名称空间中执行操作）
-资源分配（该用户组或名称空间可以使用集群中的多少计算资源）
-可能的使用情况有：
+- Kubernetes 对象（Pod、Service、Deployment等）
+- 授权（谁可以在该名称空间中执行操作）
+- 资源分配（该用户组或名称空间可以使用集群中的多少计算资源）
 
-集群管理员通过一个Kubernetes集群支持多个用户组
-集群管理员将集群中某个名称空间的权限分配给用户组中的受信任的成员
-集群管理员可以限定某一个用户组可以消耗的资源数量，以避免其他用户组受到影响
-集群用户可以使用自己的Kubernetes对象，而不会与集群中的其他用户组相互干扰
+可能的使用情况有：
+- 集群管理员通过一个Kubernetes集群支持多个用户组
+- 集群管理员将集群中某个名称空间的权限分配给用户组中的受信任的成员
+- 集群管理员可以限定某一个用户组可以消耗的资源数量，以避免其他用户组受到影响
+- 集群用户可以使用自己的Kubernetes对象，而不会与集群中的其他用户组相互干扰
 ## 标签和选择器
 标签（Label）是附加在Kubernetes对象上的一组名值对，其意图是按照对用户有意义的方式来标识Kubernetes对象，同时，又不对Kubernetes的核心逻辑产生影响。标签可以用来组织和选择一组Kubernetes对象。您可以在创建Kubernetes对象时为其添加标签，也可以在创建以后再为其添加标签。每个Kubernetes对象可以有多个标签，同一个对象的标签的 Key 必须唯一，例如：
 ```yaml
@@ -888,15 +894,74 @@ metadata:
 - track: daily、track: weekly
 
 ### 句法和字符集
+标签是一组名值对（key/value pair）。标签的 key 可以有两个部分：可选的前缀和标签名，通过 / 分隔。
+- 标签名：
+  - 标签名部分是必须的
+  - 不能多于 63 个字符
+  - 必须由字母、数字开始和结尾
+  - 可以包含字母、数字、减号-、下划线_、小数点.
+- 标签前缀：
+  - 标签前缀部分是可选的
+  - 如果指定，必须是一个DNS的子域名，例如：k8s.eip.work
+  - 不能多于 253 个字符
+  - 使用 / 和标签名分隔
+
+如果省略标签前缀，则标签的 key 将被认为是专属于用户的。Kubernetes的系统组件（例如，kube-scheduler、kube-controller-manager、kube-apiserver、kubectl 或其他第三方组件）向用户的Kubernetes对象添加标签时，必须指定一个前缀。
+
+kubernetes.io/ 和 k8s.io/ 这两个前缀是 Kubernetes 核心组件预留的。Kuboard 使用 k8s.eip.work 这个前缀。
+
+标签的 value 必须：
+- 不能多于 63 个字符
+- 可以为空字符串
+- 如果不为空，则
+  - 必须由字母、数字开始和结尾
+  - 可以包含字母、数字、减号-、下划线_、小数点.
+
+例如，下面的例子中的Pod包含两个标签 environment: production 和 app:nginx
+```yaml
+apiVersion: v1
+kind: Pod
+metadata:
+  name: label-demo
+  labels:
+    environment: production
+    app: nginx
+spec:
+  containers:
+  - name: nginx
+    image: nginx:1.7.9
+    ports:
+    - containerPort: 80
+```
 ### 标签选择器
 通常来讲，会有多个Kubernetes对象包含相同的标签。通过使用标签选择器（label selector），用户/客户端可以选择一组对象。标签选择器（label selector）是 Kubernetes 中最主要的分类和筛选手段.
+
+Kubernetes api server支持两种形式的标签选择器，equality-based 基于等式的 和 set-based 基于集合的。标签选择器可以包含多个条件，并使用逗号分隔，此时只有满足所有条件的 Kubernetes 对象才会被选中。
 #### 基于等式的选择方式
-Equality- 或者 inequality-based 选择器可以使用标签的名和值来执行过滤选择。只有匹配所有条件的对象才被选中（被选中的对象可以包含未指定的标签）。可以使用三种操作符 =、==、!=。前两个操作符含义是一样的，都代表相等，后一个操作符代表不相等。例如：
+Equality- 或者 inequality-based 选择器可以使用标签的名和值来执行过滤选择。只有匹配所有条件的对象才被选中。可以使用三种操作符 =、==、!=。前两个操作符含义是一样的，都代表相等，后一个操作符代表不相等。例如：
 ```shell
 # 选择了标签名为 `environment` 且 标签值为 `production` 的Kubernetes对象
 environment = production
 # 选择了标签名为 `tier` 且标签值不等于 `frontend` 的对象，以及不包含标签 `tier` 的对象
 tier != frontend
+```
+也可以使用逗号分隔的两个等式 environment=production,tier!=frontend，此时将选中所有 environment 为 production 且 tier 不为 frontend 的对象。
+
+以 Pod 的节点选择器 为例，下面的 Pod 可以被调度到包含标签 accelerator=nvidia-tesla-p100 的节点上：
+```yaml
+apiVersion: v1
+kind: Pod
+metadata:
+  name: cuda-test
+spec:
+  containers:
+    - name: cuda-test
+      image: "k8s.gcr.io/cuda-vector-add:v0.1"
+      resources:
+        limits:
+          nvidia.com/gpu: 1
+  nodeSelector:
+    accelerator: nvidia-tesla-p100
 ```
 
 #### 基于集合的选择方式
