@@ -1955,8 +1955,237 @@ nginx-deployment-75675f5897-qqcnn   1/1       Running   0          18s       app
 ```
     
 Deployment 创建的 ReplicaSet（副本集）确保集群中有 3 个 nginx Pod。
-### 
+### 更新 Deployment
+#### 执行更新
+**使用下述步骤更新您的 Deployment**
 
+1. 执行以下命令，将容器镜像从 nginx:1.7.9 更新到 nginx:1.9.1
+>kubectl --record deployment.apps/nginx-deployment set image deployment.v1.apps/nginx-deployment nginx=nginx:1.9.1
+ 
+
+或者，您可以 edit 该 Deployment，并将 .spec.template.spec.containers[0].image 从 nginx:1.7.9 修改为 nginx:1.9.1
+>kubectl edit deployment.v1.apps/nginx-deployment
+ 
+   
+2. 查看发布更新（rollout）的状态，执行命令：
+>kubectl rollout status deployment.v1.apps/nginx-deployment
+    
+或者
+>deployment.apps/nginx-deployment successfully rolled out
+ 
+
+    
+**查看更新后的 Deployment 的详情**：
+- 更新（rollout）成功后，您可以执行命令 kubectl get deployments 以查看更新结果。输出信息如下所示：
+```shell
+NAME               DESIRED   CURRENT   UP-TO-DATE   AVAILABLE   AGE
+nginx-deployment   3         3         3            3           36s
+```
+    
+- 执行命令 kubectl get rs Deployment 的更新是通过创建一个新的 3 个副本数的 ReplicaSet 并同时将旧的 Replicaset 的副本数缩容到 0 个副本 来达成的。
+    
+- 执行命令 kubectl get pods，此时将只显示新的 Pod，
+  - 如果您想要修改这些新的 Pod，您只需要再次修改 Deployment 的 Pod template。
+  - Deployment 将确保更新过程中，任意时刻只有一定数量的 Pod 被关闭。默认情况下，Deployment 确保至少 .spec.replicas 的 75% 的 Pod 保持可用（25% max unavailable）
+  - Deployment 将确保更新过程中，任意时刻只有一定数量的 Pod 被创建。默认情况下，Deployment 确保最多 .spec.replicas 的 25% 的 Pod 被创建（25% max surge）
+ 
+#### 覆盖更新 Rollover （更新过程中再更新）
+每创建一个 Deployment，Deployment Controller 都为其创建一个 ReplicaSet，并设定其副本数为期望的 Pod 数。如果 Deployment 被更新，旧的 ReplicaSet 将被 Scale down，新建的 ReplicaSet 将被 Scale up；直到最后新旧两个 ReplicaSet，一个副本数为 .spec.replias，另一个副本数为 0。这个过程称为 rollout。
+
+当 Deployment 的 rollout 正在进行中的时候，如果您再次更新 Deployment 的信息，此时 Deployment 将再创建一个新的 ReplicaSet 并开始将其 scale up，将先前正在 scale up 的 ReplicaSet 也作为一个旧的 ReplicaSet，并开始将其 scale down。
+
+例如：
+- 假设您创建了一个 Deployment 有 5 个 nginx:1.7.9 的副本；
+- 您立刻更新该 Deployment 使得其 .spec.replicas 为 5，容器镜像为 nginx:1.9.1，而此时只有 3 个 nginx:1.7.9 的副本已创建；
+- 此时，Deployment Controller 将立刻开始 kill 已经创建的 3 个 nginx:1.7.9 的 Pod，并开始创建 nginx:1.9.1 的 Pod。Deployment Controller 不会等到 5 个 nginx:1.7.9 的 Pod 都创建完之后在开始新的更新
+### 回滚 Deployment
+
+某些情况下，您可能想要回滚（rollback）Deployment，例如：Deployment 不稳定（可能是不断地崩溃）。默认情况下，kubernetes 将保存 Deployment 的所有更新（rollout）历史。您可以设定 revision history limit 来确定保存的历史版本数量。
+
+#### 模拟更新错误
+假设您在更新 Deployment 的时候，犯了一个拼写错误，将 nginx:1.9.1 写成了 nginx:1.91
+>kubectl set image deployment.v1.apps/nginx-deployment nginx=nginx:1.91 --record=true
+   
+输出结果如下所示：
+>deployment.apps/nginx-deployment image updated
+
+    
+该更新将卡住，您可以执行命令 kubectl rollout status deployment.v1.apps/nginx-deployment 检查其状态，输出结果如下所示：
+```shell
+Waiting for rollout to finish: 1 out of 3 new replicas have been updated...
+```
+    
+执行命令 kubectl get rs 您将看到两个旧的 ReplicaSet（nginx-deployment-1564180365 and nginx-deployment-2035384211）和一个新的 ReplicaSet (nginx-deployment-3066724191) 。如下所示：
+```shell
+NAME                          DESIRED   CURRENT   READY   AGE
+nginx-deployment-1564180365   3         3         3       25s
+nginx-deployment-2035384211   0         0         0       36s
+nginx-deployment-3066724191   1         1         0       6s
+```
+    
+执行命令 kubectl get pods，您将看到 1 个由新 ReplicaSet 创建的 Pod 卡在抓取 image 的死循环里：
+```shell
+NAME                                READY     STATUS             RESTARTS   AGE
+nginx-deployment-1564180365-70iae   1/1       Running            0          25s
+nginx-deployment-1564180365-jbqqo   1/1       Running            0          25s
+nginx-deployment-1564180365-hysrc   1/1       Running            0          25s
+nginx-deployment-3066724191-08mng   0/1       ImagePullBackOff   0          6s
+```
+
+#### 检查 Deployment 的更新历史
+1. 执行命令 kubectl rollout history deployment.v1.apps/nginx-deployment 检查 Deployment 的历史版本，输出结果如下所示：
+```shell
+deployments "nginx-deployment"
+REVISION    CHANGE-CAUSE
+1           kubectl apply --filename=https://k8s.io/examples/controllers/nginx-deployment.yaml --record=true
+2           kubectl set image deployment.v1.apps/nginx-deployment nginx=nginx:1.9.1 --record=true
+3           kubectl set image deployment.v1.apps/nginx-deployment nginx=nginx:1.91 --record=true
+```
+
+CHANGE-CAUSE 是该 revision（版本）创建时从 Deployment 的 annotation kubernetes.io/change-cause 拷贝而来。
+
+您可以通过如下方式制定 CHANGE-CAUSE 信息：
+- 为 Deployment 增加注解，kubectl annotate deployment.v1.apps/nginx-deployment kubernetes.io/change-cause="image updated to 1.9.1"
+- 执行 kubectl apply 命令时，增加 --record 选项
+- 手动编辑 Deployment 的 .metadata.annotation 信息
+
+2. 执行命令 kubectl rollout history deployment.v1.apps/nginx-deployment --revision=2，查看 revision（版本）的详细信息，输出结果如下所示：
+```shell
+deployments "nginx-deployment" revision 2
+  Labels:       app=nginx
+          pod-template-hash=1159050644
+  Annotations:  kubernetes.io/change-cause=kubectl set image deployment.v1.apps/nginx-deployment nginx=nginx:1.9.1 --record=true
+  Containers:
+  nginx:
+    Image:      nginx:1.9.1
+    Port:       80/TCP
+    QoS Tier:
+        cpu:      BestEffort
+        memory:   BestEffort
+    Environment Variables:      <none>
+  No volumes.
+```
+    
+#### 回滚到前一个 revision（版本）
+下面的步骤可将 Deployment 从当前版本回滚到前一个版本（version 2）
+
+1. 执行命令 kubectl rollout undo deployment.v1.apps/nginx-deployment 将当前版本回滚到前一个版本，输出结果如下所示：
+>deployment.apps/nginx-deployment
+   
+或者，您也可以使用 --to-revision 选项回滚到前面的某一个指定版本，执行如下命令：
+>kubectl rollout undo deployment.v1.apps/nginx-deployment --to-revision=2
+ 
+    
+输出结果如下：
+>deployment.apps/nginx-deployment
+
+
+此时，Deployment 已经被回滚到前一个稳定版本。您可以看到 Deployment Controller 为该 Deployment 产生了 DeploymentRollback event。
+
+2. 执行命令 kubectl get deployment nginx-deployment，检查该回滚是否成功，Deployment 是否按预期的运行，输出结果如下：
+```shell
+NAME               DESIRED   CURRENT   UP-TO-DATE   AVAILABLE   AGE
+nginx-deployment   3         3         3            3           30m
+```
+    
+3. 执行命令 kubectl describe deployment nginx-deployment 查看 Deployment 的详情.
+
+### 伸缩 Deployment
+伸缩（Scaling） Deployment，是指改变 Deployment 中 Pod 的副本数量，以应对实际业务流量的变化。
+#### 执行伸缩
+执行命令 kubectl scale deployment.v1.apps/nginx-deployment --replicas=10，可以伸缩 Deployment，输出结果如下所示：
+>deployment.apps/nginx-deployment scaled
+ 
+如果您的集群启用了自动伸缩（horizontal Pod autoscaling (opens new window)），执行以下命令，您就可以基于 CPU 的利用率在一个最大和最小的区间自动伸缩您的 Deployment：
+>kubectl autoscale deployment.v1.apps/nginx-deployment --min=10 --max=15 --cpu-percent=80
+    
+输出结果如下所示：
+>deployment.apps/nginx-deployment scaled
+ 
+
+    
+#### 按比例伸缩
+滚动更新（RollingUpdate） Deployment 过程中同一时间点运行应用程序的多个版本。如果一个 Deployment 正在执行滚动更新（RollingUpdate）的过程中（也可能暂停了滚动更新），您或者自动伸缩器（autoscaler）对该 Deployment 执行伸缩操作，此时，Deployment Controller 会按比例将新建的 Pod 分配到当前活动的 ReplicaSet（有 Pod 的 ReplicaSet） 中，以避免可能的风险。这种情况叫做按比例伸缩（Proportional Scaling）
+
+例如，假设您已经运行了一个 10 副本数的 Deployment，其 maxSurge=3, maxUnavailable=2。
+
+- 执行命令 kubectl get deployment，确认 Deployment 中的 10 个副本都在运行。输出结果如下所示：
+```shell
+NAME                 DESIRED   CURRENT   UP-TO-DATE   AVAILABLE   AGE
+nginx-deployment     10        10        10           10          50s
+```
+    
+- 执行命令 kubectl set image deployment.v1.apps/nginx-deployment nginx=nginx:sometag，将容器镜像更新到一个不存在的版本，输出结果如下所示：
+>deployment.apps/nginx-deployment image updated
+
+    
+- 执行命令 kubectl get rs，检查滚动更新的状态，输出结果如下：
+```shell
+NAME                          DESIRED   CURRENT   READY     AGE
+nginx-deployment-1989198191   5         5         0         9s
+nginx-deployment-618515232    8         8         8         1m
+```
+    
+更新容器镜像之后，Deployment Controller 将开始进行滚动更新（RollingUpdate），并创建一个新的 ReplicaSet nginx-deployment-1989198191，但是由于 maxUnavailable 的限定，该滚动更新将被阻止。
+
+- 执行命令 kubectl scale deployment.v1.apps/nginx-deployment --replicas=15，将 Deployment 的 replicas 调整到 15。此时，Deployment Controller 需要决定如何分配新增的 5 个 Pod 副本。根据“按比例伸缩”的原则：
+  - 更大比例的新 Pod 数被分配到副本数最多的 ReplicaSet
+  - 更小比例的新 Pod 数被分配到副本数最少的 ReplicaSet
+  - 如果还有剩余的新 Pod 数未分配，则将被增加到副本数最多的 ReplicaSet
+  - 副本数为 0 的 ReplicaSet，scale up 之后，副本数仍然为 0
+
+- 在本例中，3 个新副本被添加到旧的 ReplicaSet，2个新副本被添加到新的 ReplicaSet。如果新的副本都达到就绪状态，滚动更新过程最终会将所有的副本数添加放到新 ReplicaSet。执行命令 kubectl get deployment 查看 Deployment 的情况，输出结果如下所示：
+```shell
+NAME                 DESIRED   CURRENT   UP-TO-DATE   AVAILABLE   AGE
+nginx-deployment     15        18        7            8           7m
+```
+    
+执行命令 kubectl get rs 查看 ReplicaSet 的情况，输出结果如下所示：
+```shell
+NAME                          DESIRED   CURRENT   READY     AGE
+nginx-deployment-1989198191   7         7         0         7m
+nginx-deployment-618515232    11        11        11        7m
+```
+
+### 暂停和继续 Deployment
+
+您可以先暂停 Deployment，然后再触发一个或多个更新，最后再继续（resume）该 Deployment。这种做法使得您可以在暂停和继续中间对 Deployment 做多次更新，而无需触发不必要的滚动更新。
+
+以我们在 创建Deployment 中创建的 Deployment 为例。
+
+- 执行命令 kubectl get deployment，查看 Deployment 信息，输出结果如下所示：
+```shell
+NAME      DESIRED   CURRENT   UP-TO-DATE   AVAILABLE   AGE
+nginx     3         3         3            3           1m
+```
+    
+- 执行命令 kubectl rollout pause deployment.v1.apps/nginx-deployment 暂停 Deployment，输出结果如下所示：
+>deployment.apps/nginx-deployment paused
+ 
+- 执行命令 kubectl set image deployment.v1.apps/nginx-deployment nginx=nginx:1.9.1，更新 Deployment 的容器镜像，输出结果如下所示：
+>deployment.apps/nginx-deployment image updated
+  
+- 执行命令 kubectl rollout history deployment.v1.apps/nginx-deployment，可查看到尚未生成新的 Deployment 版本（revision），输出结果如下所示：
+```shell
+deployments "nginx"
+REVISION  CHANGE-CAUSE
+1   <none>
+```
+    
+- 执行命令 kubectl get rs 可查看到没有新的滚动更新开始执行，输出结果如下所示：
+```shell
+NAME               DESIRED   CURRENT   READY     AGE
+nginx-2142116321   3         3         3         2m
+```
+    
+- 如果需要的话，您可以针对 Deployment 执行更多的修改，例如，执行命令 kubectl set resources deployment.v1.apps/nginx-deployment -c=nginx --limits=cpu=200m,memory=512Mi 更新其 resource 限制，输出结果如下所示：
+>deployment.apps/nginx-deployment resource requirements updated
+   
+- 执行命令 kubectl describe deployment nginx-deployment，确保 Deployment 的信息已被正确修改。
+
+- 最后，执行命令 kubectl rollout resume deployment.v1.apps/nginx-deployment，继续（resume）该 Deployment，可使前面所有的变更一次性生效，输出结果如下所示：
+>deployment.apps/nginx-deployment resumed
+ 
 # 服务发现，负载均衡，网络
 ## Service
 ### Service概述
