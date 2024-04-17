@@ -553,7 +553,7 @@ Job 是一种 Kubernetes API 对象，一个 Job 将运行一个（或多个）P
 # 操作Kubernetes
 ## Kubernetes对象
 ### 什么是Kubernetes对象
-Kubernetes对象指的是Kubernetes系统的持久化实体，所有这些对象合起来，代表了你集群的实际情况。常规的应用里，我们把应用程序的数据存储在数据库中，Kubernetes将其数据以Kubernetes对象的形式通过 api server存储在 etcd 中。具体来说，这些数据（Kubernetes对象）描述了：
+Kubernetes对象指的是Kubernetes系统的持久化实体，所有这些对象合起来，代表了你集群的实际情况。常规的应用里，我们把应用程序的数据存储在数据库中，Kubernetes将其数据以Kubernetes对象的形式通过 api server存储在 etcd 中。具体来说，这些数据描述了：
 - 集群中运行了哪些容器化应用程序
 - 集群中对应用程序可用的资源
 - 应用程序相关的策略定义，例如，重启策略、升级策略、容错策略
@@ -2185,7 +2185,226 @@ nginx-2142116321   3         3         3         2m
 
 - 最后，执行命令 kubectl rollout resume deployment.v1.apps/nginx-deployment，继续（resume）该 Deployment，可使前面所有的变更一次性生效，输出结果如下所示：
 >deployment.apps/nginx-deployment resumed
+
+##  job
+### 简介
+Kubernetes中的 Job 对象将创建一个或多个 Pod，并确保指定数量的 Pod 可以成功执行到进程正常结束：
+- 当 Job 创建的 Pod 执行成功并正常结束时，Job 将记录成功结束的 Pod 数量
+- 当成功结束的 Pod 达到指定的数量时，Job 将完成执行
+- 删除 Job 对象时，将清理掉由 Job 创建的 Pod
+
+一个简单的例子是：创建一个 Job 对象用来确保一个 Pod 的成功执行并结束。在第一个 Pod 执行失败或者被删除（例如，节点硬件故障或机器重启）的情况下，该 Job 对象将创建一个新的 Pod 以重新执行。
+
+
+
+**运行一个Job的例子**
+在下面这个 Job 的例子中，Pod 执行了一个跟 π 相关的计算，并打印出最终结果，该计算大约需要 10 秒钟执行结束。
+```yaml
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: pi
+spec:
+  template:
+    spec:
+      containers:
+      - name: pi
+        image: perl
+        command: ["perl",  "-Mbignum=bpi", "-wle", "print bpi(2000)"]
+      restartPolicy: Never
+  backoffLimit: 4
+```
+    
+- 执行如下命令创建该对象：
+>kubectl apply -f https://kuboard.cn/statics/learning/job/job.yaml
+    
+执行命令查看创建结果
+>kubectl describe jobs/pi
  
+    
+输出结果如下
+```shell
+Name:             pi
+Namespace:        default
+Selector:         controller-uid=b1db589a-2c8d-11e6-b324-0209dc45a495
+Labels:           controller-uid=b1db589a-2c8d-11e6-b324-0209dc45a495
+                  job-name=pi
+Annotations:      <none>
+Parallelism:      1
+Completions:      1
+Start Time:       Tue, 07 Jun 2016 10:56:16 +0200
+Pods Statuses:    0 Running / 1 Succeeded / 0 Failed
+Pod Template:
+  Labels:       controller-uid=b1db589a-2c8d-11e6-b324-0209dc45a495
+                job-name=pi
+  Containers:
+  pi:
+    Image:      perl
+    Port:
+    Command:
+      perl
+      -Mbignum=bpi
+      -wle
+      print bpi(2000)
+    Environment:        <none>
+    Mounts:             <none>
+  Volumes:              <none>
+Events:
+  FirstSeen    LastSeen    Count    From            SubobjectPath    Type        Reason            Message
+  ---------    --------    -----    ----            -------------    --------    ------            -------
+  1m           1m          1        {job-controller }                Normal      SuccessfulCreate  Created pod: pi-dtn4q
+```
+    
+- 执行以下命令可查看所有结束的 Pod
+>kubectl get pods
+
+
+- 执行以下命令可获得该 Job 所有 Pod 的名字：
+```shell
+pods=$(kubectl get pods --selector=job-name=pi --output=jsonpath='{.items[*].metadata.name}')
+echo $pods
+```
+
+- 执行以下命令可查看 Pod 的日志：
+>kubectl logs $pods
+
+### 编写Job的定义
+与所有的 Kubernetes 对象一样，Job 对象的 YAML 文件中，都需要包括如下三个字段：
+- .apiVersion
+- .kind
+- .metadata
+
+Job 对象的 YAML 文件，还需要一个 .spec 字段。
+#### Pod Template
+.spec.template 是必填字段：
+
+- 用于定义 pod template
+- 与 Pod 有相同的字段内容，但由于是内嵌元素，pod template 不包括阿 apiVersion 字段和 kind 字段
+- 除了 Pod 所需的必填字段之外，Job 中的 pod template 必须指定
+  - 合适的标签 .spec.template.spec.labels
+  - 指定合适的重启策略 restartPolicy .spec.template.spec.restartPolicy，此处只允许使用 Never 和 OnFailure 两个取值
+
+#### Pod Selector
+.spec.selector 字段是可选的。绝大部分情况下，您不需要指定该字段。只有在少数情况下，您才需要这样做，请参考 Job 的特殊操作
+
+#### Parallel Jobs
+有三种主要的任务类型适合使用 Job 运行：
+- Non-parallel Jobs
+  - 通常，只启动一个 Pod，除非该 Pod 执行失败
+  - Pod 执行成功并结束以后，Job 也立刻进入完成 completed 状态
+- Parallel Jobs with a fixed completion count
+  - .spec.completions 为一个非零正整数
+  - Job 将创建至少 .spec.completions 个 Pod，编号为 1 - .spec.completions 尚未实现
+  - Job 记录了任务的整体执行情况，当 1 - .spec.completions 中每一个编号都有一个对应的 Pod 执行成功时，Job 进入完成状态
+- Parallel Jobs with a work queue
+  - 不指定 .spec.completions，使用 .spec.parallelism
+  - Pod 之间必须相互之间自行协调并发，或者使用一个外部服务决定每个 Pod 各自执行哪些任务。例如，某个Pod可能从带工作队列（work queue）中取出最多N个条目的批次数据
+  - 每个 Pod 都可以独立判断其他同僚（peers）是否完成，并确定整个Job是否完成
+  - 当 Job 中任何一个 Pod 成功结束，将不再为其创建新的 Pod
+  - 当所有的 Pod 都结束了，且至少有一个 Pod 执行成功后才结束，则 Job 判定为成功结束
+  - 一旦任何一个 Pod 执行成功并退出，Job 中的任何其他 Pod 都应停止工作和输出信息，并开始终止该 Pod 的进程
+
+**completions 和 parallelism**
+- 对于 non-parallel Job，.spec.completions 和 .spec.parallelism 可以不填写，默认值都为 1
+- 对于 fixed completion count Job，需要设置 .spec.completions 为您期望的个数；同时不设置 .spec.parallelism 字段（默认值为 1）
+- 对于 work queue Job，不能设置 .spec.completions 字段，且必须设置 .spec.parallelism 为0或任何正整数
+
+#### Controlling Parallelism 并发控制
+并发数 .spec.parallelism 可以被设置为0或者任何正整数，如果不设置，默认为1，如果设置为 0，则 Job 被暂停，直到该数字被调整为一个正整数。
+
+实际的并发数（同一时刻正在运行的 Pod 数量）可能比设定的并发数 .spec.parallelism 要大一些或小一些，不一定严格相等，主要的原因有：
+- 对于 fixed completion count Job，实际并发运行的 Pod 数量不会超过剩余未完成的数量。如果 .spec.parallelism 比这个数字更大，将被忽略
+- 对于 work queue Job，任何一个 Pod 成功执行后，将不再创建新的 Pod （剩余的 Pod 将继续执行）
+- Job 控制器可能没有足够的时间处理并发控制
+- 如果 Job 控制器创建 Pod 失败（例如，ResourceQuota 不够用，没有足够的权限等）
+- 同一个Job中，在已创建的 Pod 出现大量失败的情况下，Job 控制器可能限制 Pod 的创建
+- 当 Pod 被优雅地关闭时（gracefully shut down），需要等候一段时间才能结束
+
+### 处理Pod和容器的失败
+Pod 中的容器可能会因为多种原因执行失败，例如：
+- 容器中的进程退出了，且退出码（exit code）不为 0
+- 容器因为超出内存限制而被 Kill
+- 其他原因
+
+如果 Pod 中的容器执行失败，且 .spec.template.spec.restartPolicy = "OnFailure"，则 Pod 将停留在该节点上，但是容器将被重新执行。此时，您的应用程序需要处理在原节点（失败之前的节点）上重启的情况。或者，您也可以设置为 .spec.template.spec.restartPolicy = "Never"。 参考 容器组_生命周期 了解更多信息
+
+整个 Pod 也可能因为多种原因执行失败，例如：
+- Pod 从节点上被驱逐（节点升级、重启、被删除等）
+- Pod 的容器执行失败，且 .spec.template.spec.restartPolicy = "Never"
+
+当 Pod 执行失败时，Job 控制器将创建一个新的 Pod。此时，您的应用程序需要处理在一个新 Pod 中重新启动的情况。具体来说，需要处理临时文件、锁、未完成的输出信息以及前一次执行可能遗留下来的其他东西。
+
+
+#### Pod失败重试
+某些情况下，您可能期望在 Job 多次重试仍然失败的情况下停止该 Job。此时，可通过 .spec.backoffLimit 来设定 Job 最大的重试次数。该字段的默认值为 6.
+
+Job 中的 Pod 执行失败之后，Job 控制器将按照一个指数增大的时间延迟（10s,20s,40s ... 最大为 6 分钟）来多次重新创建 Pod。如果没有新的 Pod 执行失败，则重试次数的计数将被重置。
+### Job的终止和清理
+当 Job 完成后：
+- 将不会创建新的 Pod
+- 已经创建的 Pod 也不会被清理掉。此时，您仍然可以继续查看已结束 Pod 的日志，以检查 errors/warnings 或者其他诊断用的日志输出
+- Job 对象也仍然保留着，以便您可以查看该 Job 的状态
+- 由用户决定是否删除已完成的 Job 及其 Pod
+  - 可通过 kubectl 命令删除 Job，例如： kubectl delete jobs/pi 或者 kubectl delete -f https://kuboard.cn/statics/learning/job/job.yaml
+  - 删除 Job 对象时，由该 Job 创建的 Pod 也将一并被删除
+
+Job 通常会顺利的执行下去，但是在如下情况可能会非正常终止：
+- 某一个 Pod 执行失败（且 restartPolicy=Never）
+- 或者某个容器执行出错（且 restartPolicy=OnFailure）
+  - 此时，Job 按照 处理Pod和容器的失败 中 .spec.bakcoffLimit 描述的方式进行处理
+  - 一旦重试次数达到了 .spec.backoffLimit 中的值，Job 将被标记为失败，且尤其创建的所有 Pod 将被终止
+- Job 中设置了 .spec.activeDeadlineSeconds。该字段限定了 Job 对象在集群中的存活时长，一旦达到 .spec.activeDeadlineSeconds 指定的时长，该 Job 创建的所有的 Pod 都将被终止，Job 的 Status 将变为 type:Failed 、 reason: DeadlineExceeded
+
+
+例如：
+```yaml
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: pi-with-timeout
+spec:
+  backoffLimit: 5
+  activeDeadlineSeconds: 100
+  template:
+    spec:
+      containers:
+      - name: pi
+        image: perl
+        command: ["perl",  "-Mbignum=bpi", "-wle", "print bpi(2000)"]
+      restartPolicy: Never
+```
+### Job的自动清理
+系统中已经完成的 Job 通常是不在需要里的，长期在系统中保留这些对象，将给 apiserver 带来很大的压力。如果通过更高级别的控制器（例如 CronJobs）来管理 Job，则 CronJob 可以根据其中定义的基于容量的清理策略（capacity-based cleanup policy）自动清理Job。
+
+#### TTL 机制
+
+除了 CronJob 之外，TTL 机制是另外一种自动清理已结束Job（Completed 或 Finished）的方式：
+- TTL 机制由 TTL 控制器 提供
+- 在 Job 对象中指定 .spec.ttlSecondsAfterFinished 字段可激活该特性
+
+当 TTL 控制器清理 Job 时，TTL 控制器将删除 Job 对象，以及由该 Job 创建的所有 Pod 对象。
+
+
+参考例子：
+```yaml
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: pi-with-ttl
+spec:
+  ttlSecondsAfterFinished: 100
+  template:
+    spec:
+      containers:
+      - name: pi
+        image: perl
+        command: ["perl",  "-Mbignum=bpi", "-wle", "print bpi(2000)"]
+      restartPolicy: Never
+``` 
+字段解释 ttlSecondsAfterFinished：
+- Job pi-with-ttl 的 ttlSecondsAfterFinished 值为 100，则，在其结束 100 秒之后，将可以被自动删除
+- 如果 ttlSecondsAfterFinished 被设置为 0，则 TTL 控制器在 Job 执行结束后，立刻就可以清理该 Job 及其 Pod
+- 如果 ttlSecondsAfterFinished 值未设置，则 TTL 控制器不会清理该 Job
 # 服务发现，负载均衡，网络
 ## Service
 ### Service概述
