@@ -44,7 +44,9 @@ kustomizeVersion: v5.0.4-0.20230601165947-6ce0bf390ce3
 
 ```
 #### 启动minikube
->minikube start --vm-driver docker
+> minikube start  --force --driver=docker
+
+
 
 运行结果如下
 ```shell
