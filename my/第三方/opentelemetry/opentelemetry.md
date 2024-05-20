@@ -27,11 +27,7 @@ SLO，或服务级别目标，是通信可靠性的手段，可以将一个或�
 示例日志：
 >I，[2021-02-23T13:26:23.505892 #22473]  INFO -- : [6459ffe1-ea53-4044-aaa3-bf902868f730] Started GET "/" for ::1 at 2021-02-23 13:26:23 -0800
 
-不幸的是，日志对于跟踪代码的执行并不是非常有用，因为它们通常缺乏上下文信息，比如从哪里调用它们。
 
-当它们作为 span 的一部分或与跟踪和跨度相关联时，它们变得更加有用。
-
-有关日志及其与 OTel 的关系的更多信息，请参阅 日志。
 
 ### 跨度
 跨度表示一项工作或操作的单位。它跟踪请求所进行的具体操作，描绘了该操作执行期间发生的情况。
@@ -133,7 +129,7 @@ SLO，或服务级别目标，是通信可靠性的手段，可以将一个或�
   ]
 }
 ```
-这个跨度（Span）封装了特定的任务，比如问候语，它的父级是 hello 跨度。请注意，它与根跨度共享相同的 trace_id，表示它是同一追踪的一部分。此外，它有一个 parent_id 字段，与 hello 跨度的 span_id 相匹配。
+这个跨度（Span）封装了特定的任务，比如问候语，它的父级是 hello 跨度。请注意，它与根跨度共享相同的 trace_id，表示它是同一追踪的一部分。此外，它有一个 **parent_id** 字段，与 hello 跨度的 span_id 相匹配。
 
 **hello-salutations span**：
 ```json
@@ -162,11 +158,10 @@ SLO，或服务级别目标，是通信可靠性的手段，可以将一个或�
 ```
 这个跨度表示追踪中的第三个操作，与前一个跨度相同，是 ‘hello’ 跨度的子级。这也使它成为 hello-greetings 跨度的同级。
 
-这三个 JSON 块都具有相同的 trace_id，而 parent_id 字段表示了一个层次结构。这就形成了一个追踪信息！
+这三个 JSON 块都具有相同的 **trace_id**，而 parent_id 字段表示了一个层次结构。这就形成了一个追踪信息！
 
 另外一个你会注意到的是，每个跨度看起来都像是一个结构化日志。这是因为它实际上就是！追踪信息的一种思考方式是它们是一组具有上下文、关联、层次结构等特性的结构化日志。然而，这些 “结构化日志” 可以来自不同的进程、服务、虚拟机、数据中心等。这就是追踪信息能够表示任何系统的端到端视图的原因。
 
-为了理解 OpenTelemetry 中追踪的工作原理，让我们来看一下在我们的代码中进行仪表化所需的一系列组件。
 
 #### Tracer 提供者
 Tracer 提供者（有时称为 TracerProvider）是 Tracer 的工厂。在大多数应用程序中，Tracer 提供者只会初始化一次，并且其生命周期与应用程序的生命周期相匹配。Tracer 提供者的初始化还包括 Resource 和 Exporter 的初始化。这通常是在使用 OpenTelemetry 进行追踪的第一步。
@@ -174,7 +169,7 @@ Tracer 提供者（有时称为 TracerProvider）是 Tracer 的工厂。在大�
 #### Tracer
 Tracer 创建包含有关给定操作（例如服务中的请求）正在发生的更多信息的 spans（跨度）。Tracer 是从 Tracer 提供者创建的。
 
-Trace Exporters
+#### Trace Exporters
 Trace Exporters 将 traces 发送到 consumer（消费者）。这个 consumer 可以是调试和开发时的标准输出，OpenTelemetry Collector，或者您选择的任何开源或供应商后端。
 
 #### 上下文传播
@@ -184,13 +179,10 @@ Trace Exporters 将 traces 发送到 consumer（消费者）。这个 consumer �
 
 **Propagation（传播）** 是在服务和进程之间传递上下文的机制。它将上下文对象序列化或反序列化，并提供相关的追踪信息，以将其从一个服务传播到另一个服务中。传播通常由仪表化库处理，对用户来说是透明的，但是如果您需要手动传播上下文，则可以使用传播 API。
 
-OpenTelemetry 支持几种不同的上下文格式。在 OpenTelemetry 追踪中使用的默认格式称为 W3C TraceContext。每个上下文对象都存储在一个 span 中。有关上下文对象和其他可用信息的详细信息，请参见 Span 上下文。
-
-通过结合 Context 和 Propagation，您现在可以组装一个 Trace。
 
 
 #### Spans
-Span（跨度） 表示一个工作单元或操作。Spans 是构成追踪信息的基本单元。在 OpenTelemetry 中，它们包括以下信息：
+**Span（跨度）** 表示一个工作单元或操作。Spans 是构成追踪信息的基本单元。在 OpenTelemetry 中，它们包括以下信息：
 - Name（名称）
 - Parent span ID（根跨度为空）
 - Start 和 End Timestamps（开始和结束时间戳）
