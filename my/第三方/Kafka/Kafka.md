@@ -1,12 +1,12 @@
-## 
-连接GoDoc的
-类型是包的核心。它包裹着一个原始的 网络连接，用于向 Kafka 服务器公开低级 API。Connkafka-go
+# 实操
+## 连接
+类型是包的核心。它包裹着一个原始的网络连接，用于向 Kafka 服务器公开低级 API。
 
 下面是一些示例，显示了连接对象的典型用法：
-
-// to produce messages
+```go
+// 产生消息
 topic := "my-topic"
-partition := 0
+partition := 0 // 主题内分区
 
 conn, err := kafka.DialLeader(context.Background(), "tcp", "localhost:9092", topic, partition)
 if err != nil {
@@ -26,7 +26,7 @@ if err != nil {
 if err := conn.Close(); err != nil {
     log.Fatal("failed to close writer:", err)
 }
-// to consume messages
+// 消费信息
 topic := "my-topic"
 partition := 0
 
@@ -54,16 +54,18 @@ if err := batch.Close(); err != nil {
 if err := conn.Close(); err != nil {
     log.Fatal("failed to close connection:", err)
 }
-创建主题
+```
+## 创建主题
 默认情况下，kafka 在 bitnami/kafka kafka docker 映像中具有 （ ）。如果此值设置为，则将创建主题作为如下的副作用：auto.create.topics.enable='true'KAFKA_CFG_AUTO_CREATE_TOPICS_ENABLE='true''true'kafka.DialLeader
-
+```go
 // to create topics when auto.create.topics.enable='true'
 conn, err := kafka.DialLeader(context.Background(), "tcp", "localhost:9092", "my-topic", 0)
 if err != nil {
     panic(err.Error())
 }
+```
 如果那样的话，您将需要像这样显式创建主题：auto.create.topics.enable='false'
-
+```go
 // to create topics when auto.create.topics.enable='false'
 topic := "my-topic"
 
@@ -114,7 +116,9 @@ if err != nil {
     panic(err.Error())
 }
 defer connLeader.Close()
-列出主题
+```
+## 列出主题
+```go
 conn, err := kafka.Dial("tcp", "localhost:9092")
 if err != nil {
     panic(err.Error())
@@ -134,6 +138,7 @@ for _, p := range partitions {
 for k := range m {
     fmt.Println(k)
 }
+```
 因为它是低级的，所以该类型被证明是一个很好的构建块 对于更高级别的抽象，例如ConnReader
 
 读者GoDoc的
