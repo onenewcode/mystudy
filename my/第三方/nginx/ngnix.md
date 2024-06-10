@@ -83,7 +83,7 @@ Web缓存
 nginx二进制可执行文件
 nginx.conf配置文件
 error.log错误的日志记录
-access.log访问日志记录
+access.log访问日志记录 
 ```
 
 # Nginx环境准备
