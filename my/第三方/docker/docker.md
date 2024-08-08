@@ -840,8 +840,9 @@ docker run -p 9000:9000 -p 9090:9090 \
 
 注意： docker最新版安装会报错 ，提示port问题，因为最新版提供了api和console两个端口，所以需要--console-address ":9000" --address ":9090" 进行指定启动，前期版本不需要，直接运行即可
 
-
-## .安装docker-compose
+## nats
+>docker run -d -it --name nats-server -p 4222:4222 -p 6222:6222 -p 8222:8222 nats
+# 安装docker-compose
 
 最新发行的版本地址：https://github.com/docker/compose/releases
 运行以下命令以下载Docker Compose的当前稳定版本：
@@ -874,18 +875,17 @@ Compose 中有两个比较重要的概念： 服务service 和 项目 project。
 先安装 BASH 自身的子命令补全软件包
 
 yum install bash-completion
-1
+
 curl -L https://raw.githubusercontent.com/docker/compose/1.27.4/contrib/completion/bash/docker-compose -o /etc/bash_completion.d/docker-compose
-1
+
 退出并重新登录即可
 [root@docker ~]# docker-compose #连按两下tab键
 build    create   events   help     kill     pause    ps       push     rm       scale    stop     unpause  version  
 config   down     exec     images   logs     port     pull     restart  run      start    top      up 
-1
-2
-3
+
 docker-compose基础命令
 首先在一个指定的目录中编辑一个 docker-compose.yml 文件
+```yaml
 version: "3.8"                     # 指定要使用 docker-compose 的版本
 services:                          # 声明服务
   host1:                           # 第一个服务的名称，可以设置多个服务
@@ -906,21 +906,18 @@ networks:                          # 顶级 networks ，设置整个 docker-comp
       config:                      # 下面是一个配置列表
         - subnet: 172.16.1.0/24    # 子网网络
           gateway: 172.16.1.1      # 网关
-
+```
 
 以后台的方式运行: up -d
 注意：默认情况下，所有的 docker-compose 命令都必须在含有 docker-compose.yml 文件的目录下执行。换句话说，执行 docker-compose 命令的时候，需要保证当前目录下有 docker-compose.yml 文件。
 
-docker-compose up -d
-1
+>docker-compose up -d
+
 [root@docker compose]# docker-compose up -d
 Creating network "compose_centos_net" with driver "bridge"
 Creating host1 ... done
 [root@docker compose]# 
-1
-2
-3
-4
+
 列出当前 docker-compose 管理的所有的容器: ps
 docker-compose ps
 1
@@ -929,14 +926,10 @@ Name     Command    State   Ports
 ---------------------------------
 host1   /bin/bash   Up           
 [root@docker compose]# 
-1
-2
-3
-4
-5
+
 列出当前 docker-compose 管理的所有的服务: ps --services
- docker-compose ps --services 
-1
+>docker-compose ps --services 
+
 [root@docker compose]# docker-compose ps --services
 host1
 1
