@@ -1,49 +1,59 @@
-version: '3'
+version: "3"
+# 使用锚点和别名的功能减少依赖
+# x-common-depends-on: &common-depends-on
+#   - db
+#   - redis
+#   - nacos
+
 services:
-  elasticsearch:
-    image: elasticsearch:8.11.0
-    container_name: elasticsearch
-    restart: always
-#     privileged: true
+  db:
+    image: mysql:8.0
+    container_name: mysql_db # 容器名称
     environment:
-      - discovery.type=single-node #以单一节点模式启动
-      - ES_JAVA_OPTS=-Xms512m -Xmx512m #设置使用jvm内存大小
-      - cluster.name=elasticsearch #设置集群名称为elasticsearch
-      - node.name=elastic01 #设置节点名称为elasticsearch
-      - network.host=0.0.0.0 # 网络访问限制，设置所有都可以访问
-      - http.host=0.0.0.0
-      - http.cors.allow-origin="*" # 表示支持所有域名
-      - bootstrap.memory_lock=true # 内存交换的选项，官网建议为true
-      - xpack.security.enabled=false # 修改安全配置 关闭 证书校验
-      - xpack.security.http.ssl.enabled=false
-      - xpack.security.transport.ssl.enabled=false
-      - ELASTIC_PASSWORD=123456   #密码
-      
-    # volumes:
-      # - ./es/config/elasticsearch.ymldocker:/usr/share/elasticsearch/config/elasticsearch.yml 
-      # - ./es/data:/usr/share/elasticsearch/data
-      - ./es/plugins:/usr/share/elasticsearch/plugins 
-      # - ./es/logs:/user/share/elasticsearch/logs
+      MYSQL_ROOT_PASSWORD: root # 初始化root密码
+      MYSQL_DATABASE: todo #初始化数据名称
     ports:
-      - 9200:9200
-      - 9300:9300
+      - "3306:3306"
+    volumes:
+      - db_data:/var/lib/mysql
+      - ./init.sql:/docker-entrypoint-initdb.d/init.sql #初始化sql的目录
     networks:
-      - elasticsearch  
-  kibana:
-    image: kibana:8.11.0
-    container_name: kibana
-    restart: always
-    depends_on:
-      - elasticsearch #kibana在elasticsearch启动之后再启动
+      - work
+    healthcheck: # 设置健康检查
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      interval: 10s
+      timeout: 30s
+      retries: 3
+  redis:
+    image: redis:7.2.4
+    ports:
+      - "6379:6379"
+    command: ["redis-server"]
+    networks:
+      - work
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 30s
+      retries: 3
+  nacos:
+    image: nacos/nacos-server:latest
+    container_name: nacos_container
     environment:
-      # - "elasticsearch.hosts=http://elasticsearch:9200" #设置访问elasticsearch的地址
-      # - "ELASTICSEARCH_USERNAME=elastic"    
-      # - "ELASTICSEARCH_PASSWORD=123456"    #elastic密码
-      - "I18N_LOCALE=zh-CN"                 #中文
+      - MODE=standalone
     ports:
-      - 5601:5601
+      - "8848:8848"
     networks:
-        - elasticsearch  
+      - work
+  # infile: // 项目目录
+  #   image: registry.cn-hangzhou.aliyuncs.com/chat/infile:latest
+  #   container_name: infile_container
+  #   ports:
+  #     - "8080:8080"
+  #   networks:
+  #     - work
+  #   depends_on:
+  #     <<: *common-depends-on
 networks:
-    elasticsearch:
-        driver: bridge
+  chat:
+    external: false

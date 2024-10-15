@@ -157,7 +157,7 @@ ENTRYPOINT ["bash", "setup.sh"]
     </tr>
 </table>
 
- ## 创建镜像
+## 创建镜像
 编写完成 Dockerfile 之后，可以通过 docker [image] build 命令来创建镜像。基本的格式为 docker build [OPT ONS] PATH | URL 
 
 该命令将读取指定路径下（包括子目录）的 Dockerfile, 并将该路径下所有数据作为上下(Context) 发送给 Docker 服务端。 Docker 服务端在校验 Dockerfile 格式通过后，逐条执行其中定义的指令，碰到 ADD COPY RUN 指令会生成一层新的镜像。
@@ -170,7 +170,8 @@ ENTRYPOINT ["bash", "setup.sh"]
 $ cd identidock
 $ docker build -t "identidock:0.1" . 
 $ docker tag "identidock:0.1" "amouat/identidock:0.1" 
-``` 
+```
+
 ## Docker Hub
 
 ## 缩减镜像大小
