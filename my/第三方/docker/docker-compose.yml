@@ -5,6 +5,10 @@ version: "3"
 #   - redis
 #   - nacos
 
+# todo 可以确保服务处于正常状态，之后在进行连接
+# depends_on:
+#   postgres:
+#         condition: service_healthy
 services:
   db:
     image: mysql:8.0
@@ -45,15 +49,29 @@ services:
       - "8848:8848"
     networks:
       - work
-  # infile: // 项目目录
+  # infile: # 项目目录
   #   image: registry.cn-hangzhou.aliyuncs.com/chat/infile:latest
   #   container_name: infile_container
   #   ports:
   #     - "8080:8080"
   #   networks:
   #     - work
-  #   depends_on:
-  #     <<: *common-depends-on
+  #   environment: # 添加必要的环境变量方便进行配置
+  #     - "TZ=Asia/Shanghai"
+  #     - "GOTP_DB_PSQL_HOST=postgres"
+  #     - "GOTP_DB_PSQL_PORT=5432"
+  #     - "GOTP_DB_PSQL_USERNAME=postgres"
+  #     - "GOTP_DB_PSQL_PASSWORD=postgresThingsPanel"
+  #     - "GOTP_DB_PSQL_DBNAME=ThingsPanel"
+  #     - "GOTP_DB_PSQL_LOG_LEVEL=3"
+  #     - "GOTP_DB_REDIS_ADDR=redis:6379"
+  #     - "GOTP_DB_REDIS_PASSWORD=redis"
+  #     - "GOTP_MQTT_SERVER=gmqtt"
+  #     - "GOTP_MQTT_ACCESS_ADDRESS=gmqtt:1883"
+  #     - "GOTP_MQTT_BROKER=gmqtt:1883"
+  #     - "GOTP_LOG_LEVEL=error"  
+    # depends_on:
+    #   <<: *common-depends-on
 networks:
   chat:
     external: false
