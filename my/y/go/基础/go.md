@@ -1323,6 +1323,36 @@ func deal(ctx context.Context) {
 }
 
 ```
+# 常用命令
+## go doc
+
+### 在浏览器上查看
+使用命令godoc -http=:6060
+然后在打开浏览器的，在url输入localhost:6060/pkg或者127.0.0.1:6060/pkg就可以查看到你本地的所有包的信息了
+
+如果你想要找到你特定的包名的话localhost:6060/pkg/<path>/<packageName>或者127.0.0.1:6060/pkg/<path>/<packageName>
+
+<path>是你/src下包所在的路径
+
+<packageName>是包名
+
+导出godoc文档为HTML
+使用命令godoc -url "http://localhost:6060/pkg/<pkg>/<packageName>/" > <packageName>.html
+
+<pkg>是你包所在的文件夹
+
+<packageName>是你的包名
+
+导出来的是纯html文件，没有样式表，不过也有可能可以导出，但是我目前没有找到，如果有找到的朋友也可以交流一下
+
+不过我也有把对应的样式文件给导出来了
+
+下载地址https://github.com/BaiYu96/golandLearn/tree/master/learn_doc/stylefile
+
+然后把html文件里面的css跟js指定的路径修改好就可以
+
+
+
 
 # 总结
 context主要用于父子任务之间的同步取消信号，本质上是一种协程调度的方式。另外在使用context时有两点值得注意：上游任务仅仅使用context通知下游任务不再需要，但不会直接干涉和中断下游任务的执行，由下游任务自行决定后续的处理操作，也就是说context的取消操作是无侵入的；context是线程安全的，因为context本身是不可变的（immutable），因此可以放心地在多个协程中传递使用。

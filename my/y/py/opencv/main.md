@@ -1,8 +1,8 @@
 # 图像的基础操作
-## 图像的IO操作
-包括点 Point类、颜色 Scalar 类、尺寸 Size 类、矩形 Rect 类、矩阵 Mat 类
+## 图像的 IO 操作
+包括点 Point 类、颜色 Scalar 类、尺寸 Size 类、矩形 Rect 类、矩阵 Mat 类
 ### 读取操作
-cv.imread()
+`cv.imread()`
 **参数**
 - 要读取的图像
 - 读取方式的标志
@@ -11,25 +11,26 @@ cv.imread()
 
     - cv.IMREAD*GRAYSCALE：以灰度模式加载图像
 
-    -  cv.IMREAD_UNCHANGED：包括alpha通道的加载图像模式。
+    -  cv.IMREAD_UNCHANGED：包括 alpha 通道的加载图像模式。
 
-**可以使用1、0或者-1来替代上面三个标志**
+**可以使用 1、0 或者 -1 来替代上面三个标志**,但是必须是对应的图像维度才行，可以通过`img.shape`查看图像维度，彩色三维。灰度二维
+
 ### 显示图像
-cv.imshow()
+`cv.imshow()`
 - 显示图像的窗口名称，以字符串类型表示
 - 要加载的图像
 
-在调用显示图像的API后，要调用cv.waitKey()给图像绘制留下间，否则窗口会出现无响应情况，并且图像无法显示出来。
+在调用显示图像的 API 后，要调用 cv.waitKey() 给图像绘制留下间，否则窗口会出现无响应情况，并且图像无法显示出来。
 
 ### 保存图像
-cv.imwrite()
+`cv.imwrite()`
 
 - 文件名，要保存在哪里
 - 要保存的图像
 
 ## 绘制几何图形
 ### 绘制直线
-cv.line(img,start,end,color,thickness)
+`cv.line(img,start,end,color,thickness)`
 
 - img:要绘制直线的图像
 - Start,end: 直线的起点和终点
@@ -37,15 +38,16 @@ cv.line(img,start,end,color,thickness)
 - Thickness: 线条宽度
 
 ### 绘制圆形
-cv.circle(img,centerpoint, r, color, thickness)
+`cv.circle(img,centerpoint, r, color, thickness)`
 
 - img:要绘制圆形的图像
 - Centerpoint, r: 圆心和半径
 - color: 线条的颜色
-- Thickness: 线条宽度，为-1时生成闭合图案并填充颜色
+- Thickness: 线条宽度，为 -1 时生成闭合图案并填充颜色
 
 ### 绘制矩形
-cv.rectangle(img,leftupper,rightdown,color,thickness)
+`cv.rectangle(img,leftupper,rightdown,color,thickness)`
+
 - img:要绘制矩形的图像
 - Leftupper, rightdown: 矩形的左上角和右下角坐标
 - color: 线条的颜色
@@ -53,7 +55,7 @@ cv.rectangle(img,leftupper,rightdown,color,thickness)
 
 
 ## 向图像中添加文字
-cv.putText(img,text,station, font, fontsize,color,thickness,cv.LINE_AA)
+`cv.putText(img,text,station, font, fontsize,color,thickness,cv.LINE_AA)`
 
 - img: 图像
 - text：要写入的文本数据
@@ -74,9 +76,9 @@ blue = img[100,100,0]
 img[100,100] = [255,255,255]
 ```
 ## 获取图像的属性
-img.shape
-img.size
-img.dtype
+`img.shape`
+`img.size`
+`img.dtype`
 ## 图像通道的拆分与合并
 ```py
 # 通道拆分
@@ -87,9 +89,9 @@ img = cv.merge((b,g,r))
 
 ## 算数操作
 ### 图像的加法
-使用OpenCV的cv.add()函数把两幅图像相加，或者可以简单地通过numpy操作添加两个图像
+使用 OpenCV 的 cv.add() 函数把两幅图像相加，或者可以简单地通过 numpy 操作添加两个图像
 
-**OpenCV加法和Numpy加法之间存在差异。OpenCV的加法是饱和操作，而Numpy添加是模运算。**
+**OpenCV 加法和 Numpy 加法之间存在差异。OpenCV 的加法是饱和操作，而 Numpy 添加是模运算。**
 ```py
 >>> x = np.uint8([250])
 >>> y = np.uint8([10])
@@ -99,6 +101,8 @@ img = cv.merge((b,g,r))
 [4]
 ```
 ### 图像的混合
+`cv.addWeighted`
+
 这其实也是加法，但是不同的是两幅图像的权重不同，这就会给人一种混合或者透明的感觉。图像混合的计算公式如下：
 
 g(x) = (1−α)f0(x) + αf1(x)
@@ -121,37 +125,37 @@ plt.show()
 ```
 
 ## 图像缩放
-cv2.resize(src,dsize,fx=0,fy=0,interpolation=cv2.INTER_LINEAR)
+`cv2.resize(src,dsize,fx=0,fy=0,interpolation=cv2.INTER_LINEAR)`
 
 - src : 输入图像
 
 - dsize: 绝对尺寸，直接指定调整后图像的大小
 
-- fx,fy: 相对尺寸，将dsize设置为None，然后将fx和fy设置为比例因子即可
+- fx,fy: 相对尺寸，将 dsize 设置为 None，然后将 fx 和 fy 设置为比例因子即可
 
 - interpolation：插值方法，
 ##  图像平移
-cv.warpAffine(img,M,dsize)
-- img: 输入图像
+`cv.warpAffine(img,M,dsize)`
 
-- M： 2∗3移动矩阵
+- img: 输入图像
+- M：2∗3 移动矩阵
 - dsize: 输出图像的大小
 
-注意：输出图像的大小，它应该是(宽度，高度)的形式。请记住,width=列数，height=行数。
+注意：输出图像的大小，它应该是 (宽度，高度) 的形式。请记住，width=列数，height=行数。
 
 ##  图像旋转
-cv2.getRotationMatrix2D(center, angle, scale)
+`cv2.getRotationMatrix2D(center, angle, scale)`
 
 - center：旋转中心
 - angle：旋转角度
 - scale：缩放比例
 
-M：旋转矩阵
-
 ## 仿射变换
-图像的仿射变换涉及到图像的形状位置角度的变化，是深度学习预处理中常到的功能,仿射变换主要是对图像的缩放，旋转，翻转和平移等操作的组合。
+图像的仿射变换涉及到图像的形状位置角度的变化，是深度学习预处理中常到的功能，仿射变换主要是对图像的缩放，旋转，翻转和平移等操作的组合。
 
-在OpenCV中，仿射变换的矩阵是一个2×3的矩阵，
+在 OpenCV 中，仿射变换的矩阵是一个 2×3 的矩阵
+
+TODO
 
 
 ## 透射变换
@@ -162,7 +166,7 @@ M = cv2.getPerspectiveTransform(pos1, pos2)
 cv2.warpPerspective(src,M,(cols,rows)) 
  src 表示原始图像
  M 表示透视变换矩阵
- (rows,cols)表示变换后的图像大小，rows 表示行数，cols 表示列
+ (rows,cols) 表示变换后的图像大小，rows 表示行数，cols 表示列
 数
 ## 量化处理
 量化（Quantization）旨在将图像像素点对应亮度的连续变化区间转换为单个特定值的过程，即将原始灰度图像的空间坐标幅度值离散化。量化等级越多，图像层次越丰富，灰度分辨率越高，图像的质量也越好；量化等级越少，图像层次欠丰富，灰度分辨率越低，会出现图像轮廓分层的现象，降低了图像的质量。是将图像的连续灰度值转换为 0 至 255 的灰度级的过程
@@ -172,12 +176,12 @@ compactness, labels, centers = cv2.kmeans(data, K,bestLabels, criteria, attempts
 ```
 - data：需要聚类的数据，每一行表示一个样本点。
 - K：需要聚类的簇个数。
-- bestLabels：预设的标签，如果不为None，则表示用预设标签作为每个样本点的初始簇。
-- criteria：迭代终止条件，可以使用cv2.TERM_CRITERIA_EPS或cv2.TERM_CRITERIA_MAX_ITER，或者它们的组合。
+- bestLabels：预设的标签，如果不为 None，则表示用预设标签作为每个样本点的初始簇。
+- criteria：迭代终止条件，可以使用 cv2.TERM_CRITERIA_EPS 或 cv2.TERM_CRITERIA_MAX_ITER，或者它们的组合。
 - attempts：算法重复尝试的次数，选择其中最优的一次聚类结果作为输出。
-- flags：选择初始中心点的方式，可以为cv2.KMEANS_RANDOM_CENTERS、cv2.KMEANS_PP_CENTERS等。
-- center：用于存储输出的聚类中心点。如果为None，则函数会自动为其开辟空间。
-函数返回值有3个：
+- flags：选择初始中心点的方式，可以为 cv2.KMEANS_RANDOM_CENTERS、cv2.KMEANS_PP_CENTERS 等。
+- center：用于存储输出的聚类中心点。如果为 None，则函数会自动为其开辟空间。
+函数返回值有 3 个：
 
 - compactness：每个样本点到其所属簇中心的距离平方和。
 - labels：每个样本所属的簇的标签。
@@ -330,17 +334,17 @@ dst = cv2.threshold(src, thresh, maxval, type[, dst])
  src 表示输入图像的数组，8 位或 32 位浮点类型的多通道数
  dst 表示输出的阈值化处理后的图像，其类型和通道数与 src 一致
  thresh 表示阈值
- maxval 表 示 最 大 值 ， 当 参 数 阈 值 类 型 type 选 择
+ maxval 表 示 最 大 值，当 参 数 阈 值 类 型 type 选 择
 CV_THRESH_BINARY 或 CV_THRESH_BINARY_INV 时，该参数为阈值类型的最大值
  type 表示阈值类型
 
-|算法原型| 算法含义|
+|算法原型 | 算法含义 |
 |--------------|-----------------------|
 |threshold(Gray,127,255,cv2.THRESH_BINARY)|像素点的灰度值大于阈值设其灰度值为最大值，小于阈值的像素点灰度值设定为 0。|
 |threshold(Gray,127,255,cv2.THRESH_BINARY_INV)|大于阈值的像素点的灰度值设定为 0，而小于该阈值的设定为 255。|
 |threshold(Gray,127,255,cv2.THRESH_TRUNC)|像素点的灰度值小于阈值不改变，反之将像素点的灰度值设定为该阈值。|
 |threshold(Gray,127,255,cv2.THRESH_TOZERO)|像素点的灰度值小于该阈值的不进行任何改变，而大于该阈值的部分，其灰度值全变为 0。|
-|threshold(Gray,127,255,cv2.THRESH_TOZERO_INV)|像素点的灰度值大于该阈值的不进行任何改变，小于该阈值其灰度值全部设定为0。|
+|threshold(Gray,127,255,cv2.THRESH_TOZERO_INV)|像素点的灰度值大于该阈值的不进行任何改变，小于该阈值其灰度值全部设定为 0。|
 ### 自适应阈值化处理
 dst = adaptiveThreshold(src, maxValue, adaptiveMethod, 
 thresholdType, blockSize, C[, dst]) 
@@ -349,8 +353,8 @@ thresholdType, blockSize, C[, dst])
  dst 表示输出的阈值化处理后的图像，其类型和尺寸需与 src 一致
  maxValue 表示给像素赋的满足条件的最大值
  adaptiveMethod 表示要适用的自适应阈值算法，常见取值包括
-ADAPTIVE_THRESH_MEAN_C（阈值取邻域的平均值） 或ADAPTIVE_THRESH_GAUSSIAN_C（阈值取自邻域的加权和平均值，权重分布为一个高斯函数分布）
- thresholdType 表示阈值类型，取值必须为 THRESH_BINARY或 THRESH_BINARY_INV
+ADAPTIVE_THRESH_MEAN_C（阈值取邻域的平均值）或 ADAPTIVE_THRESH_GAUSSIAN_C（阈值取自邻域的加权和平均值，权重分布为一个高斯函数分布）
+ thresholdType 表示阈值类型，取值必须为 THRESH_BINARY 或 THRESH_BINARY_INV
  blockSize 表示计算阈值的像素邻域大小，取值为 3、5、7 等
  C 表示一个常数，阈值等于平均值或者加权平均值减去这个常数
 ## 形态学操作
@@ -362,21 +366,21 @@ dst = cv2.morphologyEx(src, model, kernel)
   - (3)cv2.MORPH_GRADIENT：形态学梯度（Morphological Gradient）
   - (4)cv2.MORPH_TOPHAT：顶帽运算（Top Hat）
   - (5)cv2.MORPH_BLACKHAT：黑帽运算（Black Hat）
- kernel 表示卷积核，可以用 numpy.ones()函数构建
+ kernel 表示卷积核，可以用 numpy.ones() 函数构建
 ### 腐蚀和膨胀
-具体操作是：用一个结构元素扫描图像中的每一个像素，用结构元素中的每一个像素与其覆盖的像素做“与”操作，如果都为1，则该像素为1，否则为0。
+具体操作是：用一个结构元素扫描图像中的每一个像素，用结构元素中的每一个像素与其覆盖的像素做“与”操作，如果都为 1，则该像素为 1，否则为 0。
 
 腐蚀的作用是消除物体边界点，使目标缩小，可以消除小于结构元素的噪声点。
 cv.erode(img,kernel,iterations)
 
 - img: 要处理的图像
 - kernel: 核结构
-- iterations: 腐蚀的次数，默认是1
+- iterations: 腐蚀的次数，默认是 1
 
 cv.dilate(img,kernel,iterations)
 
 ### 开闭运算
-开运算和闭运算是将腐蚀和膨胀按照一定的次序进行处理。 但这两者并不是可逆的，即先开后闭并不能得到原来的图像。
+开运算和闭运算是将腐蚀和膨胀按照一定的次序进行处理。但这两者并不是可逆的，即先开后闭并不能得到原来的图像。
 - 开运算
 开运算是先腐蚀后膨胀，其作用是：分离物体，消除小区域。特点：消除噪点，去除小的干扰块，而不影响原来的图像。
 
@@ -385,15 +389,15 @@ cv.dilate(img,kernel,iterations)
 cv.morphologyEx(img, op, kernel)
 
 - img: 要处理的图像
-- op: 处理方式：若进行开运算，则设为cv.MORPH_OPEN，若进行闭- 运算，则设为cv.MORPH_CLOSE
-- Kernel： 核结构
+- op: 处理方式：若进行开运算，则设为 cv.MORPH_OPEN，若进行闭 - 运算，则设为 cv.MORPH_CLOSE
+- Kernel：核结构
 ### 图像梯度运算 
 图像梯度运算是图像膨胀处理减去图像腐蚀处理后的结果，从而得到图像的轮廓，
 dst = cv2.morphologyEx(src, cv2.MORPH_GRADIENT, 
 kernel) 
  src 表示原始图像
  cv2.MORPH_GRADIENT 表示图像进行梯度运算处理
- kernel 表示卷积核，可以用 numpy.ones()函数构建
+ kernel 表示卷积核，可以用 numpy.ones() 函数构建
 
 ### 礼帽和黑帽
 - 礼帽运算
@@ -441,7 +445,7 @@ plt.subplot(122)
 plt.plot(hist, color='r')
 plt.xlabel("x")
 plt.ylabel("y")
-plt.title("(b)直方图曲线")
+plt.title("(b) 直方图曲线")
 plt.show()
 ```
 ```py
@@ -463,28 +467,28 @@ matplotlib.rcParams['font.sans-serif']=['SimHei']
 plt.subplot(221)
 plt.imshow(img_rgb)
 plt.axis('off')
-plt.title("(a)原图像")
+plt.title("(a) 原图像")
 #绘制蓝色分量直方图
 plt.subplot(222)
 plt.hist(b.ravel(), bins=256, density=1, facecolor='b', 
 edgecolor='b', alpha=0.75)
 plt.xlabel("x")
 plt.ylabel("y")
-plt.title("(b)蓝色分量直方图")
+plt.title("(b) 蓝色分量直方图")
 #绘制绿色分量直方图
 plt.subplot(223)
 plt.hist(g.ravel(), bins=256, density=1, facecolor='g', 
 edgecolor='g', alpha=0.75)
 plt.xlabel("x")
 plt.ylabel("y")
-plt.title("(c)绿色分量直方图")
+plt.title("(c) 绿色分量直方图")
 #绘制红色分量直方图
 plt.subplot(224)
 plt.hist(r.ravel(), bins=256, density=1, facecolor='r', 
 edgecolor='r', alpha=0.75)
 plt.xlabel("x")
 plt.ylabel("y")
-plt.title("(d)红色分量直方图")
+plt.title("(d) 红色分量直方图")
 plt.show()
 ```
 ### 图像掩膜直方图和 HS 直方图
@@ -504,7 +508,7 @@ masked_img = cv2.bitwise_and(img, img, mask=mask)
 #图像直方图计算
 hist_full = cv2.calcHist([img], [0], None, [256], [0,256]) #通道
 [0]-灰度图
-#图像直方图计算(含掩膜)
+#图像直方图计算 (含掩膜)
 hist_mask = cv2.calcHist([img], [0], mask, [256], [0,256])
 plt.figure(figsize=(8, 6))
 #设置字体
@@ -513,22 +517,22 @@ matplotlib.rcParams['font.sans-serif']=['SimHei']
 plt.subplot(221)
 plt.imshow(img_rgb, 'gray')
 plt.axis('off')
-plt.title("(a)原始图像")
+plt.title("(a) 原始图像")
 #绘制掩膜
 plt.subplot(222)
 plt.imshow(mask, 'gray')
 plt.axis('off')
-plt.title("(b)掩膜")
+plt.title("(b) 掩膜")
 #绘制掩膜设置后的图像
 plt.subplot(223)
 plt.imshow(masked_img, 'gray')
 plt.axis('off')
-plt.title("(c)图像掩膜处理")
+plt.title("(c) 图像掩膜处理")
 #绘制直方图
 plt.subplot(224)
 plt.plot(hist_full)
 plt.plot(hist_mask)
-plt.title("(d)直方图曲线")
+plt.title("(d) 直方图曲线")
 plt.xlabel("x")
 plt.ylabel("y")
 plt.show()
@@ -538,7 +542,7 @@ plt.show()
 import cv2 
 import numpy as np
 import matplotlib.pyplot as plt
-#函数: 判断黑夜或白天
+#函数：判断黑夜或白天
 def func_judge(img):
  #获取图像高度和宽度
  height = grayImage.shape[0]
@@ -595,10 +599,10 @@ img = cv2.imread('example.jpg')
 # 将图像转换为灰度图像
 gray_img = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
 
-# 创建CLAHE对象
+# 创建 CLAHE 对象
 clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
 
-# 对灰度图像进行ACE增强
+# 对灰度图像进行 ACE 增强
 result = clahe.apply(gray_img)
 
 # 显示结果
@@ -611,7 +615,7 @@ cv2.destroyAllWindows()
 #### 椒盐噪声
 椒盐噪声也称为脉冲噪声，是图像中经常见到的一种噪声，它是一种随机出现的白点或者黑点，
 #### 高斯噪声
-高斯噪声是指噪声密度函数服从高斯分布的一类噪声。由于高斯噪声在空间和频域中数学上的易处理性，这种噪声(也称为正态噪声)模型经常被用于实践中
+高斯噪声是指噪声密度函数服从高斯分布的一类噪声。由于高斯噪声在空间和频域中数学上的易处理性，这种噪声 (也称为正态噪声) 模型经常被用于实践中
 ### 图像平滑简介
 #### 均值滤波
 cv.blur(src, ksize, anchor, borderType)
@@ -634,15 +638,15 @@ dst = boxFilter(src, depth, ksize[, dst[, anchor[, normalize[, borderType]]]])
 #### 高斯滤波
 cv2.GaussianBlur(src,ksize,sigmaX,sigmay,borderType)
 - src: 输入图像
-- ksize:高斯卷积核的大小，注意 ： 卷积核的宽度和高度都应奇数，且可以不同
+- ksize:高斯卷积核的大小，注意：卷积核的宽度和高度都应奇数，且可以不同
 - sigmaX: 水平方向的标准差
-- sigmaY: 垂直方向的标准差，默认值为0，表示与sigmaX相同
+- sigmaY: 垂直方向的标准差，默认值为 0，表示与 sigmaX 相同
 - borderType:填充边界类型
 #### 中值滤波
 中值滤波是一种典型的非线性滤波技术，基本思想是用像素点邻域灰度值的中值来代替该像素点的灰度值。
 cv.medianBlur(src, ksize )
 #### 双边滤波
-双边滤波（Bilateral filter）是由 Tomasi 和 Manduchi 在1998 年发明的一种各向异性滤波，它一种非线性的图像平滑法结合了图像的空间邻近度和像素值相似度（即空间域和值域）的一种折中处理，从而达到保边去噪的目的。
+双边滤波（Bilateral filter）是由 Tomasi 和 Manduchi 在 1998 年发明的一种各向异性滤波，它一种非线性的图像平滑法结合了图像的空间邻近度和像素值相似度（即空间域和值域）的一种折中处理，从而达到保边去噪的目的。
 
 dst = bilateralFilter(src, d, sigmaColor, sigmaSpace[, dst[, borderType]]) 
  src 表示待处理的输入图像
@@ -663,7 +667,7 @@ dst = bilateralFilter(src, d, sigmaColor, sigmaSpace[, dst[, borderType]])
 ### 原理
 边缘检测是图像处理和计算机视觉中的基本问题，边缘检测的目的是标识数字图像中亮度变化明显的点
 
-基于搜索：通过寻找图像一阶导数中的最大值来检测边界，然后利用计算结果估计边缘的局部方向，通常采用梯度的方向，并利用此方向找到局部梯度模的最大值，代表算法是Sobel算子和Scharr算子。
+基于搜索：通过寻找图像一阶导数中的最大值来检测边界，然后利用计算结果估计边缘的局部方向，通常采用梯度的方向，并利用此方向找到局部梯度模的最大值，代表算法是 Sobel 算子和 Scharr 算子。
 图像锐化处理的目的是为了使图像的边缘、轮廓线以及图像的细节变得清晰，经过平滑的图像变得模糊的根本原因是图像受到了平均或积分运算，因此可以对其进行逆运算，从而使图像变得清晰。
 微分运算是求信号的变化率，具有较强高频分量作用。从频率域来考虑，图像模糊的实质是因为其高频分量被衰减，因此可以用高通滤波器来使图像清晰。
 ### Roberts 算子
@@ -676,7 +680,7 @@ dst = filter2D(src, ddepth, kernel[, dst[, anchor[, delta[, borderType]]]])
  anchor 表示内核的基准点，其默认值为（-1，-1），位于中心位置
  delta 表示在储存目标图像前可选的添加到像素的值，默认值为 0
  borderType 表示边框模式
-在进行 Roberts 算子处理之后，还需要调用 convertScaleAbs()函数计
+在进行 Roberts 算子处理之后，还需要调用 convertScaleAbs() 函数计
 算绝对值，并将图像转换为 8 位图进行显示。其算法原型如下：
 dst = convertScaleAbs(src[, dst[, alpha[, beta]]]) 
  src 表示原数组
@@ -686,8 +690,8 @@ dst = convertScaleAbs(src[, dst[, alpha[, beta]]])
 ### Prewitt 算子
 而 Robert 算子的模板为 2×2，故 Prewitt 算子的边缘检测结果在水平方向和垂直方向均比 Robert 算子更加明显。Prewitt 算子适合用来识别噪声较多、灰度渐变的图像，
 
-### Sobel检测算子
-Sobel边缘检测算法比较简单，实际应用中效率比canny边缘检测效率要高，但是边缘不如Canny检测的准确，但是很多实际应用的场合，sobel边缘却是首选，Sobel算子是高斯平滑与微分操作的结合体，所以其抗噪声能力很强，用途较多。尤其是效率要求较高，而对细纹理不太关心的时候。
+### Sobel 检测算子
+Sobel 边缘检测算法比较简单，实际应用中效率比 canny 边缘检测效率要高，但是边缘不如 Canny 检测的准确，但是很多实际应用的场合，sobel 边缘却是首选，Sobel 算子是高斯平滑与微分操作的结合体，所以其抗噪声能力很强，用途较多。尤其是效率要求较高，而对细纹理不太关心的时候。
 
 #### 方法
 
@@ -697,26 +701,26 @@ Sobel_x_or_y = cv2.Sobel(src, ddepth, dx, dy, dst, ksize, scale, delta, borderTy
 
 - ddepth: 图像的深度
 
-- dx和dy: 指求导的阶数，0表示这个方向上没有求导，取值为0、1。
+- dx 和 dy: 指求导的阶数，0 表示这个方向上没有求导，取值为 0、1。
 
-- ksize: 是Sobel算子的大小，即卷积核的大小，必须为奇数1、3、5、7，默认为3。
+- ksize: 是 Sobel 算子的大小，即卷积核的大小，必须为奇数 1、3、5、7，默认为 3。
 
-注意：如果ksize=-1，就演变成为3x3的Scharr算子。
+注意：如果 ksize=-1，就演变成为 3x3 的 Scharr 算子。
 
 - scale：缩放导数的比例常数，默认情况为没有伸缩系数。
 
-- borderType：图像边界的模式，默认值为cv2.BORDER_DEFAULT。
+- borderType：图像边界的模式，默认值为 cv2.BORDER_DEFAULT。
 
-Sobel函数求完导数后会有负值，还有会大于255的值。而原图像是uint8，即8位无符号数，所以Sobel建立的图像位数不够，会有截断。因此要使用16位有符号的数据类型，即cv2.CV_16S。处理完图像后，再使用cv2.convertScaleAbs()函数将其转回原来的uint8格式，否则图像无法显示。
+Sobel 函数求完导数后会有负值，还有会大于 255 的值。而原图像是 uint8，即 8 位无符号数，所以 Sobel 建立的图像位数不够，会有截断。因此要使用 16 位有符号的数据类型，即 cv2.CV_16S。处理完图像后，再使用 cv2.convertScaleAbs() 函数将其转回原来的 uint8 格式，否则图像无法显示。
 
 Scale_abs = cv2.convertScaleAbs(x)  # 格式转换函数
 result = cv2.addWeighted(src1, alpha, src2, beta) # 图像混合
-### Laplacian算子
+### Laplacian 算子
 laplacian = cv2.Laplacian(src, ddepth[, dst[, ksize[, scale[, delta[, borderType]]]]])
 
 - Src: 需要处理的图像，
-- Ddepth: 图像的深度，-1表示采用的是原图像相同的深度，目标图像的深度必须大于等于原图像的深度；
-- ksize：算子的大小，即卷积核的大小，必须为1,3,5,7。
+- Ddepth: 图像的深度，-1 表示采用的是原图像相同的深度，目标图像的深度必须大于等于原图像的深度；
+- ksize：算子的大小，即卷积核的大小，必须为 1,3,5,7。
 ### Scharr 算子 
 dst = Scharr(src, ddepth, dx, dy[, dst[, scale[, delta[, 
 borderType]]]]]) 
@@ -729,16 +733,16 @@ borderType]]]]])
  scale 表示缩放导数的比例常数，默认情况下没有伸缩系数
  delta 表示将结果存入目标图像之前，添加到结果中的可选增量值
  borderType 表示边框模式，更多详细信息查阅 BorderTypes
-### Canny边缘检测
+### Canny 边缘检测
 第一步：使用高斯平滑噪声去除
 第二步：计算图像梯度
 第三步：非极大值抑制
 第四步，利用双阈值方法来确定潜在的边界。
 第五步，利用滞后技术来跟踪边界。若某一像素位置和强边界相连的弱边界认为是边界，其他的弱边界则被删除。
 在获得梯度的方向和大小之后，对整幅图像进行扫描，去除那些非边界上的点。对每一个像素进行检查，看这个点的梯度是不是周围具有相同梯度方向的点中最大的。
-A点位于图像的边缘，在其梯度变化方向，选择像素点B和C，用来检验A点的梯度是否为极大值，若为极大值，则进行保留，否则A点被抑制，最终的结果是具有“细边”的二进制图像。
+A 点位于图像的边缘，在其梯度变化方向，选择像素点 B 和 C，用来检验 A 点的梯度是否为极大值，若为极大值，则进行保留，否则 A 点被抑制，最终的结果是具有“细边”的二进制图像。
 第四步：滞后阈值
-我们设置两个阈值： minVal 和 maxVal。 当图像的灰度梯度高于 maxVal 时被认为是真的边界， 低于 minVal 的边界会被抛弃
+我们设置两个阈值：minVal 和 maxVal。当图像的灰度梯度高于 maxVal 时被认为是真的边界，低于 minVal 的边界会被抛弃
 ##### 应用
 canny = cv2.Canny(image, threshold1, threshold2)
 
@@ -746,7 +750,7 @@ canny = cv2.Canny(image, threshold1, threshold2)
 - threshold1: minval，较小的阈值将间断的边缘连接起来
 - threshold2: maxval，较大的阈值检测图像中明显的边缘
 ### LOG 算子
-LOG 算子综合考虑了对噪声的抑制和对边缘的检测两个方面，并且把Gauss 平滑滤波器和 Laplacian 锐化滤波器结合了起来，先平滑掉噪声，再进行边缘检测，所以效果会更好。 
+LOG 算子综合考虑了对噪声的抑制和对边缘的检测两个方面，并且把 Gauss 平滑滤波器和 Laplacian 锐化滤波器结合了起来，先平滑掉噪声，再进行边缘检测，所以效果会更好。 
 # 图像识别及图像处理经典案例
 ## 图像分割
 ### 边缘检测分割
@@ -760,7 +764,7 @@ hierarchy 元素 hierarchy[i][0]至 hierarchy[i][3]，分别表示后一个轮�
  mode 表示轮廓检索模式。cv2.RETR_EXTERNAL 表示只检测外轮廓；cv2.RETR_LIST 表示提取所有轮廓，且检测的轮廓不建立等级关系；cv2.RETR_CCOMP 提取所有轮廓，并建立两个等级的轮廓，上面的一层为外边界，里面一层为内孔的边界信；cv2.RETR_TREE 表示提取所有轮廓，并且建立一个等级树或网状结构的轮廓
  method 表示轮廓的近似方法。cv2.CHAIN_APPROX_NONE
 存储所有的轮廓点，相邻的两个点的像素位置差不超过 1，即 max
-（ abs(x1-x2), abs(y1-y2) ） =1 ；cv2.CHAIN_APPROX_SIMPLE 压缩水平方向、垂直方向、对角线方向的元素，只保留该方向的终点坐标，例如一个矩阵轮廓只需 4 个点来保存轮廓信息； cv2.CHAIN_APPROX_TC89_L1和 cv2.CHAIN_APPROX_TC89_KCOS 使 用 Teh-Chinl Chain 近似算法
+（abs(x1-x2), abs(y1-y2) ） =1；cv2.CHAIN_APPROX_SIMPLE 压缩水平方向、垂直方向、对角线方向的元素，只保留该方向的终点坐标，例如一个矩阵轮廓只需 4 个点来保存轮廓信息；cv2.CHAIN_APPROX_TC89_L1 和 cv2.CHAIN_APPROX_TC89_KCOS 使 用 Teh-Chinl Chain 近似算法
  offset 表示每个轮廓点的可选偏移量
 
 
@@ -780,12 +784,12 @@ thickness[, lineType[, hierarchy[, maxLevel[, offset]]]]])
 mask, bgdModel, fgdModel = grabCut(img, mask, rect, 
 bgdModel, fgdModel, iterCount[, mode]) 
  image 表示输入图像，为 8 位三通道图像
- mask 表示蒙板图像，输入/输出的 8 位单通道掩码，确定前景区域、背景区域、不确定区域。当模式设置为 GC_INIT_WITH_RECT时，该掩码由函数初始化
- rect 表示前景对象的矩形坐标，其基本格式为(x, y, w, h)，分别为左上角坐标和宽度、高度
+ mask 表示蒙板图像，输入/输出的 8 位单通道掩码，确定前景区域、背景区域、不确定区域。当模式设置为 GC_INIT_WITH_RECT 时，该掩码由函数初始化
+ rect 表示前景对象的矩形坐标，其基本格式为 (x, y, w, h)，分别为左上角坐标和宽度、高度
  bdgModel 表示后台模型使用的数组，通常设置为大小为（1, 65）np.float64 的数组
  fgdModel 表示前台模型使用的数组，通常设置为大小为（1, 65）np.float64 的数组
  iterCount 表示算法运行的迭代次数
- mode 是 cv::GrabCutModes 操 作 模 式 之 一 ，cv2.GC_INIT_WITH_RECT 或cv2.GC_INIT_WITH_MASK 表示使用矩阵模式或蒙板模式
+ mode 是 cv::GrabCutModes 操 作 模 式 之 一，cv2.GC_INIT_WITH_RECT 或 cv2.GC_INIT_WITH_MASK 表示使用矩阵模式或蒙板模式
 ### 基于 K-Means 聚类算法的区域分割
 retval, bestLabels, centers = kmeans(data, K, bestLabels, 
 criteria, attempts, flags[, centers]) 
@@ -794,7 +798,7 @@ criteria, attempts, flags[, centers])
  bestLabels 表示输出的整数数组，用于存储每个样本的聚类标签索引
  criteria 表示算法终止条件，即最大迭代次数或所需精度。在某些迭代中，一旦每个簇中心的移动小于 criteria.epsilon，算法就会停止
  attempts 表示重复试验 kmeans 算法的次数，算法返回产生最佳紧凑性的标签
- flags 表 示 初 始 中 心 的 选 择 ， 两 种 方 法 是cv2.KMEANS_PP_CENTERS ; 和cv2.KMEANS_RANDOM_CENTERS
+ flags 表 示 初 始 中 心 的 选 择，两 种 方 法 是 cv2.KMEANS_PP_CENTERS ; 和 cv2.KMEANS_RANDOM_CENTERS
  centers 表示集群中心的输出矩阵，每个集群中心为一行数据
 ### 基于均值漂移算法
 它是一种无参估计算法，沿着概率梯度的上升方向寻找分布的峰值。Mean Shift 算法先算出当前点的偏移均值，移动该点到其偏移均值，然后以此为新的起始点，继续移动，直到满足一定的条件结束。
@@ -816,7 +820,7 @@ markers = watershed(image, markers)
 ## 图像变换
 ### 傅里叶变换的理解
 
-傅里叶变换是由法国的一位数学家Joseph Fourier在18世纪提出来的，他认为：**任何连续周期的信号都可以由一组适当的正弦曲线组合而成**。
+傅里叶变换是由法国的一位数学家 Joseph Fourier 在 18 世纪提出来的，他认为：**任何连续周期的信号都可以由一组适当的正弦曲线组合而成**。
 **正弦波输入至任何线性系统中，不会产生新的频率成分，输出的仍是正弦波，改变的仅仅是幅值和相位**
 
 ### 傅里叶变换中相关概念
@@ -842,13 +846,13 @@ dst = cv2.dft(src, dst=None, flags=None,
 nonzeroRows=None) 
  src 表示输入图像，需要通过 np.float32 转换格式
  dst 表示输出图像，包括输出大小和尺寸
- flags 表示转换标记，其中 DFT _INVERSE 执行反向一维或二维转换，而不是默认的正向转换；DFT _SCALE 表示缩放结果，由阵列元素的数量除以它；DFT _ROWS 执行正向或反向变换输入矩阵的每个单独的行，该标志可以同时转换多个矢量，并可用于减少开销以执行 3D 和更高维度的转换等； DFT _COMPLEX_OUTPUT 执行 1D 或 2D 实数组的正向转换，这是最快的选择，默认功能；DFT _REAL_OUTPUT 执行一维或二维复数阵列的逆变换，结果通常是相同大小的复数数组，但如果输入数组具有共轭复数对称性，则输出为真实数组
- nonzeroRows 表 示 当 参 数 不 为 零 时 ， 函 数 假 定 只 有nonzeroRows 输入数组的第一行（未设置）或者只有输出数组的第一个（设置）包含非零，因此函数可以处理其余的行更有效率，并节省一些时间；这种技术对计算阵列互相关或使用 DFT 卷积非常有用
+ flags 表示转换标记，其中 DFT _INVERSE 执行反向一维或二维转换，而不是默认的正向转换；DFT _SCALE 表示缩放结果，由阵列元素的数量除以它；DFT _ROWS 执行正向或反向变换输入矩阵的每个单独的行，该标志可以同时转换多个矢量，并可用于减少开销以执行 3D 和更高维度的转换等；DFT _COMPLEX_OUTPUT 执行 1D 或 2D 实数组的正向转换，这是最快的选择，默认功能；DFT _REAL_OUTPUT 执行一维或二维复数阵列的逆变换，结果通常是相同大小的复数数组，但如果输入数组具有共轭复数对称性，则输出为真实数组
+ nonzeroRows 表 示 当 参 数 不 为 零 时，函 数 假 定 只 有 nonzeroRows 输入数组的第一行（未设置）或者只有输出数组的第一个（设置）包含非零，因此函数可以处理其余的行更有效率，并节省一些时间；这种技术对计算阵列互相关或使用 DFT 卷积非常有用
 
 
-####  在opencv中实现图像的傅里叶变换
+####  在 opencv 中实现图像的傅里叶变换
 
-在OPenCV中实现图像的傅里叶变换，使用的是：
+在 OPenCV 中实现图像的傅里叶变换，使用的是：
 
 正变换：
 
@@ -858,8 +862,8 @@ dft = cv2.dft(src, dst=None)
 
 参数：
 
-- src: 输入图像，要转换成np.float32格式
-- dst:参数是可选的, 决定输出数组的大小。默认输出数组的大小和输入图像大小一样。如果输出结果比输入图像大，输入图像就需要在进行变换前补 0。如果输出结果比输入图像小的话，输入图像就会被切割。
+- src: 输入图像，要转换成 np.float32 格式
+- dst:参数是可选的，决定输出数组的大小。默认输出数组的大小和输入图像大小一样。如果输出结果比输入图像大，输入图像就需要在进行变换前补 0。如果输出结果比输入图像小的话，输入图像就会被切割。
 
 返回：
 
@@ -889,7 +893,7 @@ img = cv.idft(dft)
 
 
 #### 带通和带阻滤波器
-们把高通和低通的一部分结合在模板中就形成了带通滤波器，它容许一定频率范围信号通过, 但减弱(或减少)频率低于於下限截止频率和高于上限截止频率的信号的通过，如下图所示：
+们把高通和低通的一部分结合在模板中就形成了带通滤波器，它容许一定频率范围信号通过，但减弱 (或减少) 频率低于於下限截止频率和高于上限截止频率的信号的通过，如下图所示：
 
 还是以理想的带通滤波器演示如下，将构建的滤波的代码修改如下：
 
@@ -907,7 +911,7 @@ mask = mask1*mask2
 lines = HoughLines(image, rho, theta, threshold[, lines[, srn[, 
 stn[, min_theta[, max_theta]]]]]) 
  image 表示输入的二值图像
- lines 表示经过霍夫变换检测到直线的输出矢量，每条直线为(r,θ)
+ lines 表示经过霍夫变换检测到直线的输出矢量，每条直线为 (r,θ)
  rho 表示以像素为单位的累加器的距离精度
  theta 表示以弧度为单位的累加器角度精度
  threshold 表示累加平面的阈值参数，识别某部分为图中的一条直线时它在累加平面中必须达到的值，大于该值线段才能被检测返回
@@ -917,7 +921,7 @@ stn[, min_theta[, max_theta]]]]])
  max_theta 表示标准和多尺度的霍夫变换中要检查线条的最大角度。必须介于 min_theta 和π之间
 ## 图像分类
 ### 基于朴素贝叶斯
-朴素贝叶斯分类（Naive Bayes Classifier）发源于古典数学理论，利用Bayes 定理来预测一个未知类别的样本属于各个类别的可能性，选择其中可能性最大的一个类别作为该样本的最终类别。
+朴素贝叶斯分类（Naive Bayes Classifier）发源于古典数学理论，利用 Bayes 定理来预测一个未知类别的样本属于各个类别的可能性，选择其中可能性最大的一个类别作为该样本的最终类别。
 ### 基于 KNN 的图像分类
 K 最近邻分类（K-Nearest Neighbor Classifier）算法是一种基于实例的分类方法，是数据挖掘分类技术中最简单常用的方法之一。
 ### 卷积神经网络
@@ -936,7 +940,7 @@ rows, cols = src.shape[:2]
 #定义偏移量和随机数
 offsets = 5
 random_num = 0
-#毛玻璃效果: 像素点邻域内随机像素点的颜色替代当前像素点的颜色
+#毛玻璃效果：像素点邻域内随机像素点的颜色替代当前像素点的颜色
 for y in range(rows - offsets):
  for x in range(cols - offsets):
  random_num = np.random.randint(0,offsets)
@@ -1010,10 +1014,10 @@ cv2.destroyAllWindows()
 ## 颜色追踪
 
 # 图像特征提取和描述
-## Harris和Shi-Tomas算法
+## Harris 和 Shi-Tomas 算法
 
-### Harris角点检测
-Harris角点检测的思想是通过图像的局部的小窗口观察图像，角点的特征是窗口沿任意方向移动都会导致图像灰度的明显变化
+### Harris 角点检测
+Harris 角点检测的思想是通过图像的局部的小窗口观察图像，角点的特征是窗口沿任意方向移动都会导致图像灰度的明显变化
 <img src="./img/屏幕截图 2023-03-31 171004.png">
 
 ### 实现
@@ -1023,9 +1027,9 @@ dst=cv.cornerHarris(src, blockSize, ksize, k)
 
 - blockSize：角点检测中要考虑的邻域大小。
 
-- ksize：sobel求导使用的核大小
+- ksize：sobel 求导使用的核大小
 
-- k ：角点检测方程中的自由参数，取值参数为 [0.04，0.06].
+- k：角点检测方程中的自由参数，取值参数为 [0.04，0.06].
 
 优点：
 
@@ -1034,30 +1038,30 @@ dst=cv.cornerHarris(src, blockSize, ksize, k)
 缺点：
  - 对尺度很敏感，不具备几何尺度不变性。
  - 提取的角点是像素级的
-### Shi-Tomasi角点检测
+### Shi-Tomasi 角点检测
 #### 原理
-Shi-Tomasi算法是对Harris角点检测算法的改进，一般会比Harris算法得到更好的角点。Harris 算法的角点响应函数是将矩阵 M 的行列式值与 M 的迹相减，利用差值判断是否为角点。后来Shi 和Tomasi 提出改进的方法是，若矩阵M的两个特征值中较小的一个大于阈值，则认为他是角点.
+Shi-Tomasi 算法是对 Harris 角点检测算法的改进，一般会比 Harris 算法得到更好的角点。Harris 算法的角点响应函数是将矩阵 M 的行列式值与 M 的迹相减，利用差值判断是否为角点。后来 Shi 和 Tomasi 提出改进的方法是，若矩阵 M 的两个特征值中较小的一个大于阈值，则认为他是角点.
 corners = cv2.goodFeaturesToTrack ( image, maxcorners, qualityLevel, minDistance )
 
 - Image: 输入灰度图像
 - maxCorners : 获取角点数的数目。
-- qualityLevel：该参数指出最低可接受的角点质量水平，在0-1之间。
+- qualityLevel：该参数指出最低可接受的角点质量水平，在 0-1 之间。
 - minDistance：角点之间最小的欧式距离，避免得到相邻特征点。
 
 
-Corners: 搜索到的角点，在这里所有低于质量水平的角点被排除掉，然后把合格的角点按质量排序，然后将质量较好的角点附近（小于最小欧式距离）的角点删掉，最后找到maxCorners个角点返回。
+Corners: 搜索到的角点，在这里所有低于质量水平的角点被排除掉，然后把合格的角点按质量排序，然后将质量较好的角点附近（小于最小欧式距离）的角点删掉，最后找到 maxCorners 个角点返回。
 
 ## SIFT/SURF算法
 ### SIFT/SURF算法
-#### SIFT原理
+#### SIFT 原理
 这两种算法具有旋转不变性，但不具有尺度不变性，以下图为例，在左侧小图中可以检测到角点，但是图像被放大后，在使用同样的窗口，就检测不到角点了。
 
 1. 尺度空间极值检测：搜索所有尺度上的图像位置。通过高斯差分函数来识别潜在的对于尺度和旋转不变的关键点。
 2. 关键点定位：在每个候选的位置上，通过一个拟合精细的模型来确定位置和尺度。关键点的选择依据于它们的稳定程度。
 3. 关键点方向确定：基于图像局部的梯度方向，分配给每个关键点位置一个或多个方向。所有后面的对图像数据的操作都相对于关键点的方向、尺度和位置进行变换，从而保证了对于这些变换的不变性。
 4. 关键点描述：在每个关键点周围的邻域内，在选定的尺度上测量图像局部的梯度。这些梯度作为关键点的描述符，它允许比较大的局部形状的变形或光照变化。
-### SURF原理
-006 年 Bay提出了 SURF 算法，是SIFT算法的增强版，它的计算量小，运算速度快，提取的特征与SIFT几乎相同.
+### SURF 原理
+006 年 Bay 提出了 SURF 算法，是 SIFT 算法的增强版，它的计算量小，运算速度快，提取的特征与 SIFT 几乎相同.
 sift = cv.xfeatures2d.SIFT_create()
 kp,des = sift.detectAndCompute(gray,None)
 cv.drawKeypoints(image, keypoints, outputimage, color, flags)
@@ -1065,7 +1069,7 @@ cv.drawKeypoints(image, keypoints, outputimage, color, flags)
 - image: 原始图像
 - keypoints：关键点信息，将其绘制在图像上
 - outputimage：输出图片，可以是原始图像
-- color：颜色设置，通过修改（b,g,r）的值,更改画笔的颜色，b=蓝色，g=绿色，r=红色。
+- color：颜色设置，通过修改（b,g,r）的值，更改画笔的颜色，b=蓝色，g=绿色，r=红色。
 - flags：绘图功能的标识设置
    1. cv2.DRAW_MATCHES_FLAGS_DEFAULT：创建输出图像矩阵，使用现存的输出图像绘制匹配对和特征点，对每一个关键点只绘制中间点
    2. cv2.DRAW_MATCHES_FLAGS_DRAW_OVER_OUTIMG：不创建输出图像矩阵，而是在输出图像上绘制匹配对
@@ -1074,20 +1078,20 @@ cv.drawKeypoints(image, keypoints, outputimage, color, flags)
 
 
 
-## Fast和ORB算法
-### Fast算法
+## Fast 和 ORB 算法
+### Fast 算法
 
 ####  原理
 
-**FAST** (全称Features from accelerated segment test)是一种用于角点检测的算法，该算法的原理是取图像中检测点，以该点为圆心的周围邻域内像素点判断检测点是否为角点，通俗的讲就是**若一个像素周围有一定数量的像素与该点像素值不同，则认为其为角点**。
+**FAST** (全称 Features from accelerated segment test) 是一种用于角点检测的算法，该算法的原理是取图像中检测点，以该点为圆心的周围邻域内像素点判断检测点是否为角点，通俗的讲就是**若一个像素周围有一定数量的像素与该点像素值不同，则认为其为角点**。
 
-##### **FAST算法的基本流程**
+##### **FAST 算法的基本流程**
 
-1. 在图像中选取一个像素点 p，来判断它是不是关键点。$$I_p$$等于像素点 p的灰度值。
+1. 在图像中选取一个像素点 p，来判断它是不是关键点。$$I_p$$等于像素点 p 的灰度值。
 
-2. 以r为半径画圆，覆盖p点周围的M个像素，通常情狂下，设置 r=3，则 M=16，
+2. 以 r 为半径画圆，覆盖 p 点周围的 M 个像素，通常情狂下，设置 r=3，则 M=16，
 
-3. 设置一个阈值t，如果在这 16 个像素点中存在 n 个连续像素点的灰度值都高于$$I_p + t$$，或者低于$$I_p - t$$，那么像素点 p 就被认为是一个角点。
+3. 设置一个阈值 t，如果在这 16 个像素点中存在 n 个连续像素点的灰度值都高于$$I_p + t$$，或者低于$$I_p - t$$，那么像素点 p 就被认为是一个角点。
 
 4. 由于在检测特征点时是需要对图像中所有的像素点进行检测，然而图像中的绝大多数点都不是特征点，如果对每个像素点都进行上述的检测过程，那显然会浪费许多时间，因此采用一种进行**非特征点判别**的方法：首先对候选点的周围每个 90 度的点：1，9，5，13 进行测试（先测试 1 和 19, 如果它们符合阈值要求再测试 5 和 13）。如果 p 是角点，那么这四个点中至少有 3 个要符合阈值要求，否则直接剔除。对保留下来的点再继续进行测试（是否有 12 的点符合阈值要求）。 
 
@@ -1104,16 +1108,16 @@ cv.drawKeypoints(image, keypoints, outputimage, color, flags)
 
 1. 选择一组训练图片（最好是跟最后应用相关的图片）
 
-2. 使用 FAST 算法找出每幅图像的特征点，对图像中的每一个特征点，将其周围的 16 个像素存储构成一个向量P。
+2. 使用 FAST 算法找出每幅图像的特征点，对图像中的每一个特征点，将其周围的 16 个像素存储构成一个向量 P。
 
 3. 每一个特征点的 16 像素点都属于下列三类中的一种
 
 
-4. 根据这些像素点的分类，特征向量 P 也被分为 3 个子集：Pd ，Ps ，Pb，
+4. 根据这些像素点的分类，特征向量 P 也被分为 3 个子集：Pd，Ps，Pb，
 
 5. 定义一个新的布尔变量$$K_p$$，如果 p 是角点就设置为 Ture，如果不是就设置为 False。
 
-6. 利用特征值向量p，目标值是$K_p$，训练ID3 树（决策树分类器）。
+6. 利用特征值向量 p，目标值是$K_p$，训练 ID3 树（决策树分类器）。
 
 7. 将构建好的决策树运用于其他图像的快速的检测。
 
@@ -1121,17 +1125,17 @@ cv.drawKeypoints(image, keypoints, outputimage, color, flags)
 
 **在筛选出来的候选角点中有很多是紧挨在一起的，需要通过非极大值抑制来消除这种影响。**
 
-为所有的候选角点都确定一个打分函数$$V $$ ， $$V $$的值可这样计算：先分别计算$$I_p$$与圆上16个点的像素值差值，取绝对值，再将这16个绝对值相加，就得到了$$V $$的值
+为所有的候选角点都确定一个打分函数$$V $$ ， $$V $$的值可这样计算：先分别计算$$I_p$$与圆上 16 个点的像素值差值，取绝对值，再将这 16 个绝对值相加，就得到了$$V $$的值
 $$
 V = \sum_{i}^{16}|I_p-I_i|
 $$
-最后比较毗邻候选角点的 V 值，把V值较小的候选角点pass掉。
+最后比较毗邻候选角点的 V 值，把 V 值较小的候选角点 pass 掉。
 
-FAST算法的思想与我们对角点的直观认识非常接近，化繁为简。FAST算法比其它角点的检测算法快，但是在噪声较高时不够稳定，这需要设置合适的阈值。
+FAST 算法的思想与我们对角点的直观认识非常接近，化繁为简。FAST 算法比其它角点的检测算法快，但是在噪声较高时不够稳定，这需要设置合适的阈值。
 
 #### 实现
 
-OpenCV中的FAST检测算法是用传统方法实现的，
+OpenCV 中的 FAST 检测算法是用传统方法实现的，
 
 
 ```python
@@ -1140,14 +1144,14 @@ fast = =cv.FastFeatureDetector_create( threshold, nonmaxSuppression)
 
 参数：
 
-- threshold：阈值t，有默认值10
-- nonmaxSuppression：是否进行非极大值抑制，默认值True
+- threshold：阈值 t，有默认值 10
+- nonmaxSuppression：是否进行非极大值抑制，默认值 True
 
 返回：
 
-- Fast：创建的FastFeatureDetector对象
+- Fast：创建的 FastFeatureDetector 对象
 
-利用fast.detect检测关键点，没有对应的关键点描述
+利用 fast.detect 检测关键点，没有对应的关键点描述
 
 ```python
 kp = fast.detect(grayImg, None)
@@ -1161,7 +1165,7 @@ kp = fast.detect(grayImg, None)
 
 - kp: 关键点信息，包括位置，尺度，方向信息
 
-将关键点检测结果绘制在图像上，与在sift中是一样的
+将关键点检测结果绘制在图像上，与在 sift 中是一样的
 
 ```python
 cv.drawKeypoints(image, keypoints, outputimage, color, flags)
@@ -1174,8 +1178,8 @@ import cv2 as cv
 from matplotlib import pyplot as plt
 # 1 读取图像
 img = cv.imread('./image/tv.jpg')
-# 2 Fast角点检测
-# 2.1 创建一个Fast对象，传入阈值，注意：可以处理彩色空间图像
+# 2 Fast 角点检测
+# 2.1 创建一个 Fast 对象，传入阈值，注意：可以处理彩色空间图像
 fast = cv.FastFeatureDetector_create(threshold=30)
 
 # 2.2 检测图像上的关键点
@@ -1210,11 +1214,11 @@ plt.show()
 ### ORB 算法
 
 #### 原理
-**ORB算法流程**
+**ORB 算法流程**
 
-ORB算法结合了Fast和Brief算法，提出了构造金字塔，为Fast特征点添加了方向，从而使得关键点具有了尺度不变性和旋转不变性。具体流程描述如下：
+ORB 算法结合了 Fast 和 Brief 算法，提出了构造金字塔，为 Fast 特征点添加了方向，从而使得关键点具有了尺度不变性和旋转不变性。具体流程描述如下：
 
-- 构造尺度金字塔，金字塔共有n层，与SIFT不同的是，每一层仅有一幅图像。第s层的尺度为：
+- 构造尺度金字塔，金字塔共有 n 层，与 SIFT 不同的是，每一层仅有一幅图像。第 s 层的尺度为：
 ```py
 $$
 \sigma_s=\sigma_0^s
@@ -1227,11 +1231,11 @@ SIZE = (H*\frac{1}{\sigma_s})\times(W*\frac{1}{\sigma_s})
 $$
 ```
 
-- 在不同的尺度上利用Fast算法检测特征点，采用Harris角点响应函数，根据角点的响应值排序，选取前N个特征点，作为本尺度的特征点。
+- 在不同的尺度上利用 Fast 算法检测特征点，采用 Harris 角点响应函数，根据角点的响应值排序，选取前 N 个特征点，作为本尺度的特征点。
 
-- 计算特征点的主方向，计算以特征点为圆心半径为r的圆形邻域内的灰度质心位置，将从特征点位置到质心位置的方向做特征点的主方向。
+- 计算特征点的主方向，计算以特征点为圆心半径为 r 的圆形邻域内的灰度质心位置，将从特征点位置到质心位置的方向做特征点的主方向。
 
-计算方法如下:
+计算方法如下：
 ```py
 $$
 m_{pq}=\sum_{x,y}x^py^qI(x,y)
@@ -1246,38 +1250,38 @@ $$
 $$
 ```
 
-## BRIEF算法
+## BRIEF 算法
 
-###### 	BRIEF是一种特征描述子提取算法，并非特征点的提取算法，一种生成**二值**化描述子的算法，不提取代价低，匹配只需要使用简单的汉明距离(Hamming Distance)利用比特之间的异或操作就可以完成。因此，时间代价低，空间代价低，效果还挺好是最大的优点。
+###### 	BRIEF 是一种特征描述子提取算法，并非特征点的提取算法，一种生成**二值**化描述子的算法，不提取代价低，匹配只需要使用简单的汉明距离 (Hamming Distance) 利用比特之间的异或操作就可以完成。因此，时间代价低，空间代价低，效果还挺好是最大的优点。
 
 **算法的步骤介绍如下**：
 
 1. **图像滤波**：原始图像中存在噪声时，会对结果产生影响，所以需要对图像进行滤波，去除部分噪声。
 
-2. **选取点对**：以特征点为中心，取S*S的邻域窗口，在窗口内随机选取N组点对，一般N=128,256,512，默认是256，关于如何选取随机点对，提供了五种形式，结果如下图所示：
+2. **选取点对**：以特征点为中心，取 S*S 的邻域窗口，在窗口内随机选取 N 组点对，一般 N=128,256,512，默认是 256，关于如何选取随机点对，提供了五种形式，结果如下图所示：
 
-   -  x,y方向平均分布采样
+   -  x,y 方向平均分布采样
 
-   - x,y均服从Gauss(0,S^2/25)各向同性采样
+   - x,y 均服从 Gauss(0,S^2/25) 各向同性采样
 
-   -  x服从Gauss(0,S^2/25)，y服从Gauss(0,S^2/100)采样
+   -  x 服从 Gauss(0,S^2/25)，y 服从 Gauss(0,S^2/100) 采样
 
-   -  x,y从网格中随机获取
+   -  x,y 从网格中随机获取
 
-   -  x一直在(0,0)，y从网格中随机选取
+   -  x 一直在 (0,0)，y 从网格中随机选取
 
    图中一条线段的两个端点就是一组点对，其中第二种方法的结果比较好。
 
-3. **构建描述符**：假设x,y是某个点对的两个端点，p(x),p(y)是两点对应的像素值，则有：
+3. **构建描述符**：假设 x,y 是某个点对的两个端点，p(x),p(y) 是两点对应的像素值，则有：
    $$
    t(x,y)=\begin{cases}1	&if p(x)>p(y)\\
    0&	else\end{cases}
    $$
-   对每一个点对都进行上述的二进制赋值，形成BRIEF的关键点的描述特征向量，该向量一般为 128-512 位的字符串，其中仅包含 1 和 0，如下图所示：
+   对每一个点对都进行上述的二进制赋值，形成 BRIEF 的关键点的描述特征向量，该向量一般为 128-512 位的字符串，其中仅包含 1 和 0，如下图所示：
 
 
 
-**实例化ORB**
+**实例化 ORB**
 
 ```python
 orb = cv.xfeatures2d.orb_create(nfeatures)
@@ -1287,7 +1291,7 @@ orb = cv.xfeatures2d.orb_create(nfeatures)
 
 - nfeatures: 特征点的最大数量
 
-**利用orb.detectAndCompute()检测关键点并计算**
+**利用 orb.detectAndCompute() 检测关键点并计算**
 
 ```python
 kp,des = orb.detectAndCompute(gray,None)
@@ -1300,7 +1304,7 @@ kp,des = orb.detectAndCompute(gray,None)
 返回：
 
 - kp: 关键点信息，包括位置，尺度，方向信息
-- des: 关键点描述符，每个关键点BRIEF特征向量，二进制字符串，
+- des: 关键点描述符，每个关键点 BRIEF 特征向量，二进制字符串，
 
 **将关键点检测结果绘制在图像上**
 
@@ -1317,10 +1321,10 @@ from matplotlib import pyplot as plt
 # 1 图像读取
 img = cv.imread('./image/tv.jpg')
 
-# 2 ORB角点检测
-# 2.1 实例化ORB对象
+# 2 ORB 角点检测
+# 2.1 实例化 ORB 对象
 orb = cv.ORB_create(nfeatures=500)
-# 2.2 检测关键点,并计算特征描述符
+# 2.2 检测关键点，并计算特征描述符
 kp,des = orb.detectAndCompute(img,None)
 
 print(des.shape)
@@ -1351,17 +1355,17 @@ value: 修改后的属性值
 判断图像是否读取成功
 
 isornot = cap.isOpened()
-若读取成功则返回true，否则返回False
+若读取成功则返回 true，否则返回 False
 获取视频的一帧图像
 
 ret, frame = cap.read()
 参数：
 
-ret: 若获取成功返回True，获取失败，返回False
+ret: 若获取成功返回 True，获取失败，返回 False
 Frame: 获取到的某一帧的图像
-调用cv.imshow()显示图像，在显示图像时使用cv.waitkey()设置适当的持续时间，如果太低视频会播放的非常快，如果太高就会播放的非常慢，通常情况下我们设置25ms就可以了。
+调用 cv.imshow() 显示图像，在显示图像时使用 cv.waitkey() 设置适当的持续时间，如果太低视频会播放的非常快，如果太高就会播放的非常慢，通常情况下我们设置 25ms 就可以了。
 
-最后，调用cap.realease()将视频释放掉
+最后，调用 cap.realease() 将视频释放掉
 
 ```py
 
@@ -1376,7 +1380,7 @@ while(cap.isOpened()):
     # 4. 获取成功显示图像
     if ret == True:
         cv.imshow('frame',frame)
-    # 5.每一帧间隔为25ms
+    # 5.每一帧间隔为 25ms
     if cv.waitKey(25) & 0xFF == ord('q'):
         break
 # 6.释放视频对象
@@ -1384,27 +1388,27 @@ cap.release()
 cv.destoryAllwindows()
 ```
 #### 保存视频
-在OpenCV中我们保存视频使用的是VedioWriter对象，在其中指定输出文件的名称，如下所示：
+在 OpenCV 中我们保存视频使用的是 VedioWriter 对象，在其中指定输出文件的名称，如下所示：
 
 **创建视频写入的对象**
 out = cv2.VideoWriter(filename,fourcc, fps, frameSize)
 参数：
 
 - filename：视频保存的位置
-- fourcc：指定视频编解码器的4字节代码
+- fourcc：指定视频编解码器的 4 字节代码
 - fps：帧率
 - frameSize：帧大小
 
 retval = cv2.VideoWriter_fourcc( c1, c2, c3, c4 )
 参数：
 
- - c1,c2,c3,c4: 是视频编解码器的4字节代码，在fourcc.org中找到可用代码列表，与平台紧密相关，常用的有：
+ - c1,c2,c3,c4: 是视频编解码器的 4 字节代码，在 fourcc.org 中找到可用代码列表，与平台紧密相关，常用的有：
 
- - 在Windows中：DIVX（.avi）
- - 在OS中：MJPG（.mp4），DIVX（.avi），X264（.mkv）。
-利用cap.read()获取视频中的每一帧图像，并使用out.write()将某一帧图像写入视频中。
+ - 在 Windows 中：DIVX（.avi）
+ - 在 OS 中：MJPG（.mp4），DIVX（.avi），X264（.mkv）。
+利用 cap.read() 获取视频中的每一帧图像，并使用 out.write() 将某一帧图像写入视频中。
 
-使用cap.release()和out.release()释放资源。
+使用 cap.release() 和 out.release() 释放资源。
 
 示例：
 ```py
@@ -1437,31 +1441,31 @@ cv.destroyAllWindows()
 ## 视频追踪
 ### meanshift
 #### 原理
-meanshift算法的原理很简单。假设你有一堆点集，还有一个小的窗口，这个窗口可能是圆形的，现在你可能要移动这个窗口到点集密度最大的区域当中。
+meanshift 算法的原理很简单。假设你有一堆点集，还有一个小的窗口，这个窗口可能是圆形的，现在你可能要移动这个窗口到点集密度最大的区域当中。
 
 首先在图像上选定一个目标区域
 
-计算选定区域的直方图分布，一般是HSV色彩空间的直方图。
+计算选定区域的直方图分布，一般是 HSV 色彩空间的直方图。
 
-对下一帧图像b同样计算直方图分布。
+对下一帧图像 b 同样计算直方图分布。
 
-计算图像b当中与选定区域直方图分布最为相似的区域，使用meanshift算法将选定区域沿着最为相似的部分进行移动，直到找到最相似的区域，便完成了在图像b中的目标追踪。
+计算图像 b 当中与选定区域直方图分布最为相似的区域，使用 meanshift 算法将选定区域沿着最为相似的部分进行移动，直到找到最相似的区域，便完成了在图像 b 中的目标追踪。
 
-重复3到4的过程，就完成整个视频目标追踪。
+重复 3 到 4 的过程，就完成整个视频目标追踪。
 
 通常情况下我们使用直方图反向投影得到的图像和第一帧目标对象的起始位置，当目标对象的移动会反映到直方图反向投影图中，meanshift 算法就把我们的窗口移动到反向投影图像中灰度密度最大的区域了
 ####   实现
 cv.meanShift(probImage, window, criteria)
-probImage: ROI区域，即目标的直方图的反向投影
+probImage: ROI 区域，即目标的直方图的反向投影
 
-window： 初始搜索窗口，就是定义ROI的rect
+window：初始搜索窗口，就是定义 ROI 的 rect
 
 criteria: 确定窗口搜索停止的准则，主要有迭代次数达到设置的最大值，窗口中心的漂移值大于某个设定的限值等。
 
 
-probImage: ROI区域，即目标的直方图的反向投影
+probImage: ROI 区域，即目标的直方图的反向投影
 
-window： 初始搜索窗口，就是定义ROI的rect
+window：初始搜索窗口，就是定义 ROI 的 rect
 
 criteria: 确定窗口搜索停止的准则，主要有迭代次数达到设置的最大值，窗口中心的漂移值大于某个设定的限值等。
 
@@ -1501,7 +1505,7 @@ while(True):
         hsv = cv.cvtColor(frame, cv.COLOR_BGR2HSV)
         dst = cv.calcBackProject([hsv],[0],roi_hist,[0,180],1)
 
-        # 4.4 进行meanshift追踪
+        # 4.4 进行 meanshift 追踪
         ret, track_window = cv.meanShift(dst, track_window, term_crit)
 
         # 4.5 将追踪的位置绘制在视频上，并进行显示
@@ -1518,12 +1522,12 @@ cap.release()
 cv.destroyAllWindows()
 ```
 #### Camshift
-CamShift算法全称是“Continuously Adaptive Mean-Shift”（连续自适应MeanShift算法），是对MeanShift算法的改进算法，可随着跟踪目标的大小变化实时调整搜索窗口的大小，具有较好的跟踪效果。
+CamShift 算法全称是“Continuously Adaptive Mean-Shift”（连续自适应 MeanShift 算法），是对 MeanShift 算法的改进算法，可随着跟踪目标的大小变化实时调整搜索窗口的大小，具有较好的跟踪效果。
 # 人脸案例
 ##  基础
 首先需要大量的正样本图像（面部图像）和负样本图像（不含面部的图像）来训练分类器。我们需要从其中提取特征。下图中的 Haar 特征会被使用，就像我们的卷积核，每一个特征是一 个值，这个值等于黑色矩形中的像素值之后减去白色矩形中的像素值之和。
 <img src="/img/屏幕截图 2023-03-31 210427.png">
 
-Haar特征值反映了图像的灰度变化情况。例如：脸部的一些特征能由矩形特征简单的描述，眼睛要比脸颊颜色要深，鼻梁两侧比鼻梁颜色要深，嘴巴比周围颜色要深等。
+Haar 特征值反映了图像的灰度变化情况。例如：脸部的一些特征能由矩形特征简单的描述，眼睛要比脸颊颜色要深，鼻梁两侧比鼻梁颜色要深，嘴巴比周围颜色要深等。
 
-Haar特征可用于于图像任意位置，大小也可以任意改变，所以矩形特征值是矩形模版类别、矩形位置和矩形大小这三个因素的函数。故类别、大小和位置的变化，使得很小的检测窗口含有非常多的矩形特征。
+Haar 特征可用于于图像任意位置，大小也可以任意改变，所以矩形特征值是矩形模版类别、矩形位置和矩形大小这三个因素的函数。故类别、大小和位置的变化，使得很小的检测窗口含有非常多的矩形特征。
